@@ -77,3 +77,31 @@ Built against `body-design.md` and `brain-design.md` in the parent project.
 This slice intentionally targets the tasks flagged as highest-risk in the
 original work breakdown (checkpoint/resume, concurrency, storage integrity)
 first, since those are the ones worth validating before investing further.
+
+## Brain slice: the deliberation loop (added after the Body slice)
+
+`src/athenaeum_brain/` implements Section 3's four rounds (framing,
+exploration, cross-examination, synthesis) and Section 4.4's proposal-only
+commit boundary, running as a real `round_handler` on the **same**
+`SingleUnitRunner`/checkpointing engine proven in the Body slice above --
+not a separate toy runner. This is deliberate: it proves the Brain/Body
+interface contract actually works, not just that deliberation logic exists
+in isolation.
+
+Because the Local Model Serving Layer isn't built yet, the two Master
+Agents here (`Mathematics`, `Logic`) are deterministic and independently
+checkable -- real primality computation and real jurisdiction-validity
+checks -- rather than LLM-backed. This validates the *mechanics*
+(claim structure, cross-examination, the commit boundary, jurisdictional
+dissent instead of false consensus) honestly, without pretending to
+validate reasoning quality, which needs the model-serving layer first.
+
+```bash
+python demo_brain.py   # narrated walkthrough, including a kill/resume
+                        # of an in-progress deliberation
+pytest -q               # 28 tests total (19 Body + 9 Brain)
+```
+
+Not yet implemented: real Master Agents (Physics/Philosophy/Theology/
+Engineering), the Reputability Engine, re-evaluation, knowledge
+consolidation, human input, and everything requiring an actual local model.
