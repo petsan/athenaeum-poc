@@ -151,3 +151,28 @@ highest-risk tasks specifically (not yet all ~47).
 
 Tests: 40 total (19 Body storage/scheduling + 8 Brain rounds/agents +
 6 Brain integration + 6 model-serving + 1 misc).
+
+## Wrap-up: acceptance criteria extended, remaining gaps closed
+
+`acceptance-criteria.md` now covers essentially the full backlog, not just
+the highest-risk subset. Doing this surfaced two real gaps that had no
+tests at all -- `schemas.py` (Task 2) and `resource_monitor.py` (Tasks
+8-10) -- both closed, including a genuine end-to-end test that a DRAM-
+floor breach actually stops a running unit's rounds (not just flags a
+state), and resumes it cleanly once headroom returns.
+
+Also closed: the ingestion pipeline's mechanics (Tasks 14-17,
+`ingestion.py`) -- license/ToS/paid-access checks, parse/normalize into
+the Provenance schema, and running as an ordinary scheduled work unit, no
+special-casing. Real network access isn't available here, so `fetch()`
+takes a `FixtureSource` standing in for a real HTTP fetch -- the same
+substitution pattern already used for `MockBackend` and
+`simulate_tier2_outage()`.
+
+**What's left is now genuinely blocked on infrastructure this sandbox
+doesn't have**, not just unscheduled: GPU-vs-CPU output-equivalence
+testing (needs real GPU access) and distributed worker dispatch (needs a
+second process/host). Everything else backend-independent in the original
+~47-task backlog is implemented and tested.
+
+Tests: 56 total.
