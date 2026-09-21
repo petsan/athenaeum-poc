@@ -102,6 +102,20 @@ python demo_brain.py   # narrated walkthrough, including a kill/resume
 pytest -q               # 28 tests total (19 Body + 9 Brain)
 ```
 
-Not yet implemented: real Master Agents (Physics/Philosophy/Theology/
-Engineering), the Reputability Engine, re-evaluation, knowledge
-consolidation, human input, and everything requiring an actual local model.
+Not yet implemented: real Master Agents (Physics/Philosophy/Theology), the
+Reputability Engine, re-evaluation, knowledge consolidation, human input,
+and everything requiring an actual local model.
+
+### Jurisdictional conflict -> plural answers (Section 4.2)
+
+A third toy agent, `MasterOfEngineering`, was added specifically to
+exercise the case `synthesis_round` hadn't tested yet: two agents that
+each genuinely, correctly claim jurisdiction over the same question and
+reach *different* conclusions (Mathematics's classical round-half-up vs.
+Engineering's IEEE-754 round-half-to-even, both real `decimal` module
+computations). Synthesis no longer forces a single winner in this case --
+it commits both conclusions as a labeled, Logic-chaired plural answer
+(Section 4.3: never manufacture false consensus). Claims sharing a demo-only
+`topic` field are what triggers conflict detection; production would need a
+richer mechanism (an open question, not resolved here). See step 4 of
+`demo_brain.py` for the full example.

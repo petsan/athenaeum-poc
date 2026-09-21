@@ -26,7 +26,7 @@ class MasterOfMathematics:
     """Domain: formal/quantitative claims. Reasoning mode: definition ->
     derivation -> proof (Section 2.2). Here: real primality checks."""
     name = "Mathematics"
-    domain_keywords = ("prime", "number", "divisible", "sum", "even", "odd")
+    domain_keywords = ("prime", "number", "divisible", "sum", "even", "odd", "round")
 
     def in_jurisdiction(self, question: str) -> bool:
         return any(k in question.lower() for k in self.domain_keywords)
@@ -44,6 +44,23 @@ class MasterOfMathematics:
                     defeat_condition=f"a divisor of {n} other than 1 and itself is exhibited",
                     jurisdiction_check=True,
                     supporting_provenance=["computed:trial_division"],
+                ))
+        if "round" in question.lower():
+            for token in question.replace("?", "").split():
+                try:
+                    from decimal import Decimal, ROUND_HALF_UP
+                    val = Decimal(token)
+                except Exception:
+                    continue
+                rounded = val.quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+                claims.append(Claim(
+                    question_id=question_id, round=1, issuing_agent=self.name,
+                    topic=f"rounding:{token}",
+                    statement=f"{token} rounds to {rounded} (classical round-half-up convention)",
+                    claim_type="formal", confidence=1.0,
+                    defeat_condition="a different result under the round-half-up rule",
+                    jurisdiction_check=True,
+                    supporting_provenance=["computed:decimal.ROUND_HALF_UP"],
                 ))
         return claims
 
@@ -98,4 +115,43 @@ class MasterOfLogic:
                 jurisdiction_check=True, relation="challenges",
                 target_claim_id=claim.claim_id,
             )
+        return None
+
+
+class MasterOfEngineering:
+    """Domain: specification/implementation/verification via execution
+    (Section 2.2, the sixth Master Agent). Here: real Decimal computation
+    under the IEEE-754-style round-half-to-even convention -- a genuinely
+    different, equally defensible answer from Mathematics's classical
+    round-half-up convention, used to exercise Section 4.2's jurisdictional
+    conflict path."""
+    name = "Engineering"
+    domain_keywords = ("round", "implement", "execute", "verify", "test")
+
+    def in_jurisdiction(self, question: str) -> bool:
+        return any(k in question.lower() for k in self.domain_keywords)
+
+    def explore(self, question: str, question_id: str) -> list[Claim]:
+        if "round" not in question.lower():
+            return []
+        claims = []
+        from decimal import Decimal, ROUND_HALF_EVEN
+        for token in question.replace("?", "").split():
+            try:
+                val = Decimal(token)
+            except Exception:
+                continue
+            rounded = val.quantize(Decimal("1"), rounding=ROUND_HALF_EVEN)
+            claims.append(Claim(
+                question_id=question_id, round=1, issuing_agent=self.name,
+                topic=f"rounding:{token}",
+                statement=f"{token} rounds to {rounded} (IEEE-754 round-half-to-even convention)",
+                claim_type="executable", confidence=1.0,
+                defeat_condition="a different result under decimal.ROUND_HALF_EVEN",
+                jurisdiction_check=True,
+                supporting_provenance=["computed:decimal.ROUND_HALF_EVEN"],
+            ))
+        return claims
+
+    def cross_examine(self, claim: Claim, question_id: str) -> Claim | None:
         return None

@@ -68,4 +68,19 @@ print("Logic's response:", challenge.statement)
 print("(this is Section 4.4's commit boundary at work: an unchallenged claim commits;")
 print(" a jurisdiction-challenged one surfaces as dissent instead of silent acceptance)")
 
+step("4. Genuine jurisdictional conflict: 'how should we round 2.5?' (Section 4.2)")
+log, runner = fresh_runner()
+unit = make_deliberation_unit("how should we round 2.5?", "q-conflict")
+while unit.status != "completed":
+    runner.run_round(unit)
+answer = log.read_latest()["shared_state"]["answer"]
+for pa in answer["plural_answers"]:
+    print(f"topic: {pa['topic']}  (chaired by {pa['chaired_by']})")
+    for c in pa["conclusions"]:
+        print(f"  - {c['agent']}: {c['statement']}")
+print("Neither answer was suppressed or forced into false consensus --")
+print("both Mathematics's classical convention and Engineering's IEEE-754")
+print("convention are correct on their own terms, so synthesis commits both,")
+print("labeled, rather than picking a winner (Section 4.3).")
+
 print("\n=== brain demo complete ===")

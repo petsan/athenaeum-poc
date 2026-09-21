@@ -34,3 +34,14 @@ def test_logic_flags_out_of_jurisdiction_claim():
     resp = logic.cross_examine(claim, "q1")
     assert resp.relation == "challenges"
     assert resp.claim_type == "procedural"
+
+def test_engineering_computes_round_half_to_even():
+    from athenaeum_brain.agents import MasterOfEngineering
+    e = MasterOfEngineering()
+    claims = e.explore("how should we round 2.5?", "q1")
+    assert any("rounds to 2" in c.statement for c in claims)  # banker's rounding
+
+def test_mathematics_computes_round_half_up():
+    m = MasterOfMathematics()
+    claims = m.explore("how should we round 2.5?", "q1")
+    assert any("rounds to 3" in c.statement for c in claims)  # classical convention

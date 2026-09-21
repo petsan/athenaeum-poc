@@ -42,3 +42,23 @@ def test_deliberation_survives_kill_and_resume(tmp_path):
         runner2.run_round(fresh_unit)
     answer = log2.read_latest()["shared_state"]["answer"]
     assert any("17 is prime" in c["statement"] for c in answer["committed"])
+
+def test_jurisdictional_conflict_survives_body_engine_and_resume(tmp_path):
+    log, runner = make_runner(tmp_path)
+    unit = make_deliberation_unit("how should we round 2.5?", "q-conflict")
+    runner.run_round(unit)  # framing
+    runner.run_round(unit)  # exploration
+
+    # kill here, resume fresh -- same pattern as the primality kill/resume test
+    cas2 = ContentAddressedStore(tmp_path / "cas")
+    log2 = CheckpointLog(cas=cas2, index_path=tmp_path / "index.txt")
+    state = log2.read_latest()["shared_state"]
+    runner2 = SingleUnitRunner(log2, shared_state=state)
+    fresh = make_deliberation_unit("how should we round 2.5?", "q-conflict")
+    fresh.round_index = runner2.resume_round_index("q-conflict")
+    while fresh.status != "completed":
+        runner2.run_round(fresh)
+
+    answer = log2.read_latest()["shared_state"]["answer"]
+    assert len(answer["plural_answers"]) == 1
+    assert len(answer["committed"]) == 2

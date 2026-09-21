@@ -44,6 +44,7 @@ def make_deliberation_handler(question: str, question_id: str):
                     "answer": {
                         "committed": [c.to_dict() for c in result["committed"]],
                         "dissent": result["dissent"],
+                        "plural_answers": result["plural_answers"],
                     }
                 },
                 done=True,
