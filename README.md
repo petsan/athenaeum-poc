@@ -176,3 +176,29 @@ second process/host). Everything else backend-independent in the original
 ~47-task backlog is implemented and tested.
 
 Tests: 56 total.
+
+## Remote access: API server + mobile web client
+
+`src/athenaeum_body/api.py` is a stdlib-only HTTP server (no new
+dependencies) exposing the deliberation engine, and serving `client/`
+(a single-file, mobile-responsive web page) on the same origin:
+
+```bash
+python -m athenaeum_body.api          # from src/, or add src/ to PYTHONPATH
+# -> http://0.0.0.0:8080
+```
+
+Open that address from your phone on the same LAN, or forward/tunnel the
+port (e.g. `ssh -R`, Tailscale, a reverse proxy on the Proxmox host) for
+access from anywhere. The client has no build step and no external
+dependencies -- open `client/index.html` directly if you just want to look
+at it, though it needs the API reachable at the same origin to actually work.
+
+**Known limitation, stated plainly:** every request is handled
+synchronously, which only works because the toy deliberation loop
+finishes in milliseconds. Once real LLM-backed agents exist (Section 4.5),
+this needs to become async (submit -> poll `/api/questions/<id>`) to match
+the Question Ledger's `queued/active/completed` lifecycle that's already
+modeled in `ledger.py` but not yet exposed that way over HTTP.
+
+Tests: 61 total (5 new, hitting a real running server, not mocks).

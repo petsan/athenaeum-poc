@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Athenaeum</title>
+<style>
+  :root {
+    --bg: #f7f6f2; --fg: #1c1a17; --card: #ffffff; --border: #ddd8cd;
+    --accent: #6b4f3f; --muted: #78716a; --commit: #2f6b3f; --dissent: #8a3a2b;
+    box-sizing: border-box;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #16140f; --fg: #eee9df; --card: #201d17; --border: #3a352b;
+      --accent: #c9a876; --muted: #a39a8a; --commit: #7bc98f; --dissent: #e08a72;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #16140f; --fg: #eee9df; --card: #201d17; --border: #3a352b;
+    --accent: #c9a876; --muted: #a39a8a; --commit: #7bc98f; --dissent: #e08a72;
+  }
+  html, body { height: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font-family: -apple-system, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  header { padding: 16px 16px 8px; }
+  header h1 { font-size: 1.3rem; margin: 0 0 4px; }
+  header p { margin: 0; color: var(--muted); font-size: 0.85rem; }
+  #status { font-size: 0.8rem; color: var(--muted); margin-top: 6px; }
+  main { padding: 8px 16px 32px; max-width: 640px; margin: 0 auto; }
+  .row { display: flex; gap: 8px; margin: 12px 0; }
+  input[type=text] {
+    flex: 1; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--border);
+    background: var(--card); color: var(--fg); font-size: 1rem;
+  }
+  button {
+    padding: 12px 18px; border-radius: 10px; border: none; background: var(--accent);
+    color: var(--bg); font-weight: 600; font-size: 1rem;
+  }
+  button:disabled { opacity: 0.5; }
+  .card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+    padding: 14px 16px; margin: 10px 0;
+  }
+  .q { font-weight: 600; margin-bottom: 8px; }
+  .claim { padding: 6px 0; border-top: 1px solid var(--border); font-size: 0.92rem; }
+  .claim:first-of-type { border-top: none; }
+  .tag { font-size: 0.72rem; padding: 2px 7px; border-radius: 6px; margin-right: 6px; }
+  .tag.commit { background: color-mix(in srgb, var(--commit) 20%, transparent); color: var(--commit); }
+  .tag.dissent { background: color-mix(in srgb, var(--dissent) 20%, transparent); color: var(--dissent); }
+  .plural-note { font-size: 0.82rem; color: var(--muted); margin-top: 4px; font-style: italic; }
+  .empty { color: var(--muted); text-align: center; padding: 30px 0; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Athenaeum</h1>
+  <p>Submit a question to the deliberation loop.</p>
+  <div id="status">connecting...</div>
+</header>
+<main>
+  <div class="row">
+    <input id="q" type="text" placeholder="e.g. is 17 prime? / how should we round 2.5?" />
+    <button id="go">Ask</button>
+  </div>
+  <div id="results"><div class="empty">No questions yet.</div></div>
+</main>
+<script>
+const API = ""; // same-origin: served by athenaeum_body.api
+const results = document.getElementById("results");
+const statusEl = document.getElementById("status");
+const input = document.getElementById("q");
+const go = document.getElementById("go");
+
+async function checkHealth() {
+  try {
+    const r = await fetch(API + "/api/health");
+    const h = await r.json();
+    statusEl.textContent = `connected -- ${h.cores_available} cores, ${h.dram_headroom_gb}GB DRAM headroom`;
+  } catch (e) {
+    statusEl.textContent = "cannot reach API -- is athenaeum_body.api running and reachable?";
+  }
+}
+
+function renderAnswer(question, answer) {
+  const card = document.createElement("div");
+  card.className = "card";
+  let html = `<div class="q">${question}</div>`;
+  for (const c of (answer.committed || [])) {
+    html += `<div class="claim"><span class="tag commit">${c.issuing_agent}</span>${c.statement}</div>`;
+  }
+  for (const pa of (answer.plural_answers || [])) {
+    html += `<div class="plural-note">Jurisdictional conflict, chaired by ${pa.chaired_by} -- both conclusions stand:</div>`;
+  }
+  for (const d of (answer.dissent || [])) {
+    html += `<div class="claim"><span class="tag dissent">challenged</span>${d.claim.statement}</div>`;
+  }
+  card.innerHTML = html;
+  if (results.querySelector(".empty")) results.innerHTML = "";
+  results.prepend(card);
+}
+
+async function ask() {
+  const question = input.value.trim();
+  if (!question) return;
+  go.disabled = true; go.textContent = "thinking...";
+  try {
+    const r = await fetch(API + "/api/questions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question })
+    });
+    const data = await r.json();
+    if (data.answer) renderAnswer(question, data.answer);
+    else renderAnswer(question, { committed: [], dissent: [{claim: {statement: "error: " + (data.error || "unknown")}}] });
+  } catch (e) {
+    renderAnswer(question, { committed: [], dissent: [{claim: {statement: "request failed: " + e}}] });
+  }
+  input.value = "";
+  go.disabled = false; go.textContent = "Ask";
+}
+
+go.addEventListener("click", ask);
+input.addEventListener("keydown", e => { if (e.key === "Enter") ask(); });
+checkHealth();
+</script>
+</body>
+</html>
