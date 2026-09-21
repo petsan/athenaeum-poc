@@ -118,4 +118,59 @@ print("is the FIRST answer now material for re-evaluation?", result)
 print("(the first answer's own snapshot is untouched -- non-retroactive attachment --")
 print(" but materiality correctly flags it as worth reopening)")
 
+step("6. Knowledge consolidation: a claim earning its way to deep-knowledge")
+from athenaeum_body.consolidation_store import ConsolidationStore
+from athenaeum_brain.consolidation import record_survival, should_promote_to_c, compact, expand
+
+DATA4 = pathlib.Path("data/demo-brain-consolidation")
+shutil.rmtree(DATA4, ignore_errors=True)
+cons_log = CheckpointLog(cas=ContentAddressedStore(DATA4 / "cons-cas"), index_path=DATA4 / "cons-index.txt")
+cons_store = ConsolidationStore(cons_log, ContentAddressedStore(DATA4 / "archive"))
+
+entry = None
+for i in range(5):
+    log = CheckpointLog(cas=ContentAddressedStore(DATA4 / f"cas-{i}"), index_path=DATA4 / f"index-{i}.txt")
+    runner = SingleUnitRunner(log, shared_state={})
+    unit = make_deliberation_unit("is 17 prime?", f"run-{i}")
+    while unit.status != "completed":
+        runner.run_round(unit)
+    committed = log.read_latest()["shared_state"]["answer"]["committed"][0]
+    entry = record_survival(cons_store, "17-is-prime", committed)
+    print(f"  cycle {i+1}: survival count={entry['cycles']}, sources={entry['sources']}")
+
+verdict = should_promote_to_c(entry, min_cycles=5, min_sources=1)
+print("promotion verdict:", verdict)
+node = compact(cons_store, "17-is-prime")
+print("compacted to Tier C:", node)
+print("de-compacted full trace still recoverable:", expand(cons_store, "17-is-prime")["cycles"], "cycles")
+print("(nothing was ever deleted -- only what's resident got smaller)")
+
+step("7. Domain fidelity: catching an agent's reasoning style drifting")
+from athenaeum_body.domain_fidelity_store import DomainFidelityStore
+from athenaeum_brain.domain_fidelity import compute_score, needs_review
+
+df_log = CheckpointLog(cas=ContentAddressedStore(DATA4 / "df-cas"), index_path=DATA4 / "df-index.txt")
+df_store = DomainFidelityStore(df_log)
+
+healthy_state = run_once = None
+log = CheckpointLog(cas=ContentAddressedStore(DATA4 / "df-run-cas"), index_path=DATA4 / "df-run-index.txt")
+runner = SingleUnitRunner(log, shared_state={})
+unit = make_deliberation_unit("is 17 prime?", "df-q")
+while unit.status != "completed":
+    runner.run_round(unit)
+state = log.read_latest()["shared_state"]
+score = compute_score("Mathematics", state["exploration_claims"], state["exam_claims"])
+print("real Mathematics claims, current health:", score)
+for s in [score["domain_fidelity_score"]] * 3:
+    df_store.record("Mathematics", {"domain_fidelity_score": s})
+
+print("...simulating Mathematics's reasoning style drifting over several rounds...")
+drifted_claims = [{"claim_id": "d1", "issuing_agent": "Mathematics", "claim_type": "formal",
+                    "supporting_provenance": ["unsourced assertion"]}]  # no 'computed:' provenance -- off style
+drifted_score = compute_score("Mathematics", drifted_claims, [])
+df_store.record("Mathematics", drifted_score)
+review = needs_review(df_store, "Mathematics", drop_threshold=0.15)
+print("drifted score:", drifted_score)
+print("review needed?", review)
+
 print("\n=== brain demo complete ===")

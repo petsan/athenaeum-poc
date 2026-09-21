@@ -234,3 +234,31 @@ reputability, which the materiality test then correctly flags as grounds
 to reopen a *different*, earlier answer that cited the same source.
 
 13 new tests (82 total).
+
+## Knowledge consolidation and domain fidelity (4 and 5)
+
+**Knowledge consolidation** (`consolidation_store.py` Body-owned,
+`consolidation.py` Brain judgment): the Tier B -> Tier C promotion
+criteria from Section 10.2, implemented exactly, including the specific
+rule the design calls out -- a claim can meet the survival-cycle and
+independent-source thresholds and STILL be excluded from promotion if
+its confidence trend is declining, even though it hasn't been overturned
+yet (`test_declining_confidence_blocks_promotion_even_if_counts_met`).
+Compaction archives the full trace content-addressed (reusing 3.4's
+tamper detection) and never deletes it; de-compaction recovers it intact.
+Proven against 5 REAL repeated deliberations, not synthetic data.
+
+**Domain fidelity monitoring** (`domain_fidelity_store.py` Body-owned,
+`domain_fidelity.py` Brain judgment): the two independent drift signals
+from Section 2.4.1 -- jurisdictional overreach rate (reusing the exact
+challenge pattern `MasterOfLogic` already produces) and reasoning-
+fingerprint deviation (a per-agent style marker: does Mathematics still
+cite `computed:` provenance, does Logic still stay procedural-only) --
+combined into one tracked score, with a rolling-baseline drop detector
+that flags review rather than silently correcting anything (Section
+2.4.3). `demo_brain.py` step 7 shows a real, healthy Mathematics score
+(1.0) against a simulated drifted one (0.5), correctly triggering review.
+
+18 new tests (99 total), including two integration tests running the
+real deliberation engine repeatedly and feeding its actual claim logs
+into both modules.
