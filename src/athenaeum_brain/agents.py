@@ -115,6 +115,27 @@ class MasterOfLogic:
                 jurisdiction_check=True, relation="challenges",
                 target_claim_id=claim.claim_id,
             )
+        if claim.argument:
+            from .logic_engine import check_validity
+            result = check_validity(claim.argument["premises"], claim.argument["conclusion"])
+            explanation = result["explanation"]
+            if not result["valid"]:
+                return Claim(
+                    question_id=question_id, round=2, issuing_agent=self.name,
+                    statement=f"argument for '{claim.statement}' is INVALID: {explanation}",
+                    claim_type="procedural", confidence=1.0,
+                    defeat_condition="a proof that no counterexample assignment exists",
+                    jurisdiction_check=True, relation="challenges",
+                    target_claim_id=claim.claim_id,
+                )
+            return Claim(
+                question_id=question_id, round=2, issuing_agent=self.name,
+                statement=f"argument for '{claim.statement}' is valid: {explanation}",
+                claim_type="procedural", confidence=1.0,
+                defeat_condition="a counterexample assignment is exhibited",
+                jurisdiction_check=True, relation="corroborates",
+                target_claim_id=claim.claim_id,
+            )
         return None
 
 

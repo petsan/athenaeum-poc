@@ -26,6 +26,8 @@ class Claim:
     subject: str = None              # the specific entity/value this claim is about, independently
                                      # extracted by the issuing agent (see rounds.py synthesis_round
                                      # for how conflict-grouping normalizes this across agents)
+    argument: dict = None            # optional {'premises': [...], 'conclusion': str} for Logic
+                                     # to check via logic_engine.check_validity (Section 2.2)
     claim_id: str = field(default_factory=next_claim_id)
 
     def to_dict(self) -> dict:

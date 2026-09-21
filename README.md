@@ -202,3 +202,35 @@ the Question Ledger's `queued/active/completed` lifecycle that's already
 modeled in `ledger.py` but not yet exposed that way over HTTP.
 
 Tests: 61 total (5 new, hitting a real running server, not mocks).
+
+## The recommended trio: real Logic, Reputability storage, materiality
+
+**Real Logic validity-checking** (`logic_engine.py`): Logic finally does
+what Section 2.2 says it does -- checks argument FORM via brute-force
+propositional truth-table enumeration (general, not a fixed fallacy
+lookup table), returning a real counterexample when invalid. Wired into
+`MasterOfLogic.cross_examine` via an optional `Claim.argument` field.
+
+**Reputability Engine storage mechanics** (`reputability_store.py`,
+Body-owned): versioned grading, evidence accumulation from cross-
+examination outcomes, an append-only dispute log. The grading *policy*
+(`_grade_from_tally`) is an explicitly-labeled placeholder -- real
+judgment needs a model. Wired into `loop.py`'s synthesis round with the
+actual non-retroactive-attachment sequencing: snapshot each cited
+source's grade BEFORE recording this deliberation's own outcome, so a
+later grade change can never rewrite what an earlier answer said it
+relied on. Proven with two real deliberations in
+`test_reputability_integration.py`, not just asserted.
+
+**Re-evaluation materiality** (`reevaluation.py`): a pure function over
+synthetic Belief Graph deltas, exactly as Section 7.2 specifies. "Newly
+contested/rejected" is material regardless of magnitude; smaller shifts
+are material only past a configurable ordinal threshold; no live grade
+available is correctly NOT treated as a change.
+
+`demo_brain.py` step 5 walks the full connected arc: a fallacious
+argument gets caught by real Logic, which downgrades a source's
+reputability, which the materiality test then correctly flags as grounds
+to reopen a *different*, earlier answer that cited the same source.
+
+13 new tests (82 total).

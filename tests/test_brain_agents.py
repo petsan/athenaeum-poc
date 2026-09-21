@@ -45,3 +45,25 @@ def test_mathematics_computes_round_half_up():
     m = MasterOfMathematics()
     claims = m.explore("how should we round 2.5?", "q1")
     assert any("rounds to 3" in c.statement for c in claims)  # classical convention
+
+def test_logic_corroborates_valid_argument():
+    from athenaeum_brain.claims import Claim
+    m = MasterOfLogic()
+    claim = Claim(question_id="q1", round=1, issuing_agent="Mathematics",
+                  statement="Q holds", claim_type="formal", confidence=1.0,
+                  defeat_condition="x", jurisdiction_check=True,
+                  argument={"premises": ["P", "P -> Q"], "conclusion": "Q"})
+    resp = m.cross_examine(claim, "q1")
+    assert resp.relation == "corroborates"
+    assert "valid" in resp.statement.lower()
+
+def test_logic_challenges_fallacious_argument_with_real_counterexample():
+    from athenaeum_brain.claims import Claim
+    m = MasterOfLogic()
+    claim = Claim(question_id="q1", round=1, issuing_agent="Mathematics",
+                  statement="P holds", claim_type="formal", confidence=1.0,
+                  defeat_condition="x", jurisdiction_check=True,
+                  argument={"premises": ["Q", "P -> Q"], "conclusion": "P"})  # affirming consequent
+    resp = m.cross_examine(claim, "q1")
+    assert resp.relation == "challenges"
+    assert "INVALID" in resp.statement

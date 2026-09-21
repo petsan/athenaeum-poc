@@ -83,4 +83,39 @@ print("both Mathematics's classical convention and Engineering's IEEE-754")
 print("convention are correct on their own terms, so synthesis commits both,")
 print("labeled, rather than picking a winner (Section 4.3).")
 
+step("5. The connected arc: Logic validity -> Reputability -> materiality")
+from athenaeum_body.reputability_store import ReputabilityStore
+from athenaeum_brain.reevaluation import is_material
+
+DATA3 = pathlib.Path("data/demo-brain-arc")
+shutil.rmtree(DATA3, ignore_errors=True)
+rep_log = CheckpointLog(cas=ContentAddressedStore(DATA3 / "rep-cas"), index_path=DATA3 / "rep-index.txt")
+reputability = ReputabilityStore(rep_log)
+
+log = CheckpointLog(cas=ContentAddressedStore(DATA3 / "cas"), index_path=DATA3 / "index.txt")
+runner = SingleUnitRunner(log, shared_state={})
+unit = make_deliberation_unit("is 17 prime?", "q-arc", reputability=reputability)
+while unit.status != "completed":
+    runner.run_round(unit)
+answer = log.read_latest()["shared_state"]["answer"]
+print("first answer's source grade at use:", answer["source_grades_at_use"])
+
+print("...later, the same source gets cited in a fallacious argument, which real Logic catches...")
+fallacious = Claim(question_id="q-x", round=1, issuing_agent="Mathematics",
+                    statement="P holds", claim_type="formal", confidence=1.0,
+                    defeat_condition="x", jurisdiction_check=True,
+                    supporting_provenance=["computed:trial_division"],
+                    argument={"premises": ["Q", "P -> Q"], "conclusion": "P"})
+verdict = MasterOfLogic().cross_examine(fallacious, "q-x")
+print("Logic's verdict:", verdict.statement)
+for _ in range(3):
+    reputability.record_outcome("computed:trial_division", "source", "challenged")
+
+current = {"computed:trial_division": reputability.current_grade("computed:trial_division")}
+print("live grade now:", current["computed:trial_division"])
+result = is_material(answer, current)
+print("is the FIRST answer now material for re-evaluation?", result)
+print("(the first answer's own snapshot is untouched -- non-retroactive attachment --")
+print(" but materiality correctly flags it as worth reopening)")
+
 print("\n=== brain demo complete ===")
