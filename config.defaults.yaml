@@ -1,0 +1,44 @@
+# config.defaults.yaml
+# Concrete defaults for every <config> placeholder in body-design.md Section 8.
+# Sane starting values, not tuned against real load -- revisit once the
+# system has real usage to measure against.
+
+compute:
+  local_cores_min: 1
+  local_cores_max: 40
+  distributed_cores_max: 200
+  gpu_count_max: 10
+  gpu_vram_pool_max_gb: 240
+
+memory:
+  local_dram_gb: 512
+  distributed_dram_pool_max_gb: 1024
+  working_set_floor_gb: 32          # ~6% of total DRAM; revisit under real memory pressure
+
+storage:
+  checkpoint_cadence_min_minutes: 5
+  checkpoint_cadence_max_minutes: 60   # widens automatically toward this under Tier2 outage
+  tier2_health_check_interval_seconds: 30
+
+concurrency:
+  max_concurrent_active_units: 16      # ~0.4x local_cores_max, leaves headroom for idle-evolution
+  time_slice_rounds_per_unit: 1
+  question_ledger_retention: permanent  # hard invariant
+
+model_serving:
+  model_idle_unload_seconds: 300        # 5 min idle before LRU-eligible
+  gpu_wait_vs_cpu_fallback_threshold_seconds: 10
+
+execution_sandbox:
+  enabled: false                        # off until dedicated security review (Section 4.6)
+  network_egress: false                 # hard invariant
+  cpu_time_limit_seconds: 30
+  memory_limit_mb: 2048
+  scratch_storage_max_mb: 512
+
+reputability:
+  reevaluation_trigger_threshold: 0.15   # confidence-grade delta that counts as "material" (Section 7.2)
+
+consolidation:
+  min_reevaluation_cycles_for_tier_c: 5   # brain-design.md open question 7 -- starting value, unvalidated
+  min_independent_sources_for_tier_c: 2   # same -- starting value, unvalidated

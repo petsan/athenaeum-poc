@@ -55,7 +55,7 @@ class MasterOfMathematics:
                 rounded = val.quantize(Decimal("1"), rounding=ROUND_HALF_UP)
                 claims.append(Claim(
                     question_id=question_id, round=1, issuing_agent=self.name,
-                    topic=f"rounding:{token}",
+                    subject=token,
                     statement=f"{token} rounds to {rounded} (classical round-half-up convention)",
                     claim_type="formal", confidence=1.0,
                     defeat_condition="a different result under the round-half-up rule",
@@ -144,7 +144,7 @@ class MasterOfEngineering:
             rounded = val.quantize(Decimal("1"), rounding=ROUND_HALF_EVEN)
             claims.append(Claim(
                 question_id=question_id, round=1, issuing_agent=self.name,
-                topic=f"rounding:{token}",
+                subject=token,
                 statement=f"{token} rounds to {rounded} (IEEE-754 round-half-to-even convention)",
                 claim_type="executable", confidence=1.0,
                 defeat_condition="a different result under decimal.ROUND_HALF_EVEN",

@@ -36,6 +36,20 @@ def cross_examination_round(claims: list[Claim], question_id: str) -> list[Claim
     return responses
 
 
+def _normalize_subject(subject: str):
+    """Numeric-equality normalization so agents that format the same
+    subject differently ('2.5' vs '2.50') still correctly conflict-group,
+    without needing to agree on a shared string convention in advance --
+    a modest, real improvement over exact-string topic matching, though
+    still far short of general semantic 'same underlying question'
+    detection, which needs the model-serving layer (Section 4.5)."""
+    try:
+        from decimal import Decimal
+        return ("numeric", Decimal(subject).normalize())
+    except Exception:
+        return ("text", subject.strip().lower())
+
+
 def synthesis_round(exploration_claims: list[Claim], exam_claims: list[Claim]) -> dict:
     """
     Section 4: the ONLY step allowed to move a claim's status from
@@ -45,15 +59,17 @@ def synthesis_round(exploration_claims: list[Claim], exam_claims: list[Claim]) -
     is committed at its original confidence; a challenged one surfaces as
     labeled dissent rather than being silently accepted or dropped.
 
-    Topic-grouped claims (Section 4.2): claims sharing a `topic` are the
-    demo's stand-in for "the same underlying question." When two or more
-    distinct, still-jurisdiction-valid agents reach genuinely different
-    conclusions on the same topic, this is a jurisdictional conflict --
-    synthesis does NOT pick a winner (that would manufacture false
-    consensus, Section 4.3). It commits every surviving conclusion,
-    labeled by agent, as a structured plural answer, chaired by Logic
-    checking only that each side's claim survived cross-examination on
-    its own merits -- never adjudicating whose domain "should" win.
+    Subject-grouped claims (Section 4.2): each agent independently sets
+    `subject` on a claim to whatever specific entity/value it's reasoning
+    about -- agents do NOT coordinate on a shared label. Grouping here
+    happens via `_normalize_subject`, so two agents both reasoning about
+    "2.5" conflict-group correctly even without prior coordination. When
+    two or more distinct, still-jurisdiction-valid agents reach genuinely
+    different conclusions about the same normalized subject, synthesis does
+    NOT pick a winner (that would manufacture false consensus, Section 4.3)
+    -- it commits every surviving conclusion, labeled by agent, as a
+    structured plural answer, chaired by Logic checking only that each
+    side's claim survived cross-examination on its own merits.
     """
     by_target = {}
     for r in exam_claims:
@@ -67,9 +83,9 @@ def synthesis_round(exploration_claims: list[Claim], exam_claims: list[Claim]) -
             return False
         return True
 
-    topic_groups, standalone = {}, []
+    subject_groups, standalone = {}, []
     for c in exploration_claims:
-        (topic_groups.setdefault(c.topic, []) if c.topic else standalone).append(c)
+        (subject_groups.setdefault(_normalize_subject(c.subject), []) if c.subject else standalone).append(c)
 
     committed, dissent, plural_answers = [], [], []
 
@@ -78,7 +94,7 @@ def synthesis_round(exploration_claims: list[Claim], exam_claims: list[Claim]) -
             claim.status = "committed"
             committed.append(claim)
 
-    for topic, group in topic_groups.items():
+    for norm_subject, group in subject_groups.items():
         survivors = [c for c in group if surviving_or_dissent(c, dissent)]
         distinct_agents = {c.issuing_agent for c in survivors}
         distinct_statements = {c.statement for c in survivors}
@@ -87,7 +103,7 @@ def synthesis_round(exploration_claims: list[Claim], exam_claims: list[Claim]) -
         committed.extend(survivors)
         if len(survivors) >= 2 and len(distinct_agents) > 1 and len(distinct_statements) > 1:
             plural_answers.append({
-                "topic": topic,
+                "subject": group[0].subject,  # original, un-normalized, for display
                 "chaired_by": "Logic",
                 "note": "genuine jurisdictional conflict -- no single winner adjudicated (Section 4.2-4.3)",
                 "conclusions": [

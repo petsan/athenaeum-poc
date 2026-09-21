@@ -119,3 +119,35 @@ it commits both conclusions as a labeled, Logic-chaired plural answer
 `topic` field are what triggers conflict detection; production would need a
 richer mechanism (an open question, not resolved here). See step 4 of
 `demo_brain.py` for the full example.
+
+## (a) Conflict detection: subject-based, not topic-string coordination
+
+Agents no longer share a hardcoded label to detect conflicts -- each
+independently sets `subject` (the specific value/entity it's reasoning
+about), and `synthesis_round` groups by *normalized* subject (numeric
+equality via `decimal`), so differently-formatted references to the same
+thing ("2.5" vs "2.50") still correctly conflict-group. This is still a
+simplification -- general semantic "same underlying question" detection
+needs the model-serving layer below -- but it's a real step away from
+agents needing to coordinate on exact strings in advance.
+
+## (b) Local Model Serving Layer stub (`src/athenaeum_body/model_serving.py`)
+
+No GPU/network here to validate real backends against, so this proves the
+*mechanics* of Section 4.5: a content-addressed model registry (tamper
+detection reused from 3.4), a router that never lets callers address a
+backend directly, VRAM-budget-aware LRU eviction, and transparent
+GPU-unavailable -> CPU-fallback redirection. A real vLLM/llama.cpp adapter
+just needs to satisfy the same `Backend` protocol (`load`/`unload`/`infer`)
+that `MockBackend` implements here.
+
+## (c) Hardening docs
+
+`tech-stack.md`, `schemas.md`, `config.defaults.yaml`, and
+`acceptance-criteria.md` close out the gaps flagged in the last
+architecture-readiness review -- a committed stack, field-level schemas,
+filled config defaults, and checkable pass/fail criteria for the
+highest-risk tasks specifically (not yet all ~47).
+
+Tests: 40 total (19 Body storage/scheduling + 8 Brain rounds/agents +
+6 Brain integration + 6 model-serving + 1 misc).

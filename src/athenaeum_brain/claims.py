@@ -23,7 +23,9 @@ class Claim:
     target_claim_id: str = None
     supporting_provenance: List[str] = field(default_factory=list)
     status: str = "proposed"        # proposed|committed  (Section 4.4 -- only synthesis may commit)
-    topic: str = None               # demo-only conflict-grouping key (see rounds.py synthesis_round)
+    subject: str = None              # the specific entity/value this claim is about, independently
+                                     # extracted by the issuing agent (see rounds.py synthesis_round
+                                     # for how conflict-grouping normalizes this across agents)
     claim_id: str = field(default_factory=next_claim_id)
 
     def to_dict(self) -> dict:

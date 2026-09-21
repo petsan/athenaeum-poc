@@ -44,3 +44,17 @@ def test_non_conflicting_question_produces_no_plural_answer():
     exam = cross_examination_round(exp, "q1")
     result = synthesis_round(exp, exam)
     assert result["plural_answers"] == []
+
+def test_conflict_groups_by_normalized_value_not_exact_string():
+    """Agents don't coordinate on a shared label -- '2.5' and '2.50'
+    (differently formatted, same real number) must still conflict-group."""
+    from athenaeum_brain.claims import Claim
+    from athenaeum_brain.rounds import synthesis_round
+    a = Claim(question_id="q", round=1, issuing_agent="Mathematics",
+              statement="rounds to 3", claim_type="formal", confidence=1.0,
+              defeat_condition="x", jurisdiction_check=True, subject="2.5")
+    b = Claim(question_id="q", round=1, issuing_agent="Engineering",
+              statement="rounds to 2", claim_type="executable", confidence=1.0,
+              defeat_condition="x", jurisdiction_check=True, subject="2.50")
+    result = synthesis_round([a, b], [])
+    assert len(result["plural_answers"]) == 1

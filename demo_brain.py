@@ -75,7 +75,7 @@ while unit.status != "completed":
     runner.run_round(unit)
 answer = log.read_latest()["shared_state"]["answer"]
 for pa in answer["plural_answers"]:
-    print(f"topic: {pa['topic']}  (chaired by {pa['chaired_by']})")
+    print(f"topic: {pa['subject']}  (chaired by {pa['chaired_by']})")
     for c in pa["conclusions"]:
         print(f"  - {c['agent']}: {c['statement']}")
 print("Neither answer was suppressed or forced into false consensus --")
