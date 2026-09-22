@@ -262,3 +262,15 @@ that flags review rather than silently correcting anything (Section
 18 new tests (99 total), including two integration tests running the
 real deliberation engine repeatedly and feeding its actual claim logs
 into both modules.
+
+## Sandbox security review (6)
+
+`security-review-sandbox.md` — the review `body-design.md` Section 4.6
+said had to happen before Task 23g could be responsibly implemented.
+Design-only, no code: a threat model (five ranked failure modes, from
+host compromise down to the easy-to-miss "false-positive containment"
+case), six required properties with the reasoning behind each (not just
+a checklist), and eight concrete fault-injection scenarios that must
+each have a passing automated test before `execution_sandbox.enabled`
+can move from its current default of `false`. Linked from
+`acceptance-criteria.md`'s existing Task 23g entry.
