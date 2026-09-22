@@ -74,3 +74,13 @@ def test_static_client_served(tmp_path):
             assert "Athenaeum" in body
     finally:
         server.shutdown()
+
+def test_answers_now_include_reputability_source_grades(tmp_path):
+    """Small task: ReputabilityStore is wired into api.py's deliberation
+    path, so every answer carries source_grades_at_use (Section 6.3)."""
+    server, base = start_server(tmp_path)
+    try:
+        result = post(base + "/api/questions", {"question": "is 17 prime?"})
+        assert "computed:trial_division" in result["answer"]["source_grades_at_use"]
+    finally:
+        server.shutdown()

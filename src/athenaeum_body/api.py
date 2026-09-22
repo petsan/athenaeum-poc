@@ -28,6 +28,7 @@ from .scheduler.runner import SingleUnitRunner
 from .ledger import QuestionLedger
 from .schemas import QuestionLedgerEntry
 from .resource_monitor import ResourceMonitor
+from .reputability_store import ReputabilityStore
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from athenaeum_brain.loop import make_deliberation_unit  # noqa: E402
@@ -40,6 +41,8 @@ def build_app(data_dir: Path):
     log = CheckpointLog(cas=cas, index_path=data_dir / "index.txt")
     ledger = QuestionLedger(log)
     monitor = ResourceMonitor()
+    rep_log = CheckpointLog(cas=cas, index_path=data_dir / "reputability-index.txt")
+    reputability = ReputabilityStore(rep_log)
     lock = threading.Lock()
 
     def submit_question(question: str) -> dict:
@@ -48,7 +51,7 @@ def build_app(data_dir: Path):
             ledger.submit(QuestionLedgerEntry(id=qid, importance=0.5))
             unit_log = CheckpointLog(cas=cas, index_path=data_dir / f"unit-{qid}.txt")
             runner = SingleUnitRunner(unit_log, shared_state={})
-            unit = make_deliberation_unit(question, qid)
+            unit = make_deliberation_unit(question, qid, reputability=reputability)
             while unit.status != "completed":
                 runner.run_round(unit)
             answer = unit_log.read_latest()["shared_state"]["answer"]
