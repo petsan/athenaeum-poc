@@ -39,12 +39,17 @@ echo "--- building (CPU-only, this takes a few minutes) ---"
 cmake -B /opt/llama.cpp/build -S /opt/llama.cpp -DCMAKE_BUILD_TYPE=Release
 cmake --build /opt/llama.cpp/build --config Release -j\$(nproc)
 
-echo "--- huggingface-cli ---"
+echo "--- huggingface_hub CLI ---"
 pip install --break-system-packages -q -U "huggingface_hub[cli]"
 
 echo "--- downloading ${HF_FILE} (resumable if interrupted) ---"
 mkdir -p /opt/models
-huggingface-cli download "${HF_REPO}" "${HF_FILE}" --local-dir /opt/models
+# huggingface-cli was deprecated and REMOVED (not just aliased) in
+# recent huggingface_hub releases -- 'hf download' is the current command.
+# Caught for real: the first live run of this script against all six
+# guests failed here with "huggingface-cli is deprecated and no longer
+# works," not something known from training data alone.
+hf download "${HF_REPO}" "${HF_FILE}" --local-dir /opt/models
 
 echo "--- systemd unit ---"
 cat > /etc/systemd/system/llama-server.service <<UNIT
