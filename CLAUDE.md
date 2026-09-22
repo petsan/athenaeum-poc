@@ -25,7 +25,7 @@ These aren't aspirational — every one of them is here because violating it (or
    maintained checklist of actual open work**, not scattered prose; check
    there first for "what's next" instead of re-deriving it from the
    narrative sections above it.
-2. **`known-bugs.md`** — nineteen real bugs hit during development, each
+2. **`known-bugs.md`** — twenty real bugs hit during development, each
    with root cause and generalizable lesson. Read the relevant section
    before touching sandboxing/namespace code, checkpoint/content-addressed
    storage, any narrated demo script (`demo.py`, `demo_brain.py`), or any
