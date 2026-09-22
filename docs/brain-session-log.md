@@ -354,6 +354,54 @@ is exactly where it belongs.
 
 ---
 
+## 2026-09-22 — World News agent + registry refactor design choices
+
+**Q: "Adding new domains should not be difficult" — what did that
+actually require changing, beyond just writing the new agent class?**
+
+Only `rounds.py`'s `ALL_AGENTS = [MasterOfMathematics(), ...]` hardcoded
+list was the actual friction point. Fixed by adding a `@master_agent`
+decorator in `agents.py` that registers a class into a module list, and
+having `rounds.py` build `ALL_AGENTS` from that registry instead. Checked
+whether anything else needed touching for a new agent to work correctly
+(routing, cross-examination, Domain Fidelity Monitoring, evaluation's
+adversarial suite) — `domain_fidelity.py`'s `FINGERPRINT_CHECKS` was the
+only other per-agent lookup, and it already degrades gracefully (returns
+neutral 0.0) for an agent with no entry, so it didn't need a hard
+"every agent must have one" rule to stay correct. `evaluation.py`'s
+`ADVERSARIAL_CASES` was deliberately left as an explicit, named subset
+(see the 2026-09-22 Evaluation Infrastructure entry above) rather than
+something a new agent is required to extend.
+
+**Q: Why a real dated-event lookup instead of something more
+general-purpose for "timelines"?**
+
+Because the project's own established discipline (stated in `agents.py`'s
+own module docstring since session 1) is that every toy agent's claims
+are backed by real, verifiable computation in a narrow domain, not
+hand-waved text — a general "reason about any historical event" capability
+would require exactly the LLM backend that doesn't exist yet. What a
+toy agent CAN do honestly is check a mechanical, narrow property —
+temporal precedence — against a small set of dates it actually has, and
+correctly abstain (not guess) outside that set. `build_timeline()` is the
+direct, literal answer to "we are going to create timelines": it's a real
+utility, usable today, not a placeholder waiting on a future backend.
+
+**Q: World War I / World War II — how was that bug actually found, not
+just fixed?**
+
+By writing a test for the exact scenario before trusting the substring
+check (`_find_events`) was correct: a question naming only "World War
+II" should find only WWII. Running it against the naive `event in q`
+implementation failed immediately, which is what surfaced the substring
+containment (`'world war i' in 'world war ii'` is literally `True` in
+Python) rather than it being caught by inspection. Fixed with `\b`-bounded
+regex matching, then the same test made green — matching this project's
+own "verify empirically" principle applied at the smallest possible
+scale, not just at the infrastructure level.
+
+---
+
 *See `docs/progress.md` §26 for the checklist this log's entries track
 against, and `docs/infra-topology.md` for the infrastructure-side design
 decisions made in the same planning conversation.*

@@ -5,16 +5,13 @@ commits them.
 """
 from __future__ import annotations
 from .claims import Claim
-from .agents import (
-    MasterOfMathematics, MasterOfLogic, MasterOfEngineering,
-    MasterOfPhysics, MasterOfPhilosophy, MasterOfTheology,
-)
+from .agents import all_agents
 from .output_types import classify_output_type
 
-ALL_AGENTS = [
-    MasterOfMathematics(), MasterOfLogic(), MasterOfEngineering(),
-    MasterOfPhysics(), MasterOfPhilosophy(), MasterOfTheology(),
-]
+# Built from agents.py's @master_agent registry, not a hardcoded class
+# list -- adding a new domain (agents.py) requires no change here. See
+# agents.py's module docstring for the full explanation.
+ALL_AGENTS = all_agents()
 
 
 def framing_round(question: str, question_id: str) -> dict:

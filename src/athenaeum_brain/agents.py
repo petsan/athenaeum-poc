@@ -8,9 +8,45 @@ claims are backed by real, verifiable computation in a narrow domain,
 not hand-waved text. This proves the deliberation *mechanics*
 (claim structure, jurisdiction, cross-examination, commit boundary),
 not reasoning quality.
-"""
+
+Registration (added 2026-09-22, alongside the World News agent): every
+Master Agent class below is decorated with @master_agent, which appends
+it to a module-level registry. rounds.py builds ALL_AGENTS from that
+registry (`all_agents()`) instead of hardcoding a class list -- adding a
+new domain is: write the class here, decorate it, done. No other file
+needs to change for the agent to be routed, cross-examined, and included
+in Domain Fidelity Monitoring's per-agent scan (domain_fidelity.py's
+FINGERPRINT_CHECKS is a separate, OPTIONAL per-agent lookup -- an
+unregistered fingerprint check just means fingerprint_deviation() returns
+0.0 for that agent, not an error, so a new agent works correctly even
+before anyone gets around to adding one)."""
 from __future__ import annotations
+import re
 from .claims import Claim
+
+_REGISTRY: list[type] = []
+
+
+def master_agent(cls):
+    """Class decorator: registers a Master Agent so it's automatically
+    included in rounds.all_agents() -- see module docstring above."""
+    _REGISTRY.append(cls)
+    return cls
+
+
+def _strip_leading_article(s: str) -> str:
+    """Free-text causal statements naturally include 'the' ('the fall of
+    the berlin wall'), but the _EVENTS registry keys don't -- stripped
+    here rather than adding 'the'-prefixed duplicate keys to the
+    registry, which would just be the same data twice."""
+    return s[4:] if s.startswith("the ") else s
+
+
+def all_agents() -> list:
+    """Fresh instances of every registered Master Agent, in registration
+    (i.e. declaration) order -- deterministic, so routing/framing output
+    doesn't depend on dict/set ordering."""
+    return [cls() for cls in _REGISTRY]
 
 
 def _is_prime(n: int) -> bool:
@@ -22,6 +58,7 @@ def _is_prime(n: int) -> bool:
     return True
 
 
+@master_agent
 class MasterOfMathematics:
     """Domain: formal/quantitative claims. Reasoning mode: definition ->
     derivation -> proof (Section 2.2). Here: real primality checks."""
@@ -88,6 +125,7 @@ class MasterOfMathematics:
         )
 
 
+@master_agent
 class MasterOfLogic:
     """Domain: validity of argument form, never first-order domain content
     (Section 2.2). Chairs synthesis/dispute resolution (Section 4)."""
@@ -139,6 +177,7 @@ class MasterOfLogic:
         return None
 
 
+@master_agent
 class MasterOfEngineering:
     """Domain: specification/implementation/verification via execution
     (Section 2.2, the sixth Master Agent). Here: real Decimal computation
@@ -229,6 +268,7 @@ class MasterOfEngineering:
         )
 
 
+@master_agent
 class MasterOfPhysics:
     """Domain: empirical, causal claims about the natural world, always
     paired with a stated defeat condition (Section 2.2). Here: real
@@ -289,6 +329,7 @@ class MasterOfPhysics:
         )
 
 
+@master_agent
 class MasterOfPhilosophy:
     """Domain: epistemology, ethics, metaphysics; question-framing and
     assumption-surfacing (Section 2.2). Never asserts a first-order
@@ -341,6 +382,7 @@ class MasterOfPhilosophy:
         )
 
 
+@master_agent
 class MasterOfTheology:
     """Domain: the history, structure, and internal logic of religious/
     metaphysical traditions, argued from within each tradition's own
@@ -394,3 +436,145 @@ class MasterOfTheology:
             target_claim_id=claim.claim_id,
             supporting_provenance=["policy:traditional_confidence_discipline"],
         )
+
+
+@master_agent
+class MasterOfWorldNews:
+    """Domain: current and historical world events -- their chronology and
+    documented causal/contributing relationships, for timeline
+    construction. A deliberate extension beyond brain-design.md's
+    original six Master Agents, recorded explicitly the same way Section
+    2.0 records Engineering's own addition (see brain-design.md Section
+    2.0b) rather than silently expanding the taxonomy.
+
+    Reasoning mode: mirrors Physics's defeat-condition discipline, but the
+    falsifiable unit here is temporal precedence, not a physical law -- an
+    event cannot cause, or contribute to, an event that occurred before
+    it. That single constraint is mechanically checkable against
+    documented dates, the same way Mathematics checks primality: real
+    computation, not asserted plausibility."""
+    name = "WorldNews"
+    domain_keywords = ("timeline", "history", "historical", "event", "war", "treaty",
+                        "election", "revolution", "before", "after", "cause", "lead to")
+
+    # Small, real, dated-event registry -- deliberately narrow (a handful
+    # of well-documented, uncontroversially-dated events), the same
+    # scoping discipline Theology's three-tradition lookup already
+    # established: not a general history knowledge base.
+    _EVENTS = {
+        "world war i": "1914-07-28",
+        "treaty of versailles": "1919-06-28",
+        "world war ii": "1939-09-01",
+        "d-day": "1944-06-06",
+        "cuban missile crisis": "1962-10-16",
+        "moon landing": "1969-07-20",
+        "fall of the berlin wall": "1989-11-09",
+        "collapse of the soviet union": "1991-12-26",
+    }
+
+    def _find_events(self, text: str) -> list[str]:
+        """Event names matched with word boundaries, in the order they
+        appear in `text` -- NOT a plain substring `in` check. Real bug
+        caught while writing this: 'world war i' is a literal substring
+        of 'world war ii' ('world war i' + 'i'), so a naive `in` check
+        would wrongly match WWI inside a question that only ever
+        mentions WWII. `\\b...\\b` fixes it, since there's no boundary
+        between the two adjacent 'i' characters in 'world war ii'."""
+        q = text.lower()
+        found = []
+        for event in self._EVENTS:
+            m = re.search(r"\b" + re.escape(event) + r"\b", q)
+            if m:
+                found.append((m.start(), event))
+        return [event for _, event in sorted(found)]
+
+    def in_jurisdiction(self, question: str) -> bool:
+        q = question.lower()
+        return any(k in q for k in self.domain_keywords) or bool(self._find_events(question))
+
+    def explore(self, question: str, question_id: str) -> list[Claim]:
+        q = question.lower()
+        events = self._find_events(question)
+        if len(events) != 2:
+            return []
+        event_a, event_b = events
+        date_a, date_b = self._EVENTS[event_a], self._EVENTS[event_b]
+        claims = []
+        if any(k in q for k in ("before", "after", "when", "order", "timeline")):
+            order = "before" if date_a < date_b else "after"
+            claims.append(Claim(
+                question_id=question_id, round=1, issuing_agent=self.name,
+                subject=f"{event_a}|{event_b}",
+                statement=f"'{event_a}' ({date_a}) occurred {order} '{event_b}' ({date_b})",
+                claim_type="empirical", confidence=1.0,
+                defeat_condition=f"a documented date for '{event_a}' or '{event_b}' that contradicts {date_a}/{date_b}",
+                jurisdiction_check=True,
+                supporting_provenance=[f"dated_event:{event_a}", f"dated_event:{event_b}"],
+            ))
+        if any(k in q for k in ("cause", "caused", "lead to", "led to", "contribute to",
+                                 "contributed to", "result in", "resulted in")):
+            valid = date_a <= date_b
+            statement = (
+                f"'{event_a}' ({date_a}) precedes '{event_b}' ({date_b}), so a causal/contributing "
+                f"link is chronologically POSSIBLE"
+            ) if valid else (
+                f"'{event_a}' ({date_a}) occurred AFTER '{event_b}' ({date_b}), so it cannot have "
+                f"caused or contributed to it -- chronologically IMPOSSIBLE"
+            )
+            claims.append(Claim(
+                question_id=question_id, round=1, issuing_agent=self.name,
+                subject=f"{event_a}|{event_b}",
+                statement=statement,
+                claim_type="empirical", confidence=1.0,
+                defeat_condition=f"a documented date for '{event_a}' or '{event_b}' that contradicts {date_a}/{date_b}",
+                jurisdiction_check=True,
+                supporting_provenance=[f"dated_event:{event_a}", f"dated_event:{event_b}"],
+            ))
+        return claims
+
+    def cross_examine(self, claim: Claim, question_id: str) -> Claim | None:
+        """Independently re-checks another claim's stated causal assertion
+        ('X caused Y' / 'X led to Y' / ...) against this registry's
+        documented dates -- challenges only when BOTH named events are
+        recognized and the claimed direction contradicts them; anything
+        outside this registry's narrow coverage is silently abstained
+        from, the same discipline every other agent here follows rather
+        than guessing at unrecognized events."""
+        if claim.issuing_agent == self.name:
+            return None
+        m = re.search(
+            r"'?([\w \-]+?)'?\s+(?:caused|cause|led to|lead to|contributed to|contribute to|resulted in|result in)\s+'?([\w \-]+?)'?[.,]?$",
+            claim.statement.strip(), re.IGNORECASE)
+        if not m:
+            return None
+        cause = _strip_leading_article(m.group(1).strip().lower())
+        effect = _strip_leading_article(m.group(2).strip().lower())
+        if cause not in self._EVENTS or effect not in self._EVENTS:
+            return None
+        date_cause, date_effect = self._EVENTS[cause], self._EVENTS[effect]
+        agrees = date_cause <= date_effect
+        return Claim(
+            question_id=question_id, round=2, issuing_agent=self.name,
+            statement=f"chronological check of '{claim.statement}': {'consistent' if agrees else 'IMPOSSIBLE'} -- '{cause}' is dated {date_cause}, '{effect}' is dated {date_effect}",
+            claim_type="empirical", confidence=1.0,
+            defeat_condition=f"a documented date for '{cause}' or '{effect}' that contradicts {date_cause}/{date_effect}",
+            jurisdiction_check=True,
+            relation="corroborates" if agrees else "challenges",
+            target_claim_id=claim.claim_id,
+            supporting_provenance=[f"dated_event:{cause}", f"dated_event:{effect}"],
+        )
+
+    def build_timeline(self, event_names: list[str]) -> dict:
+        """Not part of the claim/cross-examination loop -- a direct
+        utility for the stated goal ('create timelines for how major
+        events tie into each other'): sorts recognized events by their
+        documented date. Unrecognized names are reported, not silently
+        dropped, so a caller knows a returned timeline is partial rather
+        than assuming completeness."""
+        recognized = [(name, self._EVENTS[name.lower()]) for name in event_names if name.lower() in self._EVENTS]
+        unrecognized = [name for name in event_names if name.lower() not in self._EVENTS]
+        ordered = sorted(recognized, key=lambda pair: pair[1])
+        return {
+            "timeline": [{"event": name, "date": date} for name, date in ordered],
+            "unrecognized": unrecognized,
+        }

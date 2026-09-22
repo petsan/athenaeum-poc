@@ -14,7 +14,12 @@ FINGERPRINT_CHECKS = {
     "Mathematics": lambda c: any(p.startswith("computed:") for p in c.get("supporting_provenance", [])),
     "Engineering": lambda c: c.get("claim_type") == "executable",
     "Logic": lambda c: c.get("claim_type") == "procedural",  # Logic must NEVER assert first-order claims
+    "WorldNews": lambda c: any(p.startswith("dated_event:") for p in c.get("supporting_provenance", [])),
 }
+# Not every registered agent needs an entry here -- fingerprint_deviation()
+# below returns 0.0 (neutral, not broken) for one that's missing, so a
+# newly added domain works correctly before anyone gets around to giving
+# it a style marker. See agents.py's module docstring.
 
 
 def jurisdiction_overreach_rate(agent_name: str, exploration_claims: list[dict], exam_claims: list[dict]) -> float:

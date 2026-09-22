@@ -2,8 +2,10 @@
 
 A slow, deep-reasoning, memory-resident, evolving knowledge system split into
 **Body** (infrastructure/elasticity) and **Brain** (cognitive logic: six
-classical Master Agents). This repo is a proof-of-work implementation, not
-the finished system — read `docs/progress.md` before doing anything else.
+classical Master Agents plus World News, a seventh, deliberately added
+2026-09-22 — see `brain-design.md` Section 2.0b). This repo is a
+proof-of-work implementation, not the finished system — read
+`docs/progress.md` before doing anything else.
 
 ## Guiding principles
 
@@ -77,7 +79,7 @@ These aren't aspirational — every one of them is here because violating it (or
   invariant enforced in `config.py` itself (`disallow_paid_apis`), not
   just a policy.
 - Before marking any task "done," run the actual test suite
-  (`pytest -q`, currently 202/202) and update `docs/progress.md` — don't
+  (`pytest -q`, currently 219/219) and update `docs/progress.md` — don't
   let the checkpoint file go stale.
 
 ## Current status (see `docs/progress.md` for full detail)
@@ -88,9 +90,12 @@ These aren't aspirational — every one of them is here because violating it (or
   real cross-process, network-based, proven against an actual killed
   worker process) all implemented and tested against everything this
   sandboxed dev environment could validate.
-- Brain: deliberation loop, all **six** Master Agents now implemented as
-  deterministic toy agents (Mathematics, Logic, Engineering, Physics,
-  Philosophy, Theology — no domain left unbuilt), Reputability Engine,
+- Brain: deliberation loop, all **seven** Master Agents now implemented
+  as deterministic toy agents (Mathematics, Logic, Engineering, Physics,
+  Philosophy, Theology, World News — see brain-design.md Section 2.0b for
+  the seventh's rationale), registered via `agents.py`'s `@master_agent`
+  decorator so adding another domain needs no edit to `rounds.py`,
+  Reputability Engine,
   Model Fitness tracking, knowledge consolidation, domain fidelity
   monitoring, Output Types (Research/Forecast/Recommendation, §5.4), Human
   Input Pipeline and governance (§11), Content Integrity enforcement
