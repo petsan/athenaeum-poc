@@ -212,3 +212,24 @@ Caught one real bug while setting it up, with an actual (not hypothetical) conse
 Confirmed separately: `docker.service` is `enabled` on this host, so the whole Docker-fix persistence strategy actually has something to attach to on every boot — the one assumption that, if wrong, would have silently broken everything else in this session.
 
 `known-bugs.md` now nineteen entries. Twenty-five commits total.
+
+## 25. What's next — maintained checklist, not scattered prose
+
+Earlier sections each ended with their own "suggested next step," repeatedly superseded by whatever came next. This section replaces that pattern: **keep this list current going forward** — check items off (strike through, don't delete, so the history of what was actually open stays visible) and add new ones here rather than starting a new scattered note at the bottom of a new section.
+
+### Infra (Proxmox) — real, not yet drilled
+- [ ] **Verify the whole stack survives an actual cold boot**, not just reasoning about it. Next time the host is powered on after being off: check `onboot` actually started both guests, `systemctl status pve-docker-bridge-fix.service` actually reapplied cleanly, and the backup timer's `Persistent=true` actually caught up a missed run — all three have been *designed* for the routine-power-cycle reality (Section 24) but none has been *observed* working through a real full power-off/power-on cycle yet.
+- [ ] Confirm the `local-thin-multi`/`local` storage content-type config is still intact after any future script touches it — `known-bugs.md` #19 was a real, if fixed, near-miss.
+- [ ] Off-host/off-site backup remains explicitly not built (`infra/proxmox/README.md`'s stated scope boundary) — only build this if actually needed, don't assume it's implied by "backups exist now."
+
+### Body/Brain — real design work, not infra
+- [ ] **Ingestion pipeline's `fetch()` still uses `FixtureSource`, not a real network fetch** (Section 6) — this was blocked on "no real network available here" when written; that's no longer true now that a real, internet-connected guest exists (VMID 104/106). Worth revisiting whether this is now actually unblocked, or whether there's a reason beyond network access it was left as a fixture.
+- [ ] **Task 23 (distributed worker dispatch)** was blocked on "needs a second process/host to be meaningful" (Section 6) — also potentially unblocked now that `infra/proxmox/` can cheaply stand up additional guests. Worth revisiting for the same reason as ingestion.
+- [ ] Tasks 21/22 (GPU-vs-CPU output equivalence) remain genuinely blocked — this host has no GPU (confirmed via the node status API, Section 22).
+- [ ] Physics, Philosophy, Theology Master Agents — design exists in `brain-design.md`, no code yet. Mathematics/Logic/Engineering are deterministic toy agents, not LLM-backed.
+- [ ] Local Model Serving Layer has no real backend — `model_serving.py`'s router/eviction/fallback logic is tested only against `MockBackend`. Needs real vLLM/llama.cpp integration before any Master Agent can be more than deterministic.
+- [ ] Human input workflow (`brain-design.md` Section 11) — still not built, was on the original "explicitly not built yet" list from the very first session and hasn't been revisited since.
+- [ ] `execution_sandbox.enabled` stays `false` — not actionable right now (the CPU-time gap is a confirmed environment limitation on this specific kernel, not a bug to fix), but re-run `scripts/preflight_check.py` if this project is ever deployed to a *different* host, per `security-review-sandbox.md` Section 7.3/7.4.
+
+### Explicitly not on this list
+Production sizing/90%+ resource cap — the user's own stated plan is to raise the 50% cap once this project goes live, but that's a "when going live" decision to make explicitly at the time, not a current task. Also not on this list: any application-level work beyond what `deployment-playbook.md` promises to deliver (verified SSH access to a correctly-networked guest, not a deployed application).

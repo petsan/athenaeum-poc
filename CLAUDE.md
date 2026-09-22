@@ -8,9 +8,11 @@ the finished system — read `docs/progress.md` before doing anything else.
 ## Read these first, in this order
 
 1. **`docs/progress.md`** — resumable session-history checkpoint. What's
-   built, what's tested, what's still open, what the last suggested next
-   step was. This is the single most important file in the repo for
-   picking up cold.
+   built, what's tested, what's still open. This is the single most
+   important file in the repo for picking up cold — **Section 25 is a
+   maintained checklist of actual open work**, not scattered prose; check
+   there first for "what's next" instead of re-deriving it from the
+   narrative sections above it.
 2. **`known-bugs.md`** — nineteen real bugs hit during development, each
    with root cause and generalizable lesson. Read the relevant section
    before touching sandboxing/namespace code, checkpoint/content-addressed
@@ -77,16 +79,29 @@ the finished system — read `docs/progress.md` before doing anything else.
   knowledge consolidation, domain fidelity monitoring all implemented.
   No real LLM backend yet — `model_serving.py`'s router/eviction/fallback
   logic is tested against a `MockBackend` only.
-- **Proxmox is live and access is set up** (see `deployment-playbook.md`
-  and the project's own memory notes) — a scoped API token, a standing
-  test LXC (VMID 104, `athenaeum-preflight`, `192.168.0.150`) with working
+- **Proxmox is live and access is set up** (see `deployment-playbook.md`,
+  `infra/proxmox/`, and the project's own memory notes) — a scoped API
+  token, a standing test LXC (VMID 104, `athenaeum-preflight`,
+  `192.168.0.150`, privileged+nesting for sandbox testing) with working
   SSH, and real specs confirmed (2× Xeon E5-2690 v2, 40 threads, ~504GB
   RAM, PVE 9.2.20). `scripts/preflight_check.py` has been run for real on
   this host: `RLIMIT_CPU` still crashes `unshare --fork` here (matches the
   original reference environment, wall-clock kill remains primary CPU-time
   enforcement — no code change needed). Fork containment briefly reopened
   on this host (cgroups v2 only, `sandbox.py` had assumed v1) and is now
-  fixed and re-verified — see `known-bugs.md` entry 17.
+  fixed and re-verified — see `known-bugs.md` entry 17. **Full `pytest -q`
+  suite has been run for real in that LXC — 113/113.**
+- A shared, multi-project tools container (VMID 106, `athenaeum-tools`,
+  `192.168.0.151`) holds `pve-ops`, a CLI with credentials preinstalled;
+  both guests auto-start on host boot (`onboot: 1`); the Docker
+  `FORWARD`-chain networking fix and a daily `vzdump` backup (to `local`,
+  self-pruned to 7 copies) both persist via systemd units. All of this is
+  scripted, not just done once by hand — see `infra/proxmox/README.md`.
+  This host is routinely powered OFF between sessions by design (see
+  "Suggested first move" below) — none of the above has been drilled
+  through an actual full power-cycle yet, only reasoned through; worth
+  treating as "should work" until it's been observed working after a
+  real cold boot.
 
 ## Suggested first move in a new session
 
