@@ -15,13 +15,13 @@ These aren't aspirational — every one of them is here because violating it (or
 4. **Infrastructure and decisions live in the repo (or memory), not just in chat.** Nothing about this project's Proxmox setup, its known bugs, or its open work should depend on any specific conversation surviving — `deployment-playbook.md`, `infra/proxmox/`, `known-bugs.md`, and `docs/progress.md` are the actual source of truth, kept current as work happens, not reconstructed from memory after the fact.
 5. **State scope honestly — what's fixed, what's tested, and what's still just reasoned-through.** A fix gets called "closed" only once it's been observed working, not once it's been designed correctly (see the cold-boot checklist item this principle exists to unblock). Backup/DR claims say plainly what they don't cover (no off-host protection here) rather than letting "backups exist" be read as "fully protected."
 6. **Confirm before consequential or hard-to-reverse actions**, especially anything touching shared state, security posture, or broad credentials — this repo's own hard constraints below (resource caps, no bare-host deploys, sandbox stays disabled) are instances of this principle, not exceptions to it.
-7. **Keep the checkpoint current, every session.** `docs/progress.md` Section 25, `known-bugs.md`, and `CLAUDE.md`'s own "Current status" get updated as part of finishing a task, not as an afterthought — a stale checkpoint is worse than no checkpoint, because it's trusted.
+7. **Keep the checkpoint current, every session.** `docs/progress.md` Section 26, `known-bugs.md`, and `CLAUDE.md`'s own "Current status" get updated as part of finishing a task, not as an afterthought — a stale checkpoint is worse than no checkpoint, because it's trusted.
 
 ## Read these first, in this order
 
 1. **`docs/progress.md`** — resumable session-history checkpoint. What's
    built, what's tested, what's still open. This is the single most
-   important file in the repo for picking up cold — **Section 25 is a
+   important file in the repo for picking up cold — **Section 26 is a
    maintained checklist of actual open work**, not scattered prose; check
    there first for "what's next" instead of re-deriving it from the
    narrative sections above it.

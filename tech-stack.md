@@ -12,6 +12,6 @@ The design docs deliberately left implementation choices abstract for elasticity
 | GPU-backed model serving | vLLM | Continuous batching, multi-GPU, matches elastic pool design (see chat decision on local model tooling). |
 | CPU-fallback model serving | llama.cpp (server mode) | Only realistic dependency-light CPU path; matches the single-core-floor requirement. |
 | Testing | pytest | Already used in all delivered test suites. |
-| Packaging | `pyproject.toml`, `src/` layout | Already in place in `athenaeum-body-poc`. |
+| Packaging | `pyproject.toml`, `src/` layout | Already in place in `athenaeum-poc` (renamed from `athenaeum-body-poc` — the repo covers both Body and Brain, "body" in the name was misleading). |
 
 **Not yet decided:** distributed-worker transport (how the ~200-core pool receives work units), and whether the Question Ledger's index needs a real database once question volume is high. Both deferred until the relevant backlog phase (7 and 3, respectively) is reached for real.

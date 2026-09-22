@@ -1,6 +1,6 @@
 [Unit]
 Description=Allow bridged guest traffic through vmbr0 (undo Docker's FORWARD-chain DROP for guest LAN/internet reachability)
-# See known-bugs.md entry 18 in the athenaeum-body-poc repo for the full
+# See known-bugs.md entry 18 in the athenaeum-poc repo for the full
 # incident this exists to prevent from recurring after every reboot:
 # Docker sets FORWARD's default policy to DROP and only allows traffic
 # tied to its own managed interfaces, which silently also catches all

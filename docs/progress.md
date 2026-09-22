@@ -2,6 +2,8 @@
 
 **Purpose of this file:** a resumable checkpoint of where the project stands. Read this first in any new session before touching the design docs or the repo.
 
+**Naming note (2026-09-22):** this repo was renamed from `athenaeum-body-poc` to `athenaeum-poc` — see Section 26. Earlier sections below still say `athenaeum-body-poc` where that was the actual name at the time; those aren't errors, just history. The current name, everywhere it matters going forward, is `athenaeum-poc`.
+
 ---
 
 ## 1. Where we are, in one paragraph
@@ -213,7 +215,19 @@ Confirmed separately: `docker.service` is `enabled` on this host, so the whole D
 
 `known-bugs.md` now nineteen entries. Twenty-five commits total.
 
-## 25. What's next — maintained checklist, not scattered prose
+## 25. Pushed to GitHub, then renamed
+
+Set up `gh` (GitHub CLI, installed via `winget` since it wasn't present), authenticated via device-code flow, and pushed this repo to a **private** GitHub repo — confirmed private via the API response (`visibility: PRIVATE`), and confirmed `.proxmox.env` (the live API token secret) never made it into the pushed tree, matching what `.gitignore` had been enforcing locally all along. Needed a second device-auth pass to add the `workflow` OAuth scope, since the default scope set can't push `.github/workflows/ci.yml`.
+
+Then renamed: `athenaeum-body-poc` → `athenaeum-poc`, both on GitHub and the local folder. Reason: this repo has always contained both Body (`src/athenaeum_body/`) and Brain (`src/athenaeum_brain/`) code — "body" in the name was actively misleading about what the repo covers, not just imprecise. Renamed via the GitHub API directly (`gh api -X PATCH .../name=athenaeum-poc`) rather than the interactive `gh repo rename` flow, updated the local `origin` remote URL, and fixed the two files that referenced the old name as current-state fact (`tech-stack.md`, the systemd unit's own comment) — left `docs/progress.md`'s own historical mentions of the old name alone, since those are an accurate record of what it was actually called at the time, not something to retroactively rewrite.
+
+Local Windows folder also renamed to match (`C:\Users\petsa\Downloads\Claude\athenaeum-poc`) — done carefully from outside the directory itself, since Windows won't let a process rename a directory it's currently working inside.
+
+Note: the copy of `pve-docker-bridge-fix.service` already installed on the Proxmox host (`/etc/systemd/system/`) still has the old name in its comment — cosmetic only (doesn't affect function), not worth a host round-trip just for that; will naturally get the current name next time `04-persist-docker-forward-fix.sh` is re-run for any real reason.
+
+Repo is now `https://github.com/petsan/athenaeum-poc` (private). Twenty-six commits total (pre-rename).
+
+## 26. What's next — maintained checklist, not scattered prose
 
 Earlier sections each ended with their own "suggested next step," repeatedly superseded by whatever came next. This section replaces that pattern: **keep this list current going forward** — check items off (strike through, don't delete, so the history of what was actually open stays visible) and add new ones here rather than starting a new scattered note at the bottom of a new section.
 
