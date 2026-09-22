@@ -13,6 +13,16 @@
 #   GUEST_IP=192.168.0.150 GUEST_MAC=BC:24:11:AA:BB:CC \
 #     ./03-create-project-guest.sh
 #
+# Brainbox tier (optional, see docs/infra-topology.md for the full
+# rationale): set GUEST_TIER to xsmall|medium|large|xlarge to pick sane
+# vCPU/RAM/disk defaults for that role. GUEST_CORES/GUEST_MEM_MB/
+# GUEST_DISK_GB, if set, always win over the tier default. Omitting
+# GUEST_TIER keeps the original 2vCPU/2GB/8GB defaults this script always
+# had, so existing callers (e.g. LXC 104's own rebuild) are unaffected.
+#   GUEST_TIER=medium GUEST_VMID=110 GUEST_HOSTNAME=athenaeum-agent-md-physics \
+#   GUEST_IP=192.168.0.152 GUEST_MAC=BC:24:11:AA:BB:CD \
+#     ./03-create-project-guest.sh
+#
 # For a guest that needs real nested unshare/mount/cgroups (sandbox-style
 # testing), this script creates it unprivileged first -- you must then
 # run the destroy+recreate-with-flags dance from deployment-playbook.md
@@ -30,10 +40,29 @@ MAC="${GUEST_MAC:?set GUEST_MAC}"
 GATEWAY="${PROXMOX_GATEWAY:-192.168.0.1}"
 POOL="${PROXMOX_POOL:?set PROXMOX_POOL}"
 STORAGE="${GUEST_STORAGE:-local-thin-multi}"
-CORES="${GUEST_CORES:-2}"
-MEM="${GUEST_MEM_MB:-2048}"
-DISK="${GUEST_DISK_GB:-8}"
 SSH_PUBKEY_PATH="${SSH_PUBKEY_PATH:?set SSH_PUBKEY_PATH}"
+
+# Tier defaults per docs/infra-topology.md Section 2. The untiered default
+# (empty GUEST_TIER) matches this script's original 2vCPU/2GB/8GB shape.
+case "${GUEST_TIER:-}" in
+    "")       TIER_CORES=2;  TIER_MEM_MB=2048;  TIER_DISK_GB=8  ;;
+    xsmall)   TIER_CORES=1;  TIER_MEM_MB=2048;  TIER_DISK_GB=8  ;;
+    medium)   TIER_CORES=4;  TIER_MEM_MB=16384; TIER_DISK_GB=16 ;;
+    large)    TIER_CORES=8;  TIER_MEM_MB=40960; TIER_DISK_GB=32 ;;
+    xlarge)   TIER_CORES=16; TIER_MEM_MB=81920; TIER_DISK_GB=64 ;;
+    *)
+        echo "Unknown GUEST_TIER '${GUEST_TIER}' -- expected one of xsmall|medium|large|xlarge (or unset)" >&2
+        exit 1
+        ;;
+esac
+CORES="${GUEST_CORES:-$TIER_CORES}"
+MEM="${GUEST_MEM_MB:-$TIER_MEM_MB}"
+DISK="${GUEST_DISK_GB:-$TIER_DISK_GB}"
+
+if [ -n "${GUEST_TIER:-}" ]; then
+    echo "Tier '${GUEST_TIER}': requesting ${CORES} vCPU / ${MEM}MB RAM / ${DISK}GB disk."
+    echo "Reminder (docs/infra-topology.md Sec.1): 50% host cap = 20 vCPU / 252GB total across ALL guests here, not per guest -- check current usage (pve-ops or the Proxmox UI) before stacking multiple Medium/Large/XLarge boxes."
+fi
 
 if pve_lxc_exists "$VMID"; then
     echo "LXC $VMID already exists. Stop+destroy it first if you want a clean rebuild:" >&2
