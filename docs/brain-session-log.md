@@ -205,6 +205,39 @@ is untrustworthy.
 
 ---
 
+## 2026-09-22 — Content Integrity (Phase 14) design choices
+
+**Q: §12.2 says the architecture "closes this by construction rather than
+by vigilance" — how do you actually test a "by construction" claim, as
+opposed to just testing behavior?**
+
+With a structural scan, not a behavioral assertion: the test reads every
+`.py` file in `src/athenaeum_brain/` and fails if `eval(` or `exec(`
+appears anywhere. This is a different (stronger) claim than "I tried an
+injection and it didn't work" — it proves the *mechanism* for claim text
+to become code doesn't exist in this codebase at all, not just that this
+session's specific attempts failed. Paired with an end-to-end test
+(`test_adversarial_human_submission_is_inert_claim_data_end_to_end`) that
+still exercises a real adversarial string through the real pipeline, since
+a construction proof alone doesn't show the ordinary path still works
+correctly on hostile input.
+
+**Q: Open Question 8 asks how much weight the instruction-detection
+heuristic should carry "versus being purely advisory" — what's the actual
+number?**
+
+Exactly the weight of one ordinary cross-examination challenge — a single
+call to the same `ReputabilityStore.record_outcome(..., "challenged")`
+any other challenge uses, no separate multiplier or override path. Chosen
+because §12.3 itself calls the heuristic "necessarily imperfect," which
+argues against giving it outsized leverage over a well-evidenced
+cross-examination outcome; and because §12.3's own language — "a
+*pattern* of instruction-like submissions is grounds for a low grade" —
+describes accumulation, which the existing tally mechanism already does
+correctly without needing a new weighting scheme invented for this case.
+
+---
+
 *See `docs/progress.md` §26 for the checklist this log's entries track
 against, and `docs/infra-topology.md` for the infrastructure-side design
 decisions made in the same planning conversation.*
