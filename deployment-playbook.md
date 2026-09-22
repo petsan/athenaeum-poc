@@ -4,6 +4,8 @@
 
 **How to use this file:** point Claude at this playbook plus one filled-in config file (template in Section 1) and one SSH key (Section 4). Everything else below is a mechanical procedure, not a design decision — follow it in order.
 
+**This playbook is now backed by actual executable scripts, not just prose:** see `infra/proxmox/` in this repo. Every step below that can be scripted, is — `infra/proxmox/README.md` maps each script to the section here it implements, and `rebuild-all.sh` automates the whole non-host-only sequence in one shot. There is also now a persistent, shared **tools container** (`athenaeum-tools`, `192.168.0.151`, VMID 106) holding a multi-project CLI (`pve-ops`) with all credentials preinstalled — for ordinary day-to-day operations (status checks, guest listing, SSH to a guest, creating/destroying an unprivileged guest), prefer `ssh root@192.168.0.151 pve-ops -p athenaeum <command>` over re-deriving raw API calls from scratch. Fall back to the raw procedure below only for the host-only steps `pve-ops` deliberately can't do (Section 3, Section 6's privileged+nesting combination, and the Docker `FORWARD`-chain fix), or if the tools container itself is what needs rebuilding.
+
 ---
 
 ## 0. Before anything: hard constraints (apply regardless of project)
@@ -87,7 +89,12 @@ pveum pool add <project-name>-poc
 #    work on this host; extend only as a specific API call demands it
 #    (each extension will tell you exactly which privilege is missing).
 pveum role add ClaudeAgent-<project-name> -privs \
-  "Datastore.AllocateSpace,Datastore.Audit,Pool.Audit,SDN.Use,Sys.Audit,VM.Allocate,VM.Config.CDROM,VM.Config.CPU,VM.Config.Cloudinit,VM.Config.Disk,VM.Config.HWType,VM.Config.Memory,VM.Config.Network,VM.Config.Options,VM.PowerMgmt"
+  "Datastore.AllocateSpace,Datastore.Audit,Pool.Audit,SDN.Use,Sys.Audit,VM.Allocate,VM.Audit,VM.Config.CDROM,VM.Config.CPU,VM.Config.Cloudinit,VM.Config.Disk,VM.Config.HWType,VM.Config.Memory,VM.Config.Network,VM.Config.Options,VM.PowerMgmt"
+# VM.Audit specifically: without it, bulk guest-listing endpoints
+# (/nodes/{node}/lxc, /nodes/{node}/qemu) silently return an empty array
+# with NO error -- easy to miss, since everything that operates on a
+# *known* vmid (create/start/stop/status) works fine without it. Found
+# the hard way once already; don't drop it from a future role definition.
 
 # 4. API token -- name it after the project, keep Privilege Separation ON
 pveum user token add claude@pve <project-name> --privsep 1
@@ -161,7 +168,8 @@ pct create <VMID> local:vztmpl/debian-12-standard_12.12-1_amd64.tar.zst \
   --rootfs local-thin-multi:8 \
   --net0 name=eth0,bridge=vmbr0,ip=<STATIC_IP>/24,gw=192.168.0.1,firewall=0,hwaddr=<PINNED_MAC> \
   --pool <project-name>-poc \
-  --unprivileged 0 --features nesting=1,keyctl=1
+  --unprivileged 0 --features nesting=1,keyctl=1 \
+  --onboot 1
 pct start <VMID>
 ```
 
@@ -170,6 +178,8 @@ Notes on every non-obvious flag, each one earned the hard way:
 - **`hwaddr=` pinned, always.** Omitting it means Proxmox generates a new random MAC on *every* `pct set -net0 ...` call, which breaks ARP/neighbor caches on every machine that's ever talked to the guest (including the Proxmox host itself) and manifests as total unreachability until caches are manually flushed. Pin it once, at creation, and never omit it on any later `pct set -net0`.
 - **`firewall=0`.** Per-NIC firewall defaults to a restrictive posture that blocks DHCP/inbound-unsolicited traffic with no rules configured. Turn it off unless the project specifically needs guest-level firewalling, in which case configure actual rules, don't leave it enabled-with-nothing-allowed.
 - **`unprivileged=0 --features nesting=1,keyctl=1`** — only if the project needs real nested `unshare`/`mount`/cgroups capability inside the guest (e.g. testing a sandboxing mechanism, running Docker-in-LXC). For an ordinary application workload, prefer the safer default (`unprivileged=1`, omit `--features`). The full privileged+nesting+keyctl combination needs `Sys.Modify` on `/`, which the scoped token deliberately does not have — **only `root@pam` running `pct create`/`pct set` directly on the host can set this combination**; don't try to grant the token enough privilege to do it itself, that defeats the scoping in Section 3. `unprivileged` is immutable after creation — changing it means destroy + recreate.
+- **`--onboot 1`.** Makes the guest start automatically when the Proxmox host itself boots — the guest-side half of surviving an accidental host power-off/reboot. (The other half is the host-side Docker `FORWARD`-chain fix persisting too, Section 7.) `infra/proxmox/`'s scripts set this by default via the API; if creating a guest by hand, don't forget it.
+- **Skip the manual `authorized_keys` step entirely** (unprivileged path only) by adding `--ssh-public-keys /path/to/key.pub` to `pct create` — Proxmox injects it directly into `/root/.ssh/authorized_keys` at creation, confirmed working with a plain Debian template, no cloud-init needed. Not available for the privileged+nesting combination above (that one still needs Section 8's manual `pct exec` step, since it's created differently).
 
 ---
 
@@ -187,7 +197,7 @@ If this host runs Docker for anything (check with `docker ps` or `systemctl stat
 ```
 iptables -I DOCKER-USER -i vmbr0 -o vmbr0 -j ACCEPT
 ```
-Not yet confirmed to persist across a host reboot (check whether `iptables-persistent`/`netfilter-persistent` is installed; if not, this rule needs re-applying after any reboot of the Proxmox host — check for it early in any session that starts after a suspected reboot).
+**Now persisted across reboots**: `infra/proxmox/04-persist-docker-forward-fix.sh` installs a systemd unit (`infra/proxmox/systemd/pve-docker-bridge-fix.service`) that reapplies this rule automatically after every host boot *and* after Docker itself restarts (which rewrites its own chains and would otherwise silently drop the manual rule again). Run it once per host, as root, directly on the host — not per-project, not per-rebuild. Verify with `systemctl status pve-docker-bridge-fix.service` and `iptables -L DOCKER-USER -n -v | grep vmbr0` (non-zero packet/byte counters confirm it's actually matching live traffic, not just present).
 
 If this host does *not* run Docker, this whole section is moot — but check `iptables -L FORWARD -n -v` anyway before chasing Proxmox-level theories; the general lesson (verify the actual kernel filter table before assuming the problem is at the layer you're already looking at) applies regardless of the specific cause.
 

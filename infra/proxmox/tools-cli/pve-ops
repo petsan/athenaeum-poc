@@ -1,0 +1,207 @@
+#!/usr/bin/env bash
+# pve-ops -- multi-project Proxmox administration CLI.
+#
+# Lives on the shared tools LXC and holds per-project credentials under
+# /opt/athenaeum-tools/keys/<project>.env, so multiple projects can each
+# have their own scoped token/pool/SSH key while sharing this one box and
+# this one CLI. This is the canonical source; the copy actually running
+# on the tools container is deployed from here by
+# infra/proxmox/01-create-tools-container.sh -- edit THIS file and
+# redeploy, don't hand-edit the container's copy and let it drift.
+#
+# `athenaeum-ops` is kept as a symlink to this same script for backward
+# compatibility with earlier sessions/docs that referenced that name.
+set -euo pipefail
+
+KEYS_DIR="/opt/athenaeum-tools/keys"
+
+_list_projects() {
+    ls "$KEYS_DIR"/*.env 2>/dev/null | xargs -n1 basename 2>/dev/null | sed 's/\.env$//'
+}
+
+_load_project() {
+    local project="$1"
+    local env_file="${KEYS_DIR}/${project}.env"
+    if [[ ! -f "$env_file" ]]; then
+        echo "No such project '$project' (no $env_file)." >&2
+        echo "Known projects: $(_list_projects | tr '\n' ' ')" >&2
+        exit 1
+    fi
+    # shellcheck source=/dev/null
+    source "$env_file"
+    : "${PROXMOX_HOST:?$env_file missing PROXMOX_HOST}"
+    : "${PROXMOX_NODE:?$env_file missing PROXMOX_NODE}"
+    : "${PROXMOX_TOKEN_ID:?$env_file missing PROXMOX_TOKEN_ID}"
+    : "${PROXMOX_TOKEN_SECRET:?$env_file missing PROXMOX_TOKEN_SECRET}"
+    API="https://${PROXMOX_HOST}:${PROXMOX_PORT:-8006}/api2/json"
+    AUTH_HEADER="Authorization: PVEAPIToken=${PROXMOX_TOKEN_ID}=${PROXMOX_TOKEN_SECRET}"
+    SSH_KEY="${SSH_KEY:-${KEYS_DIR}/${project}_poc}"
+}
+
+_api() {
+    local method="$1" path="$2"; shift 2
+    curl -sk -X "$method" -H "$AUTH_HEADER" "$@" "${API}${path}"
+}
+
+_wait_task() {
+    local upid="$1" encoded resp status exitstatus
+    encoded=$(printf '%s' "$upid" | sed 's/:/%3A/g')
+    for _ in $(seq 1 90); do
+        resp=$(_api GET "/nodes/${PROXMOX_NODE}/tasks/${encoded}/status")
+        status=$(echo "$resp" | jq -r '.data.status')
+        if [[ "$status" == "stopped" ]]; then
+            exitstatus=$(echo "$resp" | jq -r '.data.exitstatus')
+            echo "task finished: $exitstatus"
+            [[ "$exitstatus" == "OK" ]] || return 1
+            return 0
+        fi
+        sleep 2
+    done
+    echo "task did not finish within timeout: $upid" >&2
+    return 1
+}
+
+cmd_projects() {
+    echo "Known projects (env files in $KEYS_DIR):"
+    _list_projects
+}
+
+cmd_status() {
+    _api GET "/nodes/${PROXMOX_NODE}/status" | jq '{cpu: .data.cpuinfo.cpus, cores: .data.cpuinfo.cores, mem_total_gb: (.data.memory.total/1073741824|floor), mem_free_gb: (.data.memory.free/1073741824|floor), uptime_h: (.data.uptime/3600|floor), pve: .data.pveversion, kernel: .data.kversion, loadavg: .data.loadavg}'
+}
+
+cmd_guests() {
+    echo "--- LXC ---"
+    _api GET "/nodes/${PROXMOX_NODE}/lxc" | jq -r '.data[] | "\(.vmid)\t\(.name)\t\(.status)"'
+    echo "--- QEMU ---"
+    _api GET "/nodes/${PROXMOX_NODE}/qemu" | jq -r '.data[] | "\(.vmid)\t\(.name)\t\(.status)"'
+}
+
+cmd_perms() {
+    local path="${1:?usage: pve-ops -p PROJECT perms /pool/xyz}"
+    _api GET "/access/permissions?path=${path}" | jq
+}
+
+cmd_pool() {
+    local pool="${1:-${PROXMOX_POOL:-}}"
+    : "${pool:?usage: pve-ops -p PROJECT pool [name]}"
+    _api GET "/pools/${pool}" | jq
+}
+
+cmd_storage() {
+    local storage="${1:-local-thin-multi}"
+    _api GET "/nodes/${PROXMOX_NODE}/storage/${storage}/status" | jq '{total_gb: (.data.total/1073741824|floor), used_gb: (.data.used/1073741824|floor), avail_gb: (.data.avail/1073741824|floor), type: .data.type}'
+}
+
+cmd_create() {
+    # pve-ops -p PROJECT create VMID HOSTNAME IP MAC [CORES] [MEM_MB] [DISK_GB]
+    local vmid="${1:?vmid}" hostname="${2:?hostname}" ip="${3:?ip}" mac="${4:?mac}"
+    local cores="${5:-2}" mem="${6:-2048}" disk="${7:-8}"
+    echo "Creating unprivileged LXC $vmid ($hostname, $ip, $mac) in pool ${PROXMOX_POOL:-<none set>}..."
+    echo "NOTE: unprivileged/no-nesting path. For real nested unshare/mount/"
+    echo "cgroups capability, root@pam must set -unprivileged 0 -features"
+    echo "nesting=1,keyctl=1 directly on the host -- see deployment-playbook.md."
+    local resp upid
+    resp=$(_api POST "/nodes/${PROXMOX_NODE}/lxc" \
+        --data-urlencode "vmid=${vmid}" \
+        --data-urlencode "ostemplate=local:vztmpl/debian-12-standard_12.12-1_amd64.tar.zst" \
+        --data-urlencode "hostname=${hostname}" \
+        --data-urlencode "cores=${cores}" \
+        --data-urlencode "memory=${mem}" \
+        --data-urlencode "rootfs=local-thin-multi:${disk}" \
+        --data-urlencode "net0=name=eth0,bridge=vmbr0,ip=${ip}/24,gw=${PROXMOX_GATEWAY:-192.168.0.1},firewall=0,hwaddr=${mac}" \
+        --data-urlencode "pool=${PROXMOX_POOL:?set PROXMOX_POOL in the project env file}" \
+        --data-urlencode "unprivileged=1" \
+        --data-urlencode "onboot=1" \
+        --data-urlencode "ssh-public-keys=$(cat "${SSH_KEY}.pub")")
+    upid=$(echo "$resp" | jq -r '.data')
+    _wait_task "$upid"
+    echo "Starting..."
+    upid=$(_api POST "/nodes/${PROXMOX_NODE}/lxc/${vmid}/status/start" | jq -r '.data')
+    _wait_task "$upid"
+    echo "Created. Verify with: pve-ops -p <project> ssh ${ip} 'echo ok'"
+}
+
+cmd_destroy() {
+    local vmid="${1:?vmid}"
+    echo "Stopping $vmid..."
+    local upid
+    upid=$(_api POST "/nodes/${PROXMOX_NODE}/lxc/${vmid}/status/stop" | jq -r '.data')
+    _wait_task "$upid" || true
+    echo "Destroying $vmid..."
+    upid=$(_api DELETE "/nodes/${PROXMOX_NODE}/lxc/${vmid}" | jq -r '.data')
+    _wait_task "$upid"
+}
+
+cmd_ssh() {
+    local target="${1:?usage: pve-ops -p PROJECT ssh IP [command...]}"; shift || true
+    ssh -i "$SSH_KEY" -o StrictHostKeyChecking=accept-new "root@${target}" "$@"
+}
+
+cmd_help() {
+    cat <<EOF
+pve-ops -- multi-project Proxmox administration CLI
+
+Usage: pve-ops -p PROJECT <command> [args...]
+       pve-ops projects              (no -p needed -- lists known projects)
+
+Commands:
+  status                              node CPU/RAM/uptime/kernel
+  guests                              list all LXC + QEMU guests on the node
+  perms <path>                        effective permissions at an ACL path
+  pool [name]                         pool status (default: this project's PROXMOX_POOL)
+  storage [name]                      storage free/used (default: local-thin-multi)
+  create VMID HOST IP MAC [C] [M] [D] create an unprivileged LXC guest
+  destroy VMID                        stop + destroy a guest
+  ssh IP [cmd...]                     ssh to any guest using this project's stored key
+  projects                            list known projects (env files present)
+  help                                this message
+
+Things this CLI deliberately CANNOT do (by design, not a bug):
+  - Set unprivileged=0 / features nesting=1,keyctl=1 on a guest -- needs
+    root@pam directly on the Proxmox host.
+  - Change host-level iptables/nftables rules (e.g. the DOCKER-USER fix
+    for guest networking) -- needs root on the Proxmox host itself.
+  - Create a new project's user/role/pool/token -- needs Sys.Modify,
+    run infra/proxmox/00-bootstrap-identity.sh on the host instead.
+EOF
+}
+
+main() {
+    local project=""
+    if [[ "${1:-}" == "-p" || "${1:-}" == "--project" ]]; then
+        project="${2:?}"; shift 2
+    elif [[ "${1:-}" == "projects" || "${1:-}" == "help" || "${1:-}" == "-h" || "${1:-}" == "--help" || -z "${1:-}" ]]; then
+        : # these don't need a project
+    else
+        project="${PVE_OPS_PROJECT:-}"
+    fi
+
+    local sub="${1:-help}"; shift || true
+
+    case "$sub" in
+        projects) cmd_projects; return ;;
+        help|-h|--help) cmd_help; return ;;
+    esac
+
+    if [[ -z "$project" ]]; then
+        echo "No project specified. Use -p PROJECT or set PVE_OPS_PROJECT." >&2
+        cmd_projects >&2
+        exit 1
+    fi
+    _load_project "$project"
+
+    case "$sub" in
+        status) cmd_status "$@" ;;
+        guests) cmd_guests "$@" ;;
+        perms) cmd_perms "$@" ;;
+        pool) cmd_pool "$@" ;;
+        storage) cmd_storage "$@" ;;
+        create) cmd_create "$@" ;;
+        destroy) cmd_destroy "$@" ;;
+        ssh) cmd_ssh "$@" ;;
+        *) echo "unknown command: $sub" >&2; cmd_help; exit 1 ;;
+    esac
+}
+
+main "$@"

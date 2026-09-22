@@ -31,12 +31,20 @@ the finished system — read `docs/progress.md` before doing anything else.
    supporting reference: what "done" means for the highest-risk tasks,
    field-level shapes for the core stores, and the committed tech
    decisions (Python, flat-file CAS, SHA-256, YAML config).
-6. **`deployment-playbook.md`** — required reading before any new Proxmox
-   access setup or new guest creation on this host. Distilled from the
-   first live deployment session (see `known-bugs.md` 17–18): scoped
-   token/role/ACL creation (including the token+user grant-pairing
-   gotcha), the standing-test-guest template, and the mandatory
-   `iptables -L FORWARD` check before chasing any other networking theory.
+6. **`deployment-playbook.md`** and **`infra/proxmox/`** — required
+   reading before any new Proxmox access setup or new guest creation on
+   this host. The playbook is the narrative; `infra/proxmox/` is the same
+   thing as executable scripts (`README.md` there maps each script to
+   the playbook section it implements). Distilled from the first live
+   deployment session (see `known-bugs.md` 17–18): scoped token/role/ACL
+   creation (including the token+user grant-pairing gotcha and the
+   `VM.Audit` omission that silently broke guest listing), the
+   standing-guest template, and the mandatory `iptables -L FORWARD` check
+   before chasing any other networking theory. A shared, multi-project
+   tools container (`athenaeum-tools`, `192.168.0.151`) now holds a CLI
+   (`pve-ops`) with credentials preinstalled — prefer
+   `ssh root@192.168.0.151 pve-ops -p athenaeum <command>` over re-deriving
+   raw API calls for routine operations.
 
 ## Hard constraints — do not violate these
 

@@ -1,0 +1,25 @@
+[Unit]
+Description=Allow bridged guest traffic through vmbr0 (undo Docker's FORWARD-chain DROP for guest LAN/internet reachability)
+# See known-bugs.md entry 18 in the athenaeum-body-poc repo for the full
+# incident this exists to prevent from recurring after every reboot:
+# Docker sets FORWARD's default policy to DROP and only allows traffic
+# tied to its own managed interfaces, which silently also catches all
+# guest<->gateway/LAN traffic bridged through vmbr0 (ARP still works,
+# ICMP/TCP doesn't -- that split is the diagnostic tell). This rule is
+# NOT persisted by Docker or Proxmox across a reboot on its own.
+After=docker.service network-online.target
+Wants=network-online.target
+# Reapply if Docker itself restarts and rewrites its own chains.
+PartOf=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# -C checks whether the rule already exists before inserting, so this is
+# safe to run multiple times (systemd restart, manual re-run, etc.)
+# without stacking duplicate rules.
+ExecStart=/bin/sh -c 'iptables -C DOCKER-USER -i vmbr0 -o vmbr0 -j ACCEPT 2>/dev/null || iptables -I DOCKER-USER -i vmbr0 -o vmbr0 -j ACCEPT'
+ExecStop=/sbin/iptables -D DOCKER-USER -i vmbr0 -o vmbr0 -j ACCEPT
+
+[Install]
+WantedBy=multi-user.target
