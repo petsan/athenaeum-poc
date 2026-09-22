@@ -11,7 +11,7 @@ the finished system — read `docs/progress.md` before doing anything else.
    built, what's tested, what's still open, what the last suggested next
    step was. This is the single most important file in the repo for
    picking up cold.
-2. **`known-bugs.md`** — eighteen real bugs hit during development, each
+2. **`known-bugs.md`** — nineteen real bugs hit during development, each
    with root cause and generalizable lesson. Read the relevant section
    before touching sandboxing/namespace code, checkpoint/content-addressed
    storage, any narrated demo script (`demo.py`, `demo_brain.py`), or any

@@ -26,12 +26,21 @@ VMIDS="${BACKUP_VMIDS:-104 106}"
 SCRIPT_DIR="$(dirname "${BASH_SOURCE[0]}")"
 
 echo "== ensure 'local' storage allows backup content =="
-current=$(pvesh get /storage/local --output-format json | jq -r '.content')
+# Deliberately NOT using jq here -- it's guaranteed on the guests we
+# explicitly installed it on, NOT guaranteed on the Proxmox host itself.
+# grep/sed on raw JSON is uglier but has zero extra dependencies, which
+# matters more for a script that needs to "just work" on any fresh host.
+current=$(pvesh get /storage/local --output-format json | grep -o '"content":"[^"]*"' | cut -d'"' -f4)
+if [[ -z "$current" ]]; then
+    echo "Could not determine current content types for 'local' -- check manually:" >&2
+    echo "  pvesh get /storage/local" >&2
+    exit 1
+fi
 if [[ "$current" != *backup* ]]; then
     pvesh set /storage/local --content "${current},backup"
     echo "added 'backup' to local storage's content types (was: $current)"
 else
-    echo "local storage already allows backup content"
+    echo "local storage already allows backup content ($current)"
 fi
 
 echo "== install systemd units =="
