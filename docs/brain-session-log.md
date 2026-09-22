@@ -105,6 +105,58 @@ not silently closed by this session's work.
 
 ---
 
+## 2026-09-22 — Human Input Pipeline (Phase 13) design choices
+
+**Q: §11.1 says justification is "required, not optional," but also says
+unjustified assertions are "accepted... as low-weight testimony at most" —
+which is it?**
+
+Both, read as two different things: *presence* of the field is required
+(passing `justification=None` is a hard `HumanInputError`), but the
+*content* isn't policed beyond that — an empty or whitespace-only
+justification is accepted, just capped at confidence ≤0.3 regardless of
+what the submitter requested. This reading lets the design's own two
+sentences both be true rather than picking one and quietly dropping the
+other.
+
+**Q: Is submitter track-record tracking (§11.3) a new mechanism, or does
+the existing Reputability Engine actually already support it?**
+
+Already supports it, without any change to `reputability_store.py`.
+`ReputabilityStore.record_outcome(subject_id, subject_type, outcome)` was
+already generic over `subject_type` (used for sources today) — Phase 13
+task 36 turned out to be "call it with `subject_type='human_submitter'`,"
+not "build a parallel tracking system." Worth flagging because it's the
+kind of thing that's easy to over-build if you don't check what the store
+already does first.
+
+**Q: How is the §11.7 conflict-of-interest rule (a submitter can't clear
+their own triggered checkpoint) enforced?**
+
+As a hard error (`CheckpointConflictError`) inside `clear_checkpoint()`,
+comparing `reviewer_id` against the `submitter_id` recorded on the
+checkpoint at trigger time — not left as a caller-discipline convention,
+since §11.7 calls this "a basic conflict-of-interest safeguard," which
+reads as something the system should refuse to let happen, not just
+discourage.
+
+**Real limitation surfaced while testing, logged rather than hidden:**
+cross-examination of a `human_input` claim only produces a genuine
+challenge/corroboration when the claim's free-text statement happens to
+match one of the existing toy agents' narrow regex patterns (e.g.
+Mathematics' `"N is (not )?prime"` format). Anything else — which is most
+realistic human input — currently survives cross-examination by omission,
+not because it was evaluated. This is a real, not cosmetic, gap relative
+to §11.2's "examined, never auto-accepted at full weight" — it's a
+consequence of not having a real reasoning backend yet (same root
+limitation as every toy agent), not something Phase 13's own code could
+have closed. Verified with a test
+(`test_human_input_claim_flows_through_cross_examination_and_synthesis`)
+that documents the current behavior honestly rather than asserting it's
+been "examined."
+
+---
+
 *See `docs/progress.md` §26 for the checklist this log's entries track
 against, and `docs/infra-topology.md` for the infrastructure-side design
 decisions made in the same planning conversation.*
