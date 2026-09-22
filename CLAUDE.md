@@ -64,9 +64,10 @@ These aren't aspirational — every one of them is here because violating it (or
 
 ## Hard constraints — do not violate these
 
-- **Resource cap on this Proxmox host: use at most 50% of total CPU/RAM**
-  for any VM or LXC created here for testing. Check real specs first
-  (`lscpu`, `free -h`, or the Proxmox API) — don't assume the placeholder
+- **Resource cap on this Proxmox host: use at most 80% of total CPU/RAM**
+  for any VM or LXC created here (raised from 50% by explicit user
+  decision, 2026-09-23 — see `docs/progress.md` §38). Check real specs
+  first (`lscpu`, `free -h`, or the Proxmox API) — don't assume the placeholder
   numbers in `docs/design.md` (40 cores / 512GB / 10 GPUs) match this
   actual box.
 - **Deploy inside a VM or LXC — never directly on the Proxmox host OS.**

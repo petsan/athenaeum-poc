@@ -22,13 +22,16 @@ predate this convention and aren't retrofitted into it.
   vLLM/GPU path. This is a real capability ceiling, not a temporary inconvenience
   to design around — when GPU nodes do come online, this table gets a genuine GPU
   tier added, not an XLarge tier stretched to pretend to be one.
-- **Hard cap unchanged:** at most 50% of the host's real CPU/RAM for anything
-  created here (`CLAUDE.md`), confirmed specs: 2× Xeon E5-2690 v2 = 40 threads,
-  ~504GB RAM → **budget ceiling of 20 threads / 252GB across every guest**, not
-  per guest. The two existing standing guests (104, 106) already consume roughly
-  4 vCPU / 10GB of that. Effective remaining headroom for brainboxes today is
-  **~16 vCPU / ~240GB**, and every deployment plan below has to fit inside it,
-  not the raw host total.
+- **Hard cap raised 2026-09-23 (explicit user decision, was 50%):** at most
+  80% of the host's real CPU/RAM for anything created here (`CLAUDE.md`),
+  confirmed specs: 2× Xeon E5-2690 v2 = 40 threads, ~503GB RAM →
+  **budget ceiling of 32 threads / ~402GB across every guest**, not per
+  guest. As of that same date, nine guests (104, 106, plus the seven
+  model-lab guests — see `infra/proxmox/model-lab/`) allocate ~19 vCPU of
+  that. Effective remaining headroom is **~13 vCPU / ~370GB** — always
+  check the live number (`pve-ops status`/API) before planning against
+  this figure, since it changes as guests come and go; don't trust this
+  paragraph over the real host.
 
 ---
 
@@ -39,13 +42,16 @@ predate this convention and aren't retrofitted into it.
 | **XSmall** | 1 | 1–2GB | Mocks/simulators, deterministic toy agents (the Mathematics/Logic/Engineering pattern already in `agents.py`), orchestration/routing workers, anything with no model backend loaded | Cheap — many can run concurrently |
 | **Medium** | 4 | 16GB | One real CPU-quantized model backend (~3–7B Q4 GGUF via `llama.cpp`) serving exactly one Master Agent | 2–3 concurrent |
 | **Large** | 8 | 32–48GB | A bigger quantized model (~13B class) for an agent needing more capability, or a bundled multi-agent host running several agents behind one process | 1 at a time |
-| **XLarge** | 16 | 64–96GB | Reserved, not routine. The largest CPU-only experiment this host can plausibly run. Alone it consumes most of the 50% cap | At most one, spun up deliberately, never part of default topology |
+| **XLarge** | 16 | 64–96GB | Reserved, not routine. The largest CPU-only experiment this host can plausibly run. Alone it consumes about half of the 80% cap | At most one, spun up deliberately, never part of default topology |
 
 A fully-loaded steady-state mix (e.g. 4× XSmall + 2× Medium + 1× Large =
-4+8+8 = 20 vCPU, 4+32+40 = 76GB) fits comfortably inside the ~16 vCPU / ~240GB
-headroom on RAM but is CPU-bound first — vCPU, not RAM, is the tighter
+4+8+8 = 20 vCPU, 4+32+40 = 76GB) fits comfortably inside the ~13 vCPU / ~370GB
+current headroom on RAM but is CPU-bound first — vCPU, not RAM, is the tighter
 constraint on this host, worth checking explicitly before scaling out rather
-than assuming RAM will run out first.
+than assuming RAM will run out first. (That example mix's 20 vCPU actually
+exceeds current real headroom, ~13 vCPU as of 2026-09-23 — illustrative of
+the tier shapes, not a plan that fits today without retiring something else
+first; always check the live number.)
 
 ---
 
@@ -119,5 +125,6 @@ speculative infrastructure ahead of a real need for it.
   down) — this document defines the shapes of the boxes, not the policy for
   provisioning them; that's a separate decision for whenever real load
   justifies it.
-- Raising the 50% resource cap — out of scope per `CLAUDE.md`'s own
-  explicit note that this is a "when going live" decision, not a current one.
+- ~~Raising the 50% resource cap — out of scope...~~ **Done, 2026-09-23**:
+  raised to 80% by explicit user decision — see `CLAUDE.md`'s hard
+  constraints and §1 above for the recomputed budget.

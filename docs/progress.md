@@ -372,5 +372,20 @@ Each of the other six agents (Mathematics, Engineering, Physics, Philosophy, The
 
 **238/238 tests passing**, verified for real on LXC 104 (225 prior + 13 new). Design reasoning in `docs/brain-session-log.md`.
 
+## 38. Resource cap raised to 80%, and the OLMo generation swap (OLMo 2 → OLMo 3)
+
+**Resource cap:** explicit user decision, 2026-09-23 — the 50% CPU/RAM cap this project used throughout testing is raised to **80%**, per the phasing this project's own memory notes always anticipated ("50% cap is testing-only; user plans to raise it once live"). `CLAUDE.md`'s hard constraints section and `docs/infra-topology.md` §1 updated with the recomputed real budget: 40 threads × 80% = 32 threads, ~503GB RAM × 80% ≈ 402GB. As of this date, nine guests (104, 106, plus seven model-lab guests) allocate ~19 vCPU, leaving **~13 vCPU / ~370GB** real headroom — always check the live number before planning against this, per the doc's own standing advice.
+
+**OLMo generation swap, prompted by a direct question ("is this the biggest/newest AI2 model?"):** verified live against Hugging Face that it wasn't — OLMo 2 (1B/7B/13B/32B) has been superseded by **OLMo 3** (7B, Nov 2025) and **OLMo 3.1** (32B, Dec 2025), both Apache 2.0. Concretely:
+- `model_backed_reasoning.py`'s `DEFAULT_MODEL` changed from `olmo2-1b` to **`olmo3-7b`** — the real fallback backend for six of the seven Master Agents is now OLMo 3, not OLMo 2.
+- VMID 110 (`olmo2-1b`) destroyed; VMID 116 (`athenaeum-modeltest-olmo3-7b`, `192.168.0.166`, 4 vCPU/10GB) created in its place, same resource footprint as the existing `mistral-7b` guest.
+- A separate, one-off **VMID 117** (`athenaeum-modeltest-olmo3-32b`, `192.168.0.167`, 4 vCPU/32GB) was also stood up — AI2's current largest public model, for a direct quality comparison before deciding anything further. **Not** part of `manifest.tsv`'s standard six-way set and **not** wired into `model_backed_reasoning.py` — comparison-only, reachable via `model_lab_registry.OLMO3_32B_ENDPOINT`.
+- To fit both new guests inside the (then-50%, now-80%) cap without exceeding it, the four smallest comparison guests (Qwen2.5-Coder-1.5B, Qwen2.5-1.5B, Phi-3.5-mini, Granite-2B) were resized from 2→1 vCPU each — a real, low-risk trade-off made transparently, not silently.
+- `manifest.tsv`, `model_lab_registry.py`, and affected tests updated to match; full reasoning in `docs/brain-session-log.md`.
+
+Test suite re-run pending completion of both new guests' setup (llama.cpp build + weight download, OLMo 3.1 32B's ~20GB download takes meaningfully longer) — see the next section once that's verified.
+
 ### Explicitly not on this list
-Production sizing/90%+ resource cap — the user's own stated plan is to raise the 50% cap once this project goes live, but that's a "when going live" decision to make explicitly at the time, not a current task. Also not on this list: any application-level work beyond what `deployment-playbook.md` promises to deliver (verified SSH access to a correctly-networked guest, not a deployed application).
+Any application-level work beyond what `deployment-playbook.md` promises to deliver (verified SSH access to a correctly-networked guest, not a deployed application).
+
+~~Production sizing/90%+ resource cap~~ — **decided, 2026-09-23, see Section 38**: raised to 80% by explicit user request, not the full 90%+ once floated but a real, stated increase nonetheless.
