@@ -11,10 +11,12 @@ the finished system — read `docs/progress.md` before doing anything else.
    built, what's tested, what's still open, what the last suggested next
    step was. This is the single most important file in the repo for
    picking up cold.
-2. **`known-bugs.md`** — sixteen real bugs hit during development, each
+2. **`known-bugs.md`** — eighteen real bugs hit during development, each
    with root cause and generalizable lesson. Read the relevant section
    before touching sandboxing/namespace code, checkpoint/content-addressed
-   storage, or any narrated demo script (`demo.py`, `demo_brain.py`).
+   storage, any narrated demo script (`demo.py`, `demo_brain.py`), or any
+   Proxmox guest-networking issue (entry 18 — check `iptables -L FORWARD`
+   before any other theory).
 3. **`docs/body-design.md`** and **`docs/brain-design.md`** — the actual
    design intent. The code in `src/athenaeum_body/` and `src/athenaeum_brain/`
    implements a deliberate subset of these; when in doubt about *why*
@@ -29,6 +31,12 @@ the finished system — read `docs/progress.md` before doing anything else.
    supporting reference: what "done" means for the highest-risk tasks,
    field-level shapes for the core stores, and the committed tech
    decisions (Python, flat-file CAS, SHA-256, YAML config).
+6. **`deployment-playbook.md`** — required reading before any new Proxmox
+   access setup or new guest creation on this host. Distilled from the
+   first live deployment session (see `known-bugs.md` 17–18): scoped
+   token/role/ACL creation (including the token+user grant-pairing
+   gotcha), the standing-test-guest template, and the mandatory
+   `iptables -L FORWARD` check before chasing any other networking theory.
 
 ## Hard constraints — do not violate these
 
@@ -47,7 +55,7 @@ the finished system — read `docs/progress.md` before doing anything else.
   invariant enforced in `config.py` itself (`disallow_paid_apis`), not
   just a policy.
 - Before marking any task "done," run the actual test suite
-  (`pytest -q`, currently 109/109) and update `docs/progress.md` — don't
+  (`pytest -q`, currently 113/113) and update `docs/progress.md` — don't
   let the checkpoint file go stale.
 
 ## Current status (see `docs/progress.md` for full detail)
@@ -61,12 +69,20 @@ the finished system — read `docs/progress.md` before doing anything else.
   knowledge consolidation, domain fidelity monitoring all implemented.
   No real LLM backend yet — `model_serving.py`'s router/eviction/fallback
   logic is tested against a `MockBackend` only.
-- One genuinely open technical question: does `RLIMIT_CPU` work correctly
-  under `unshare --fork` on this host's actual kernel? Run
-  `scripts/preflight_check.py` to find out — the answer determines a
-  small, well-defined change to `sandbox.py` either way.
+- **Proxmox is live and access is set up** (see `deployment-playbook.md`
+  and the project's own memory notes) — a scoped API token, a standing
+  test LXC (VMID 104, `athenaeum-preflight`, `192.168.0.150`) with working
+  SSH, and real specs confirmed (2× Xeon E5-2690 v2, 40 threads, ~504GB
+  RAM, PVE 9.2.20). `scripts/preflight_check.py` has been run for real on
+  this host: `RLIMIT_CPU` still crashes `unshare --fork` here (matches the
+  original reference environment, wall-clock kill remains primary CPU-time
+  enforcement — no code change needed). Fork containment briefly reopened
+  on this host (cgroups v2 only, `sandbox.py` had assumed v1) and is now
+  fixed and re-verified — see `known-bugs.md` entry 17.
 
 ## Suggested first move in a new session
 
-Read `docs/progress.md`, then run `scripts/preflight_check.py` against
-this host before deploying anything else.
+Read `docs/progress.md`. Proxmox access is already set up (see
+`deployment-playbook.md`); if starting infra work from scratch on a
+*different* host or project, follow that playbook rather than
+re-deriving the setup.
