@@ -6,6 +6,7 @@ from athenaeum_brain.evaluation import (
     run_ground_truth_benchmark, run_adversarial_suite, ADVERSARIAL_CASES,
     record_claim_calibration, calibration_report, b0_retrieval_only, a1_full_workflow,
     ablation_no_cross_examination, ablation_naive_majority_vote, check_integrity_gates,
+    b1_single_agent_baseline,
 )
 from athenaeum_brain.claims import Claim
 
@@ -72,6 +73,14 @@ def test_b0_has_no_synthesis_or_dissent():
     assert "committed" not in result
     assert result["baseline"] == "B0"
     assert len(result["claims"]) >= 1
+
+
+def test_b1_single_agent_baseline_gets_a_real_generalist_response():
+    """Section 9.7's B1, real for the first time (2026-09-23) via the
+    model-lab guests -- no longer B1_UNAVAILABLE."""
+    result = b1_single_agent_baseline("Q: What is the capital of Japan?\nA:")
+    assert result["baseline"] == "B1"
+    assert "tokyo" in result["response"].lower()
 
 
 def test_a1_full_workflow_commits_claims():

@@ -150,6 +150,30 @@ B1_UNAVAILABLE = (
     "run alone, which doesn't test what B1 is meant to test (a non-specialized reasoner) "
     "-- so this is left explicitly blocked rather than faked."
 )
+# UPDATE 2026-09-23: no longer unconditionally true. The model-lab guests
+# (infra/proxmox/model-lab/) give a real generalist backend for the first
+# time -- b1_single_agent_baseline() below is real when that infra is up,
+# and B1_UNAVAILABLE is kept only as the honest fallback message for when
+# it isn't (these guests are explicitly disposable, model-lab/README.md).
+
+
+def b1_single_agent_baseline(question: str, model_name: str = "qwen2.5-1.5b") -> dict:
+    """Section 9.7's B1: one generalist reasoning process, no domain
+    specialization, no Master Agent structure, answering the question
+    directly -- a single real inference call against a model-lab
+    candidate (LlamaCppBackend), deliberately bypassing framing/routing/
+    synthesis entirely, since B1's whole point is to have NONE of that
+    structure to compare A1 against. Raises BackendUnavailable (from
+    athenaeum_body.model_serving) if the model-lab guest isn't reachable
+    -- callers wanting the graceful fallback message should catch that
+    and fall back to B1_UNAVAILABLE themselves, rather than this function
+    silently pretending to answer."""
+    from athenaeum_body.model_lab_registry import MODEL_LAB_ENDPOINTS
+    from athenaeum_body.model_serving import LlamaCppBackend, ModelSpec
+    backend = LlamaCppBackend(endpoints={model_name: MODEL_LAB_ENDPOINTS[model_name]})
+    spec = ModelSpec(name=model_name, vram_gb=0)
+    response = backend.infer(spec, question)
+    return {"baseline": "B1", "model": model_name, "response": response}
 
 
 def b0_retrieval_only(question: str, question_id: str) -> dict:

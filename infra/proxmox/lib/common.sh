@@ -22,7 +22,12 @@ pve_api() {
 
 pve_wait_task() {
     # pve_wait_task UPID -- polls until stopped; echoes exitstatus; returns
-    # non-zero if it wasn't "OK".
+    # non-zero if it wasn't "OK" or a benign "WARNINGS: N" (e.g. LXC
+    # create's own "Systemd 252 detected, you may need to enable nesting"
+    # on every debian-12-standard template create -- true, harmless, and
+    # not something guest creation should fail on; caught while creating
+    # the model-lab guests, where this previously aborted VMID 110's
+    # creation script after the guest itself was already created fine).
     local upid="$1" encoded status resp exitstatus
     encoded=$(printf '%s' "$upid" | sed 's/:/%3A/g')
     for _ in $(seq 1 90); do
@@ -31,7 +36,7 @@ pve_wait_task() {
         if [[ "$status" == "stopped" ]]; then
             exitstatus=$(echo "$resp" | jq -r '.data.exitstatus')
             echo "task finished: $exitstatus"
-            [[ "$exitstatus" == "OK" ]] || return 1
+            [[ "$exitstatus" == "OK" || "$exitstatus" == WARNINGS:* ]] || return 1
             return 0
         fi
         sleep 2

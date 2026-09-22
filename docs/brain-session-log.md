@@ -413,6 +413,25 @@ Nothing else in the original manifest needed changing -- Qwen2.5-Coder-1.5B, Phi
 
 ---
 
+## 2026-09-23 — Model-lab creation: three real bugs, and the real LLM backend milestone
+
+**Three real bugs hit while actually creating the six guests, none of them known in advance:**
+1. `pve_wait_task` treated Proxmox's routine "WARNINGS: 1" (a benign systemd-nesting notice every `debian-12-standard` LXC create prints) as a hard failure, aborting the creation script right after the guest was already successfully created. Fixed in `lib/common.sh` to accept `OK` or `WARNINGS:*`.
+2. Manifest hostnames used underscores (`qwen2-5-1_5b`) to represent version numbers -- the Proxmox API correctly rejected these as invalid DNS names. Fixed to hyphens.
+3. `huggingface-cli` is not just deprecated, it's been removed outright in the `huggingface_hub` version that installs today -- every one of the six guests' first setup attempt failed on it. Replaced with the current `hf download` command.
+
+None of these three were guessable from documentation or training knowledge alone -- all three were only found by actually running the scripts against the real host, which is exactly why they're worth recording here rather than just silently fixed.
+
+**Q: Once the six were live, what's the highest-value thing to build with them, given the standing instruction to keep going and "surprise" with something real?**
+
+Wiring a real `Backend` into `model_serving.py` -- this closes the single most-repeated "not yet built" line in `progress.md`/`CLAUDE.md` across the entire session (Local Model Serving Layer, MockBackend-only), and it directly unblocks something evaluation.py had explicitly marked impossible: the B1 baseline (`B1_UNAVAILABLE`, "requires a real generalist reasoning backend"). Chose this over wiring a specific Master Agent to use it for its own claims, because the backend is the shared foundation every agent would need regardless of which one goes first -- doing the foundation once, generically, is worth more than doing one agent's wiring first and redoing the same backend work for each subsequent agent. Building foundation-then-consumer in that order matches how `loop.py` and `distributed_worker.py` were both built earlier this session (generic contract first, one concrete user of it after).
+
+**Q: `n_predict=256` timed out on the 2-vCPU Phi-3.5-mini box at 60s -- was the fix to raise the timeout?**
+
+No -- lowering `n_predict` to 64 by default. Raising the timeout treats a real, informative capacity number (these boxes are genuinely slow at longer generations under CPU inference on 2 vCPU) as if it were just an arbitrary threshold to relax. 64 tokens is fast and sufficient for comparison/sanity use, which is what these guests exist for right now; both `n_predict` and `timeout_seconds` are still there for a caller doing longer real reasoning to raise deliberately, together, rather than the default silently assuming everyone wants long generations.
+
+---
+
 *See `docs/progress.md` §26 for the checklist this log's entries track
 against, and `docs/infra-topology.md` for the infrastructure-side design
 decisions made in the same planning conversation.*

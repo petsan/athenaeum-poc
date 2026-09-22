@@ -1,16 +1,23 @@
 """
-Local Model Serving Layer (Section 4.5) -- structural stub.
+Local Model Serving Layer (Section 4.5).
 
-Real backends (vLLM, llama.cpp) aren't wired up here -- no GPU/network in
-this environment to validate against. What IS real and tested: the
-registry, the router contract, VRAM-budget-aware LRU loading/unloading,
-and automatic GPU-unavailable -> CPU-fallback redirection (4.5.2-4.5.3).
-A real backend just has to implement the same `Backend` interface.
+Registry, router contract, VRAM-budget-aware LRU loading/unloading, and
+automatic GPU-unavailable -> CPU-fallback redirection (4.5.2-4.5.3) were
+already real and tested against MockBackend. Added 2026-09-23:
+LlamaCppBackend, a REAL backend talking to actual llama.cpp `llama-server`
+processes -- the six model-lab guests (infra/proxmox/model-lab/), each
+running a real CPU-quantized open-weight model. No GPU pool exists yet
+(infra-topology.md), so this backend is wired in as the CPU fallback
+with gpu_available=False -- every request routes to it directly, which
+is the honest current topology, not a temporary workaround.
 """
 from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Protocol, Optional
+import json
 import time
+import urllib.error
+import urllib.request
 
 from .storage.content_addressed import ContentAddressedStore
 
@@ -47,6 +54,65 @@ class MockBackend:
         if spec.name not in self.loaded:
             raise RuntimeError(f"{spec.name} not loaded on {self.kind} backend")
         return f"[{self.kind}:{spec.name}] response to: {prompt}"
+
+
+class BackendUnavailable(Exception):
+    """A real backend's inference call failed (network, timeout, non-200)
+    -- distinct from a KeyError (model never registered) or a RuntimeError
+    (MockBackend's own not-loaded case), so a caller can tell 'this model
+    doesn't exist' apart from 'this model exists but couldn't be reached
+    right now'."""
+
+
+@dataclass
+class LlamaCppBackend:
+    """Real backend: talks to an actual llama.cpp `llama-server` process
+    over HTTP (stdlib `urllib` only -- matches api.py's/ingestion.py's own
+    no-new-dependency convention). Each ModelSpec.name maps to a
+    configured endpoint via `endpoints`.
+
+    Deliberately stateless about load/unload: each of the six model-lab
+    guests already runs exactly one model for the lifetime of its
+    systemd-managed llama-server process (infra/proxmox/model-lab/) --
+    there is nothing for THIS backend to load or unload in-process, so
+    those two methods are no-ops and `loaded` always reports every
+    configured endpoint as loaded. This mirrors the same "stateless
+    lease-holder" pattern already used for distributed_worker.py -- the
+    actual state lives on the remote process, not here."""
+    endpoints: dict  # model name -> "http://host:port"
+    timeout_seconds: float = 60.0
+    n_predict: int = 64  # real finding, not a guess: 256 tokens on these
+    # 2-vCPU CPU-inference guests genuinely exceeded a 60s timeout for the
+    # larger candidates (Phi-3.5-mini) -- 64 is comfortably fast for
+    # sanity/comparison use while still exercising real generation;
+    # callers doing longer real reasoning should raise both this and
+    # timeout_seconds together, not just the timeout.
+
+    @property
+    def loaded(self) -> set:
+        return set(self.endpoints)
+
+    def load(self, spec: ModelSpec) -> None:
+        pass
+
+    def unload(self, spec: ModelSpec) -> None:
+        pass
+
+    def infer(self, spec: ModelSpec, prompt: str) -> str:
+        if spec.name not in self.endpoints:
+            raise KeyError(f"'{spec.name}' has no configured endpoint on this backend")
+        url = self.endpoints[spec.name]
+        payload = json.dumps({"prompt": prompt, "n_predict": self.n_predict}).encode()
+        req = urllib.request.Request(
+            f"{url}/completion", data=payload,
+            headers={"Content-Type": "application/json"}, method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=self.timeout_seconds) as resp:
+                body = json.loads(resp.read())
+        except (urllib.error.URLError, OSError, TimeoutError) as e:
+            raise BackendUnavailable(f"'{spec.name}' at {url!r} unreachable: {e}") from e
+        return body["content"]
 
 
 class ModelRegistry:
