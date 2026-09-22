@@ -56,6 +56,55 @@ phrasing was the accidental part, not Philosophy's response to it.
 
 ---
 
+## 2026-09-22 — Output Types (Phase 7) design choices
+
+**Q: How should Forecast probability avoid the category-error risk §5.4
+explicitly names ("must never be presented with the same grammar" as
+Research confidence)?**
+
+Structurally, not just by convention: `build_forecast_answer()`'s return
+dict has a `probability` field and deliberately has no `confidence` field
+at all, so there's nothing for a caller to conflate by accident — the same
+"close the risk by construction, not vigilance" approach §12.2 already
+uses for content-integrity. Enforced with a test
+(`test_forecast_probability_field_is_not_called_confidence`).
+
+**Q: Does a Recommendation-classified question still get a Research
+section, and does a pure Forecast question?**
+
+Yes and no, respectively, and both follow directly from §5.4's own
+example ("should we do X" implies *both* a Research Answer about the facts
+and a Recommendation about the choice) rather than from an arbitrary
+symmetry rule: `classify_output_type()` always includes Research alongside
+Recommendation, but a pure Forecast (no recommendation cue) stands alone
+— a probability estimate doesn't inherently imply a separate research
+section the way a recommendation inherently implies a factual basis does.
+
+**Q: What actually gets wired into the deliberation loop today, versus
+just built as a standalone module?**
+
+Only the Research Answer builder is wired into `loop.py`'s synthesis round
+(round_index 3), because it's the only one buildable purely from what
+today's toy agents actually produce. `build_forecast_answer()` and
+`build_recommendation_answer()` are complete, tested, standalone functions
+— per Phase 7's own task list this is legitimate (they're specified as
+"synthesis paths," not required to have a producing agent yet) — but
+nothing in the current agent set emits a claim with the resolution/
+objective structure they need as input. Wiring them for real is deferred
+to whichever future agent (or the eventual Forecast-capable model backend)
+actually produces that structure, rather than building a fake one now
+just to exercise the wiring.
+
+**Not resolved, and not claimed to be:** Open Question 4 (confidence
+aggregation across a plural or multi-type answer) is only partially
+addressed — `compose_answer()` keeps sections non-collapsing per-type,
+which sidesteps needing a single blended number, but there's still no
+defined method for "overall confidence" when a reader wants one number
+across a multi-type answer. Left open per the design doc's own framing,
+not silently closed by this session's work.
+
+---
+
 *See `docs/progress.md` §26 for the checklist this log's entries track
 against, and `docs/infra-topology.md` for the infrastructure-side design
 decisions made in the same planning conversation.*

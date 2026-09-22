@@ -42,6 +42,12 @@ def test_jurisdictional_conflict_produces_plural_answer_not_forced_consensus():
     assert any(c.issuing_agent == "Philosophy" for c in result["committed"])
     assert result["dissent"] == []
 
+def test_framing_round_classifies_output_type():
+    frame = framing_round("is 17 prime?", "q1")
+    assert frame["output_types"] == ["research"]
+    frame2 = framing_round("should we round 2.5 up or down?", "q2")
+    assert frame2["output_types"] == ["research", "recommendation"]
+
 def test_non_conflicting_question_produces_no_plural_answer():
     frame = framing_round("is 17 prime?", "q1")
     exp = exploration_round(frame, "q1")

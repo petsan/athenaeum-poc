@@ -20,6 +20,10 @@ def test_deliberation_runs_to_completion_on_body_engine(tmp_path):
     final = log.read_latest()
     answer = final["shared_state"]["answer"]
     assert any("17 is prime" in c["statement"] for c in answer["committed"])
+    # Section 5.4: the structured output-type section rides along on the
+    # same answer, built from the same synthesis result, not bolted on
+    assert answer["output_answer"]["output_types"] == ["research"]
+    assert "17 is prime" in answer["output_answer"]["sections"]["research"]["leading_conclusion"]["statement"]
 
 def test_deliberation_survives_kill_and_resume(tmp_path):
     log, runner = make_runner(tmp_path)

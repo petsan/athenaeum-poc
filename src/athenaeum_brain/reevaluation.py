@@ -53,3 +53,14 @@ def is_material(answer: dict, current_grades: dict, threshold: int = 1) -> dict:
             reasons.append(f"{source_id}: grade moved {prior_grade} -> {now_grade} (delta {delta})")
 
     return {"material": len(reasons) > 0, "reasons": reasons}
+
+
+def forecast_is_material(forecast: dict) -> dict:
+    """Section 5.4's last bullet: a Forecast's resolution is ALWAYS
+    material, regardless of importance rating -- forecast accuracy is only
+    ever knowable in hindsight, so this deliberately ignores the
+    threshold/severity logic above and only asks whether the forecast has
+    been resolved (output_types.resolve_forecast)."""
+    if forecast.get("resolved") is not None:
+        return {"material": True, "reasons": [f"forecast resolved: outcome={forecast['resolved']}"]}
+    return {"material": False, "reasons": []}

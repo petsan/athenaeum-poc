@@ -9,6 +9,7 @@ from .agents import (
     MasterOfMathematics, MasterOfLogic, MasterOfEngineering,
     MasterOfPhysics, MasterOfPhilosophy, MasterOfTheology,
 )
+from .output_types import classify_output_type
 
 ALL_AGENTS = [
     MasterOfMathematics(), MasterOfLogic(), MasterOfEngineering(),
@@ -17,9 +18,14 @@ ALL_AGENTS = [
 
 
 def framing_round(question: str, question_id: str) -> dict:
-    """Section 3.1: decide which agents are routed to this question."""
+    """Section 3.1: decide which agents are routed to this question, and
+    (Section 5.4) which of research|forecast|recommendation it's asking
+    for -- written into the frame itself, same as routing, so later
+    re-evaluation can detect if the *classification* becomes outdated,
+    not just the answer built on it."""
     routed = [a.name for a in ALL_AGENTS if a.in_jurisdiction(question)]
-    return {"question": question, "routed_agents": routed}
+    output_types = classify_output_type(question)
+    return {"question": question, "routed_agents": routed, "output_types": output_types}
 
 
 def exploration_round(frame: dict, question_id: str) -> list[Claim]:
