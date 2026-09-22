@@ -41,6 +41,8 @@ GATEWAY="${PROXMOX_GATEWAY:-192.168.0.1}"
 POOL="${PROXMOX_POOL:?set PROXMOX_POOL}"
 STORAGE="${GUEST_STORAGE:-local-thin-multi}"
 SSH_PUBKEY_PATH="${SSH_PUBKEY_PATH:?set SSH_PUBKEY_PATH}"
+GUEST_PURPOSE="${GUEST_PURPOSE:-general Athenaeum project workload}"
+GUEST_LIFETIME="${GUEST_LIFETIME:-long-lived; rebuilt via this script when needed, not destroyed casually}"
 
 # Tier defaults per docs/infra-topology.md Section 2. The untiered default
 # (empty GUEST_TIER) matches this script's original 2vCPU/2GB/8GB shape.
@@ -70,6 +72,12 @@ if pve_lxc_exists "$VMID"; then
     exit 1
 fi
 
+DESCRIPTION="${GUEST_DESCRIPTION:-Athenaeum project guest (${HOSTNAME}).
+Purpose: ${GUEST_PURPOSE}
+Expected lifetime: ${GUEST_LIFETIME}
+Tier: ${GUEST_TIER:-untiered (2vCPU/2GB/8GB default)}
+Created: $(date -u +%Y-%m-%dT%H:%MZ) via infra/proxmox/03-create-project-guest.sh}"
+
 echo "Creating $VMID ($HOSTNAME, $IP, $MAC) in pool $POOL on $STORAGE..."
 resp=$(pve_api POST "/nodes/${PROXMOX_NODE}/lxc" \
     --data-urlencode "vmid=${VMID}" \
@@ -82,6 +90,7 @@ resp=$(pve_api POST "/nodes/${PROXMOX_NODE}/lxc" \
     --data-urlencode "pool=${POOL}" \
     --data-urlencode "unprivileged=1" \
     --data-urlencode "onboot=1" \
+    --data-urlencode "description=${DESCRIPTION}" \
     --data-urlencode "ssh-public-keys=$(cat "$SSH_PUBKEY_PATH")")
 pve_wait_task "$(echo "$resp" | jq -r '.data')"
 
@@ -100,3 +109,4 @@ echo "    --net0 name=eth0,bridge=vmbr0,ip=${IP}/24,gw=${GATEWAY},firewall=0,hwa
 echo "    --pool ${POOL} --unprivileged 0 --features nesting=1,keyctl=1"
 echo "  pct start ${VMID}"
 echo "  pct exec ${VMID} -- bash -c \"mkdir -p /root/.ssh && chmod 700 /root/.ssh && echo '\$(cat "$SSH_PUBKEY_PATH")' >> /root/.ssh/authorized_keys && chmod 600 /root/.ssh/authorized_keys\""
+echo "  pct set ${VMID} --description \"$DESCRIPTION\"   # the destroy+recreate above drops the Notes field -- reapply it"

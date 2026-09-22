@@ -56,3 +56,7 @@ To onboard a **new** project onto the existing tools container:
 | 106 | `athenaeum-tools` | 192.168.0.151 | Shared tools/ops box (this CLI lives here) | No |
 
 Keep this table current — it's the fastest way to know what should exist before assuming something is missing or extra.
+
+## Every guest carries its purpose/lifetime in its own Notes field
+
+`01-create-tools-container.sh` and `03-create-project-guest.sh` both set the LXC `description` field (the "Notes" box in the Proxmox UI's guest summary) at creation time — purpose, expected lifetime, tier (if any), and creation timestamp — via `TOOLS_DESCRIPTION`/`GUEST_DESCRIPTION` (or the `GUEST_PURPOSE`/`GUEST_LIFETIME` pair that builds `03-`'s default). This is deliberately redundant with this README's own inventory table above: the table can go stale between rebuilds, but the Notes field lives on the guest itself and survives even if this file isn't updated — `pct config <vmid>` or the Proxmox UI is always a second, independent source of truth for "why does this exist and is it safe to destroy." Guests 104/106 had this applied retroactively on 2026-09-22 (they predate this convention); any future manual `pct create`/`pct set` should set `--description` too, not just guests created through these scripts.

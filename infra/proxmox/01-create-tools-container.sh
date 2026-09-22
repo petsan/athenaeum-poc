@@ -30,8 +30,15 @@ POOL="${TOOLS_POOL:?set TOOLS_POOL -- which resource pool the tools box lives in
 STORAGE="${TOOLS_STORAGE:-local-thin-multi}"
 SSH_PUBKEY_PATH="${SSH_PUBKEY_PATH:?set SSH_PUBKEY_PATH -- public key to inject as root's authorized_keys}"
 
+DESCRIPTION="${TOOLS_DESCRIPTION:-Athenaeum shared tools container (pve-ops CLI).
+Purpose: multi-project Proxmox API tooling, shared across every project on this host -- not recreated per-project.
+Expected lifetime: persistent (see infra/proxmox/README.md's onboot/backup coverage).
+Created: $(date -u +%Y-%m-%dT%H:%MZ) via infra/proxmox/01-create-tools-container.sh}"
+
 if pve_lxc_exists "$VMID"; then
     echo "LXC $VMID already exists -- not recreating. (Destroy it first if you actually want a from-scratch rebuild.)"
+    echo "Re-syncing Notes/description..."
+    pve_api PUT "/nodes/${PROXMOX_NODE}/lxc/${VMID}/config" --data-urlencode "description=${DESCRIPTION}" >/dev/null
 else
     echo "Creating tools container $VMID ($HOSTNAME, $IP, $MAC)..."
     resp=$(pve_api POST "/nodes/${PROXMOX_NODE}/lxc" \
@@ -45,6 +52,7 @@ else
         --data-urlencode "pool=${POOL}" \
         --data-urlencode "unprivileged=1" \
         --data-urlencode "onboot=1" \
+        --data-urlencode "description=${DESCRIPTION}" \
         --data-urlencode "ssh-public-keys=$(cat "$SSH_PUBKEY_PATH")")
     pve_wait_task "$(echo "$resp" | jq -r '.data')"
     echo "Starting..."
