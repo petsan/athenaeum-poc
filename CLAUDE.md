@@ -94,3 +94,22 @@ Read `docs/progress.md`. Proxmox access is already set up (see
 `deployment-playbook.md`); if starting infra work from scratch on a
 *different* host or project, follow that playbook rather than
 re-deriving the setup.
+
+**This Proxmox host is routinely powered OFF between sessions by design**
+(it's a test box, not production — the user turns it off when not
+actively working). This is the normal start-of-session state, not an
+incident. Before assuming anything about current guest/network state:
+1. Check reachability first (`ping 192.168.0.100` or similar) — if it's
+   down, that's expected, not a problem to diagnose. Ask the user to
+   power it on if Proxmox-related work is actually needed this session.
+2. Once it's up, don't trust prior-session memory notes about "what's
+   running" at face value — `onboot: 1` means both guests (104, 106)
+   *should* autostart, and the Docker `FORWARD`-chain fix *should*
+   reapply via its systemd unit, but "should" isn't "verified this
+   boot." Run `infra/proxmox/05-verify.sh` (or the equivalent manual
+   checks: ping the guest, SSH in, check `systemctl status
+   pve-docker-bridge-fix.service`) before building on top of an assumed
+   state.
+3. This is exactly why `infra/proxmox/` and `deployment-playbook.md`
+   exist as the durable record instead of only this session's own
+   memory — verify against them, don't just recall them.
