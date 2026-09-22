@@ -40,7 +40,11 @@ not assumed -- see security-review-sandbox.md Section 7):
     environment's user-namespace-mapped root (confirmed: 50 forks
     succeeded against a limit of 4, with no error, no crash -- just
     silent non-enforcement). The cgroups pids controller was tested in
-    isolation and DOES correctly block excess forks. CLOSED.
+    isolation and DOES correctly block excess forks. CLOSED -- and, as
+    of the 2026-09-21 proxmox01 LXC re-validation (security-review-
+    sandbox.md Section 7.4), auto-detects cgroups v1 (/sys/fs/cgroup/pids)
+    vs v2 (unified hierarchy) rather than assuming v1, since a cgroups-v2-
+    only host silently fell back to the broken RLIMIT_NPROC path otherwise.
   - Environment: executed with an explicitly empty environment (no host
     variables visible inside). VERIFIED.
   - Scratch directory: a fresh temp directory created per invocation,
@@ -59,7 +63,9 @@ import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
-CGROUP_PIDS_ROOT = Path("/sys/fs/cgroup/pids")
+CGROUP_V1_PIDS_ROOT = Path("/sys/fs/cgroup/pids")
+CGROUP_V2_ROOT = Path("/sys/fs/cgroup")
+CGROUP_V2_CONTROLLERS_FILE = CGROUP_V2_ROOT / "cgroup.controllers"
 
 
 class SandboxSetupError(Exception):
@@ -99,12 +105,36 @@ def _teardown_root(root: Path) -> None:
     shutil.rmtree(root, ignore_errors=True)
 
 
+def _cgroup_pids_version() -> str | None:
+    """Which cgroups layout actually has a usable 'pids' controller here --
+    v1's dedicated /sys/fs/cgroup/pids hierarchy, or v2's single unified
+    one. Never assume v1: a cgroups-v2-only host (confirmed on a Proxmox
+    LXC guest, security-review-sandbox.md Section 7.4) has no v1 path at
+    all, and silently returning False here sends run_sandboxed() into the
+    RLIMIT_NPROC fallback, which known-bugs.md #5 already proved is
+    unenforced."""
+    if CGROUP_V1_PIDS_ROOT.is_dir():
+        return "v1"
+    if CGROUP_V2_CONTROLLERS_FILE.is_file() and "pids" in CGROUP_V2_CONTROLLERS_FILE.read_text().split():
+        return "v2"
+    return None
+
+
 def _cgroup_pids_available() -> bool:
-    return CGROUP_PIDS_ROOT.is_dir()
+    return _cgroup_pids_version() is not None
 
 
-def _make_pids_cgroup(max_pids: int) -> Path:
-    cg = CGROUP_PIDS_ROOT / f"athenaeum-sandbox-{uuid.uuid4().hex[:12]}"
+def _make_pids_cgroup(max_pids: int, version: str) -> Path:
+    if version == "v1":
+        cg = CGROUP_V1_PIDS_ROOT / f"athenaeum-sandbox-{uuid.uuid4().hex[:12]}"
+    else:
+        # v2: child cgroups only get a controller if the parent has
+        # delegated it via cgroup.subtree_control -- enable it if it
+        # isn't already, before creating the child that needs it.
+        subtree_control = CGROUP_V2_ROOT / "cgroup.subtree_control"
+        if "pids" not in subtree_control.read_text().split():
+            subtree_control.write_text("+pids")
+        cg = CGROUP_V2_ROOT / f"athenaeum-sandbox-{uuid.uuid4().hex[:12]}"
     cg.mkdir()
     (cg / "pids.max").write_text(str(max_pids))
     return cg
@@ -157,8 +187,9 @@ def run_sandboxed(code: str, cpu_time_limit_seconds: int = 5, memory_limit_mb: i
         try:
             (scratch / "code.py").write_text(code)
             _build_root(root, scratch)
-            if _cgroup_pids_available():
-                cgroup = _make_pids_cgroup(max_pids)
+            cgroup_version = _cgroup_pids_version()
+            if cgroup_version is not None:
+                cgroup = _make_pids_cgroup(max_pids, cgroup_version)
         except Exception as e:
             return SandboxResult(status="setup_failed", stdout="", stderr=str(e), returncode=None)
 

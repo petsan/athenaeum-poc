@@ -54,6 +54,12 @@ These aren't bugs in the sense of "code that was wrong" — they're incorrect as
 **Fix:** Join the cgroup from `preexec_fn`, which runs synchronously *in the child*, after `fork()` but before `exec()` — guaranteeing cgroup membership is established before the process becomes anything that could start forking.
 **Lesson:** "It passed once" is not evidence a race condition is fixed or absent, especially for anything involving process creation timing. Run any timing-sensitive fix multiple times (this project used 8 repeats, then 3 full-suite reruns) before trusting it — a single green run can be luck.
 
+### 17. Cgroups `pids` controller path hardcoded to v1, silently degrading to a known-broken fallback on v2-only hosts
+**What happened:** Bug #7's fix — a real cgroups `pids` controller for fork containment — was verified working and marked "CLOSED" in `security-review-sandbox.md`. Re-validating on a real deployment target (`scripts/preflight_check.py` against a Proxmox LXC guest, per Section 7.3) found fork containment failing again: `no cgroups v1 'pids' controller`.
+**Root cause:** Both `sandbox.py`'s `_cgroup_pids_available()` and the preflight script's own copy hardcoded the cgroups v1 path, `/sys/fs/cgroup/pids`. The Proxmox LXC guest runs cgroups v2 only (unified hierarchy) — that path never exists there. `_cgroup_pids_available()` returned `False`, so `run_sandboxed()` silently fell back to `RLIMIT_NPROC` — which bug #5 already proved is unenforced in this environment. Fork containment was therefore not actually enforced by anything on that host, despite the earlier fix and its "CLOSED" status.
+**Fix:** Added `_cgroup_pids_version()`, which checks for the v1 path first, then falls back to checking `/sys/fs/cgroup/cgroup.controllers` for a `pids` entry (the v2 signal), returning `"v1"`, `"v2"`, or `None`. `_make_pids_cgroup()` now takes the detected version and creates the cgroup under the right root — for v2, this also requires enabling `pids` in the parent's `cgroup.subtree_control` before a child cgroup can use it, which v1 never needed. Verified against the real Proxmox LXC guest's actual cgroups v2 setup: fork containment now blocks correctly (forks blocked after 2, against a limit of 5).
+**Lesson:** A fix verified as "CLOSED" against one environment is a claim about *that environment*, not a universal one — exactly what `security-review-sandbox.md` Section 7.3 already says to guard against for the CPU-time gap, and it turned out to apply here too, to a gap that had already been marked resolved. Re-validating on a new deployment target isn't just for catching *new* problems; it can un-close old ones that were only ever closed for the reference environment's specific cgroups version.
+
 ---
 
 ## Storage / correctness bugs
@@ -128,7 +134,7 @@ These aren't bugs in the sense of "code that was wrong" — they're incorrect as
 ## How to use this file
 
 Before writing similar code again in this project:
-- **Any new sandboxing/namespace work:** re-read entries 5–7. Test enforcement directly, isolate failures to minimal reproductions, and re-verify timing-sensitive fixes multiple times before trusting them.
+- **Any new sandboxing/namespace work:** re-read entries 5–7 and 17. Test enforcement directly, isolate failures to minimal reproductions, re-verify timing-sensitive fixes multiple times before trusting them, and never assume a mechanism verified on one environment (cgroups version, kernel, container runtime) carries over to the next deployment target unvalidated.
 - **Any new content-addressed or checkpoint code:** re-read entries 8–9. Be explicit about what's hashed vs. stored vs. derived, and make sure "verified" checks everything a caller would assume it checks.
 - **Any new API/serialization boundary:** re-read entry 10. Check the actual runtime type after a round-trip.
 - **Any new test:** re-read entries 11–14 before assuming a failing test means the implementation is wrong.

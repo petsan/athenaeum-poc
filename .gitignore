@@ -4,3 +4,5 @@ __pycache__/
 data/demo-run/
 *.egg-info/
 .venv/
+.proxmox.env
+.env

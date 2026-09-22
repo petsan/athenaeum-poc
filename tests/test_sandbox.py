@@ -6,7 +6,37 @@ will not pass in an unprivileged CI runner without extra setup -- see
 README's note on this.
 """
 import pytest
+from athenaeum_body import sandbox
 from athenaeum_body.sandbox import run_sandboxed
+
+def test_cgroup_pids_version_prefers_v1_when_present(tmp_path, monkeypatch):
+    v1 = tmp_path / "pids"
+    v1.mkdir()
+    monkeypatch.setattr(sandbox, "CGROUP_V1_PIDS_ROOT", v1)
+    assert sandbox._cgroup_pids_version() == "v1"
+
+def test_cgroup_pids_version_falls_back_to_v2_when_v1_absent(tmp_path, monkeypatch):
+    v1 = tmp_path / "pids"  # never created -- v1 absent, matches a cgroups-v2-only host
+    v2_controllers = tmp_path / "cgroup.controllers"
+    v2_controllers.write_text("cpuset cpu io memory pids rdma\n")
+    monkeypatch.setattr(sandbox, "CGROUP_V1_PIDS_ROOT", v1)
+    monkeypatch.setattr(sandbox, "CGROUP_V2_CONTROLLERS_FILE", v2_controllers)
+    assert sandbox._cgroup_pids_version() == "v2"
+
+def test_cgroup_pids_version_v2_without_pids_controller_listed_is_unavailable(tmp_path, monkeypatch):
+    v1 = tmp_path / "pids"
+    v2_controllers = tmp_path / "cgroup.controllers"
+    v2_controllers.write_text("cpuset cpu io memory rdma\n")  # no 'pids' entry
+    monkeypatch.setattr(sandbox, "CGROUP_V1_PIDS_ROOT", v1)
+    monkeypatch.setattr(sandbox, "CGROUP_V2_CONTROLLERS_FILE", v2_controllers)
+    assert sandbox._cgroup_pids_version() is None
+
+def test_cgroup_pids_version_none_when_neither_layout_present(tmp_path, monkeypatch):
+    v1 = tmp_path / "pids"
+    v2_controllers = tmp_path / "cgroup.controllers"  # never created
+    monkeypatch.setattr(sandbox, "CGROUP_V1_PIDS_ROOT", v1)
+    monkeypatch.setattr(sandbox, "CGROUP_V2_CONTROLLERS_FILE", v2_controllers)
+    assert sandbox._cgroup_pids_version() is None
 
 def test_scenario_1_network_egress_blocked():
     code = """

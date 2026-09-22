@@ -106,3 +106,37 @@ Either way, that is a decision for whoever enables this in production, informed 
 
 ### 7.3 Re-validate on every new deployment target, not just once
 This scorecard is a report on one specific environment. `scripts/preflight_check.py` (standalone, no repo dependency beyond Python's standard library and the same `unshare`/`chroot`/`mount`/`timeout` tools the real sandbox needs) re-runs every scenario above, including the isolated `RLIMIT_CPU` reproduction that answers the open question directly. **Run it on any new target — a fresh VM, an LXC container, bare metal — before trusting this document's scorecard to carry over, and especially before changing `execution_sandbox.enabled`.** If it finds `RLIMIT_CPU` works correctly there, that's a genuine capability upgrade for that environment specifically, and this section should be updated to reflect it rather than assuming the reference environment's limitation is universal.
+
+### 7.4 Re-validation log
+
+#### 2026-09-21 — `proxmox01` (Proxmox VE 9.2.20 host), privileged Debian 12 LXC (VMID 104, `nesting=1,keyctl=1`), cgroups v2 unified hierarchy only, kernel `7.0.14-17-pve`
+
+`scripts/preflight_check.py` run as root inside the container. Results:
+
+| Scenario | Result | Notes |
+|---|---|---|
+| Prerequisites | PASS | root + all required tools present |
+| cgroups `pids` controller availability | PASS | via cgroups v2 unified hierarchy (`cgroup.controllers` lists `pids`) — **no `/sys/fs/cgroup/pids` v1 path exists on this host at all** |
+| 1 — network egress | PASS | |
+| 2/3 — filesystem containment | PASS | |
+| 4 — fork containment via cgroups | **FAIL — new gap, this environment only** | See below |
+| Minimal repro — `RLIMIT_CPU` under `unshare --fork` | FAIL, as expected | Matches the reference environment's finding exactly (`sigprocmask unblock failed: Invalid argument`) — confirms 7.1's CPU gap is not reference-environment-specific, no code change needed, wall-clock kill remains correct |
+| 5b — external wall-clock kill | PASS | `rc=-9`, `elapsed=3.0s` |
+| 6 — memory limit | PASS | |
+| 7 — scratch directory freshness | PASS | |
+| 8 — environment scrubbed | PASS | |
+
+**New finding: the fork-containment fix from 7.1 does not carry over to cgroups-v2-only hosts, and this Proxmox LXC is one.** `src/athenaeum_body/sandbox.py`'s `_cgroup_pids_available()` (and `preflight_check.py`'s own copy of the same check) hardcoded the cgroups v1 path, `/sys/fs/cgroup/pids`. On this host that path never exists — cgroups v2's unified hierarchy uses a different layout entirely. `_cgroup_pids_available()` therefore returns `False`, `run_sandboxed()` never creates a cgroup, and per its own docstring it silently falls back to in-process `RLIMIT_NPROC` — which `known-bugs.md` bug #5 already proved is unenforced in this project's environment (50/50 forks succeeded against a limit of 4, no error, no crash). So on this host specifically, fork/process-count containment is currently **not enforced by anything**, despite 7.1 marking that gap "CLOSED" — that closure was correct for whatever reference environment had cgroups v1, and does not generalize.
+
+**Status:** `execution_sandbox.enabled` remains `false` regardless of the fix below — passing tests is necessary, not sufficient, per Section 5.
+
+**Fix applied and verified the same day.** `_cgroup_pids_available()` was replaced with `_cgroup_pids_version()` (checks v1's path first, then falls back to reading `pids` out of v2's `cgroup.controllers`), and `_make_pids_cgroup()` now creates the cgroup under whichever root was detected — for v2 this also means enabling `pids` in the parent's `cgroup.subtree_control` first, which v1 never required. Full writeup: `known-bugs.md` entry 17.
+
+Verified against this same container (not a different environment, not a hypothetical) via a standalone script exercising the real modified `sandbox.py` directly:
+- Pure version-detection logic (v1 present / v2-only / neither): **PASS**
+- Scenario 4, fork containment, re-run for real against this host's actual cgroups v2 setup: **PASS** — forks blocked after 2, against a limit of 5 (previously: all 50 would have succeeded, per the RLIMIT_NPROC fallback bug #5 already documented)
+- Regression spot-checks (network egress, memory limit): **PASS**, unaffected by this change
+
+Note on verification method: this Windows-based session has no local Python/Linux environment to run the full `pytest -q` suite (which needs root + `unshare`/`chroot`/cgroups). The fix was instead verified by pushing the modified `sandbox.py` into this same LXC and directly exercising `run_sandboxed()` and `_cgroup_pids_version()` there — the real code, the real target environment, just not through the pytest harness. `tests/test_sandbox.py` gained the corresponding pytest-native coverage (`test_cgroup_pids_version_*`, no root required for those specific tests) for whenever this runs in a normal CI/dev environment; re-run the actual suite there before trusting this beyond what's confirmed above.
+
+With this fix, fork containment is confirmed working on **both** cgroups v1 (original reference environment) and v2 (this Proxmox LXC) hosts. The CPU-time gap (7.1) remains the sole open item, mitigated by wall-clock `timeout -s KILL` as before.
