@@ -317,6 +317,43 @@ later," exactly the information that distinction exists to preserve.
 
 ---
 
+## 2026-09-22 — Distributed worker dispatch (Task 23) design choice
+
+**Q: Task 23 was blocked on "needs a second process/host to be
+meaningful" — why a second OS process on the same LXC rather than
+actually standing up a second guest, now that the infra tier convention
+makes that cheap?**
+
+Because the thing Task 23 is actually testing — real network I/O between
+a dispatcher and a worker, and real recovery when the worker disappears —
+doesn't require a second physical host to be genuine; it requires the
+worker to be a truly separate, independently-killable process that the
+dispatcher can't reach into. `multiprocessing`'s fork context gives that
+for real (its own PID, its own memory, killed with a real `terminate()`,
+reached only over a real TCP socket) without the added cost, cleanup
+burden, and resource-cap accounting of provisioning a new guest for one
+test. If a *future* task specifically needs to test cross-host network
+conditions (latency, partition, a host actually going offline), that's
+the trigger to stand up a second guest — this one didn't need it to be
+honest.
+
+**Q: Why keep `distributed_worker.py` fully ignorant of
+`athenaeum_brain`, when the only real work-unit type this project has is
+a Brain deliberation?**
+
+Because that's the same bet `loop.py` already made and it paid off:
+`loop.py` adapts Brain rounds into the Body's `WorkUnit` contract, not the
+reverse, which is what let the Brain backlog's later phases (output
+types, human input, etc.) plug into the existing scheduler with zero Body
+changes. Making `distributed_worker.py` generic over a
+`round_handler_factory` extends that same seam to the network boundary
+rather than opening a new, Brain-specific one — the worker test's own
+wiring (`_run_worker_process` in the test file) is where the
+Brain-specific `make_deliberation_handler` import actually lives, which
+is exactly where it belongs.
+
+---
+
 *See `docs/progress.md` §26 for the checklist this log's entries track
 against, and `docs/infra-topology.md` for the infrastructure-side design
 decisions made in the same planning conversation.*
