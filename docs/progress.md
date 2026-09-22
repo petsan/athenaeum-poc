@@ -383,7 +383,13 @@ Each of the other six agents (Mathematics, Engineering, Physics, Philosophy, The
 - To fit both new guests inside the (then-50%, now-80%) cap without exceeding it, the four smallest comparison guests (Qwen2.5-Coder-1.5B, Qwen2.5-1.5B, Phi-3.5-mini, Granite-2B) were resized from 2→1 vCPU each — a real, low-risk trade-off made transparently, not silently.
 - `manifest.tsv`, `model_lab_registry.py`, and affected tests updated to match; full reasoning in `docs/brain-session-log.md`.
 
-Test suite re-run pending completion of both new guests' setup (llama.cpp build + weight download, OLMo 3.1 32B's ~20GB download takes meaningfully longer) — see the next section once that's verified.
+**Three more real bugs found getting both guests actually working, none guessable in advance:**
+1. OLMo 3's GGUF chat template uses a Jinja `tojson` filter llama.cpp's built-in minimal parser doesn't support — `llama-server` parses/validates the chat template at *startup* even though every caller here only ever uses the raw `/completion` endpoint, so the server crash-looped indefinitely (systemd restarting it every ~5s, hidden behind a generic 503 "Loading model" unless `journalctl -u llama-server` was actually checked). Fixed by adding `--no-jinja` to every guest's `ExecStart` (not just OLMo 3's) — root-cause, not a one-off patch, since any future model's template could hit the same gap.
+2. Restoring the four resized guests from 1→2 vCPU (now that the 80% cap gave room) cut full-suite runtime from 311s to 179s and eliminated most, but not all, of a batch of real timeout failures.
+3. `model_backed_reasoning.ask_model()`'s own retry loop had a real bug: on a timeout (`BackendUnavailable`) it returned `None` immediately, silently burning zero of its `max_attempts` — only an empty-string response was ever actually retried. Fixed to retry on both failure modes.
+4. The real, decisive one: OLMo 3 (unlike OLMo 2) reliably — not occasionally — returns an **empty completion for a bare, unframed question**; it needs explicit `Q: ...\nA:` continuation framing to know a response is expected at all. Confirmed directly (4/4 real calls empty on the bare prompt, 2/2 real calls succeeded once framed) before fixing, not assumed. `ask_model()` now wraps every question in that frame before it reaches the backend.
+
+**240/240 tests passing**, verified for real on LXC 104 against both new guests. Full reasoning for all of the above in `docs/brain-session-log.md`.
 
 ### Explicitly not on this list
 Any application-level work beyond what `deployment-playbook.md` promises to deliver (verified SSH access to a correctly-networked guest, not a deployed application).

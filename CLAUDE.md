@@ -80,7 +80,7 @@ These aren't aspirational — every one of them is here because violating it (or
   invariant enforced in `config.py` itself (`disallow_paid_apis`), not
   just a policy.
 - Before marking any task "done," run the actual test suite
-  (`pytest -q`, currently 238/238) and update `docs/progress.md` — don't
+  (`pytest -q`, currently 240/240) and update `docs/progress.md` — don't
   let the checkpoint file go stale.
 
 ## Current status (see `docs/progress.md` for full detail)
@@ -112,7 +112,8 @@ These aren't aspirational — every one of them is here because violating it (or
   OLMo-2-1B, Qwen2.5-Coder-1.5B, Qwen2.5-1.5B, Phi-3.5-mini, Granite-3.1-2B,
   Mistral-7B-v0.3), proven end-to-end including `evaluation.py`'s
   previously-blocked B1 baseline. **Six of seven Master Agents now have a
-  real OLMo 2 fallback** (`model_backed_reasoning.py`) for when their own
+  real OLMo 3 fallback** (`model_backed_reasoning.py` — swapped from OLMo
+  2 on 2026-09-23, see `docs/progress.md` §38) for when their own
   narrow deterministic computation finds nothing — Logic is the one
   deliberate exception (§2.2: never asserts first-order claims, so no
   fallback path exists for it at all). Deterministic computation still

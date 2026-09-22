@@ -1,5 +1,5 @@
 """
-The six model-lab candidates (infra/proxmox/model-lab/manifest.tsv),
+The model-lab candidates (infra/proxmox/model-lab/manifest.tsv),
 described as ModelSpecs + a LlamaCppBackend endpoint map, so tests and
 evaluation code have one place to get "what's actually live right now"
 instead of hand-rolling IPs. Kept in sync with manifest.tsv by hand --
@@ -8,13 +8,20 @@ if a guest gets destroyed or replaced, update both.
 These are real, running CPU-quantized models on isolated LXC guests
 (model-lab/README.md) -- NOT the production swap-based router topology
 (body-design.md Section 4.5), which remains a postponed decision.
+
+2026-09-23: olmo2-1b retired, replaced by olmo3-7b (OLMo 2 1B was not
+AI2's newest/biggest public model -- see docs/brain-session-log.md).
+olmo3-32b is intentionally NOT in MODEL_LAB_ENDPOINTS/MODEL_LAB_SPECS or
+manifest.tsv -- it's a separate, one-off comparison guest (VMID 117,
+192.168.0.167), not part of the standard set or wired as the default
+fallback; see OLMO3_32B_ENDPOINT below for its own, opt-in access point.
 """
 from __future__ import annotations
 import json
 from .model_serving import ModelSpec, LlamaCppBackend, ModelRegistry
 
 MODEL_LAB_ENDPOINTS = {
-    "olmo2-1b": "http://192.168.0.160:8080",
+    "olmo3-7b": "http://192.168.0.166:8080",
     "qwen-coder-1.5b": "http://192.168.0.161:8080",
     "qwen2.5-1.5b": "http://192.168.0.162:8080",
     "phi-3.5-mini": "http://192.168.0.163:8080",
@@ -22,13 +29,16 @@ MODEL_LAB_ENDPOINTS = {
     "mistral-7b": "http://192.168.0.165:8080",
 }
 
+# Comparison-only, not part of the standard set (see module docstring).
+OLMO3_32B_ENDPOINT = "http://192.168.0.167:8080"
+
 # vram_gb here is really "resource footprint" -- these run on CPU/RAM, not
 # VRAM, but ModelSpec/ModelServingLayer's eviction math is generic over
 # "footprint units" (Section 4.5.3 applies the same discipline to any
 # shared, contended resource) and these guests are isolated single-model
 # boxes anyway, so eviction never actually triggers for them today.
 MODEL_LAB_SPECS = {
-    "olmo2-1b": ModelSpec(name="olmo2-1b", vram_gb=0.7, capabilities=("general",)),
+    "olmo3-7b": ModelSpec(name="olmo3-7b", vram_gb=4.5, capabilities=("general",)),
     "qwen-coder-1.5b": ModelSpec(name="qwen-coder-1.5b", vram_gb=1.0, capabilities=("coding",)),
     "qwen2.5-1.5b": ModelSpec(name="qwen2.5-1.5b", vram_gb=1.0, capabilities=("general",)),
     "phi-3.5-mini": ModelSpec(name="phi-3.5-mini", vram_gb=2.3, capabilities=("general",)),

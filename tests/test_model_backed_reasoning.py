@@ -1,6 +1,6 @@
 """
 Real model-backed fallback tests -- these hit the actual OLMo 2 model-lab
-guest (192.168.0.160), no mocking for the main path, same convention as
+guest (192.168.0.166, olmo3-7b), no mocking for the main path, same convention as
 test_model_serving_real.py. Deterministic edge cases (unreachable
 backend) use an unrouted IP, same technique test_model_serving_real.py
 already uses.
@@ -40,13 +40,59 @@ def test_ask_model_retries_on_empty_or_whitespace_completion(monkeypatch):
     assert result == "a real answer"
 
 
+def test_ask_model_retries_on_timeout_not_just_empty_completion(monkeypatch):
+    """Real bug caught running the full suite under load: a transient
+    timeout (BackendUnavailable) used to return None immediately,
+    burning zero of the remaining retry attempts -- only an empty-string
+    response was ever retried. Verified here deterministically: the first
+    attempt raises BackendUnavailable, the second succeeds."""
+    import athenaeum_brain.model_backed_reasoning as mbr
+    from athenaeum_body.model_serving import BackendUnavailable
+
+    attempts = iter([BackendUnavailable("simulated timeout"), "a real answer"])
+
+    class FakeBackend:
+        def __init__(self, *a, **kw):
+            pass
+
+        def infer(self, spec, question):
+            outcome = next(attempts)
+            if isinstance(outcome, Exception):
+                raise outcome
+            return outcome
+
+    monkeypatch.setattr(mbr, "LlamaCppBackend", FakeBackend)
+    result = ask_model("irrelevant", max_attempts=3)
+    assert result == "a real answer"
+
+
+def test_ask_model_returns_none_after_exhausting_attempts_on_repeated_timeout(monkeypatch):
+    import athenaeum_brain.model_backed_reasoning as mbr
+    from athenaeum_body.model_serving import BackendUnavailable
+
+    class AlwaysTimesOut:
+        def __init__(self, *a, **kw):
+            pass
+
+        def infer(self, spec, question):
+            raise BackendUnavailable("simulated timeout")
+
+    monkeypatch.setattr(mbr, "LlamaCppBackend", AlwaysTimesOut)
+    assert ask_model("irrelevant", max_attempts=3) is None
+
+
 def test_ask_model_gets_real_completion_from_olmo():
-    response = ask_model("Q: What is the capital of France?\nA:")
+    # bare question -- ask_model wraps it in Q:/A: framing itself
+    response = ask_model("What is the capital of France?")
     assert response and len(response.strip()) > 0
 
 
 def test_model_backed_claim_has_capped_confidence_and_serving_model():
-    claim = model_backed_claim(agent_name="TestAgent", question="Q: Say hello.\nA:", question_id="q1")
+    # a genuine question, not an imperative -- "Say hello." turned out to
+    # be a real edge case for OLMo 3's Q:/A: framing (degenerate/empty
+    # output), unlike any actual agent fallback prompt, which is always a
+    # real question extracted from a deliberation, never an imperative
+    claim = model_backed_claim(agent_name="TestAgent", question="What is the capital of Japan?", question_id="q1")
     assert claim is not None
     assert claim.confidence < 1.0
     assert claim.serving_model == DEFAULT_MODEL

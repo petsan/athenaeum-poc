@@ -3,7 +3,7 @@ Real LlamaCppBackend tests -- these hit ACTUAL running llama-server
 processes on the model-lab guests (infra/proxmox/model-lab/), no mocking,
 same "verify empirically" convention as test_sandbox.py's real kernel
 tests and test_distributed_worker.py's real process kills. Needs LAN
-reachability to 192.168.0.160-165; will fail if those guests are ever
+reachability to 192.168.0.161-166; will fail if those guests are ever
 torn down (model-lab/README.md's guests are explicitly disposable).
 """
 import pytest
@@ -15,9 +15,9 @@ from athenaeum_body.model_lab_registry import (
 
 
 def test_llama_cpp_backend_gets_real_completion_from_olmo():
-    backend = LlamaCppBackend(endpoints={"olmo2-1b": MODEL_LAB_ENDPOINTS["olmo2-1b"]})
+    backend = LlamaCppBackend(endpoints={"olmo3-7b": MODEL_LAB_ENDPOINTS["olmo3-7b"]})
     from athenaeum_body.model_serving import ModelSpec
-    spec = ModelSpec(name="olmo2-1b", vram_gb=0.7)
+    spec = ModelSpec(name="olmo3-7b", vram_gb=4.5)
     result = backend.infer(spec, "Q: What is 2+2?\nA:")
     assert isinstance(result, str) and len(result) > 0
 

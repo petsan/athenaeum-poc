@@ -1,7 +1,7 @@
 """
 Master Agents (Section 2): narrow, real deterministic computation first,
 a real model-backed fallback second (added 2026-09-23, model_backed_
-reasoning.py -- OLMo 2 via the model-lab guests, infra/proxmox/model-lab/).
+reasoning.py -- OLMo 3 7B Instruct via the model-lab guests, infra/proxmox/model-lab/).
 
 Every agent below tries its own hand-checkable computation FIRST (real
 primality, kinematics, sandboxed execution, dated-event chronology --

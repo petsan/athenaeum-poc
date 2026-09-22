@@ -7,7 +7,7 @@ no claim -- the first time any Master Agent's OWN claims (not just
 Engineering's sandboxed execution) are backed by something other than
 hand-written toy logic.
 
-Default model: OLMo 2 (AllenAI/AI2) -- see infra/proxmox/model-lab/ and
+Default model: OLMo 3 7B Instruct (AllenAI/AI2) -- see infra/proxmox/model-lab/ and
 brain-session-log.md for why. Deliberately NOT used by Logic: Section 2.2
 is explicit that Logic never asserts first-order claims, only procedural
 ones, and a model-backed fallback producing a first-order claim would
@@ -27,7 +27,10 @@ from athenaeum_body.model_lab_registry import MODEL_LAB_ENDPOINTS
 from athenaeum_body.model_serving import LlamaCppBackend, ModelSpec, BackendUnavailable
 from .claims import Claim
 
-DEFAULT_MODEL = "olmo2-1b"
+DEFAULT_MODEL = "olmo3-7b"  # was olmo2-1b until 2026-09-23 -- OLMo 2 1B
+# turned out not to be AI2's newest or biggest public model (OLMo 3/3.1
+# exist, up to 32B); swapped once that was verified live against
+# Hugging Face, same resource footprint as the existing mistral-7b guest.
 FALLBACK_CONFIDENCE = 0.6
 
 
@@ -40,27 +43,41 @@ def ask_model(question: str, model_name: str = DEFAULT_MODEL, n_predict: int = 9
     (Section 4.2's stateless-lease-holder discipline: a remote call
     failing should degrade gracefully, not crash the caller).
 
-    Two real findings, not guesses: a 60s timeout intermittently tripped
-    when many real fallback calls landed on the same single-model guest
-    back to back (these guests queue requests rather than reject them
-    outright, so a generous timeout is the honest fix); separately,
-    OLMo 2's own sampling occasionally produces a near-empty completion
-    (observed directly: a single space, for an otherwise ordinary prompt)
-    -- real sampling variance, not a backend fault, so it's retried a
-    couple of times here rather than surfaced as 'no claim' on the first
-    unlucky draw. Fixed centrally, once, rather than leaving every call
-    site (agents.py's six fallback sites, and any future one) to
-    remember to retry individually."""
+    Three real findings, not guesses: a 60s timeout intermittently
+    tripped when many real fallback calls landed on the same single-model
+    guest back to back (these guests queue requests rather than reject
+    them outright, so a generous timeout is the honest fix); OLMo 2's own
+    sampling occasionally produces a near-empty completion (observed
+    directly: a single space, for an otherwise ordinary prompt) -- real
+    sampling variance, retried here rather than surfaced as 'no claim' on
+    one unlucky draw; and, found switching to OLMo 3 (2026-09-23), a raw
+    unframed question reliably (not occasionally) produces an EMPTY
+    completion from that model specifically -- unlike OLMo 2, it needs
+    explicit continuation framing to know a response is expected. Fixed
+    by wrapping the question in a minimal 'Q: ...\\nA:' frame before it
+    ever reaches the backend, confirmed live to fix it deterministically
+    (4/4 real calls), not just theorized. Fixed centrally, once, rather
+    than leaving every call site (agents.py's six fallback sites, and any
+    future one) to remember to retry or frame prompts individually."""
     if model_name not in MODEL_LAB_ENDPOINTS:
         return None
+    framed_question = f"Q: {question}\nA:"
     backend = LlamaCppBackend(endpoints={model_name: MODEL_LAB_ENDPOINTS[model_name]},
                                n_predict=n_predict, timeout_seconds=timeout_seconds)
     spec = ModelSpec(name=model_name, vram_gb=0)
     for _ in range(max_attempts):
         try:
-            response = backend.infer(spec, question)
+            response = backend.infer(spec, framed_question)
         except BackendUnavailable:
-            return None
+            # Real bug caught running this under the full test suite's
+            # back-to-back load: this used to `return None` immediately
+            # on ANY timeout, never using the remaining retry attempts --
+            # only an empty-string response was retried. A transient
+            # timeout under load is exactly the kind of recoverable
+            # failure max_attempts exists for; falling through to the
+            # next loop iteration (instead of returning) is the actual
+            # fix, not just a bigger timeout.
+            continue
         if response and response.strip():
             return response
     return None

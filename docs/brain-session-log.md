@@ -485,6 +485,57 @@ workaround" choice already made for `distributed_worker.py` and
 
 ---
 
+## 2026-09-23 — OLMo 2 → OLMo 3 swap, resource cap raise: design choices
+
+**Q: The four smallest guests were resized 2→1 vCPU to fit the old 50%
+cap, then back to 2 once the cap was raised — was shrinking them the
+right call in the first place, given it caused real test timeouts?**
+
+Yes, at the time it was made: the cap was still 50% when olmo3-7b and
+olmo3-32b needed room, and the alternative was exceeding a hard
+constraint, which isn't a tradeoff — it's not allowed regardless of
+convenience. The resize was reversible, transparent (reported plainly,
+not buried), and the timeouts it caused were a real, honest cost that got
+fixed the moment the actual constraint changed (the cap raise), not
+something quietly tolerated. Worth remembering: a resource-constrained
+decision made correctly under yesterday's constraint can still need
+revisiting the moment the constraint itself changes — that's not the
+original decision being wrong, it's the ground shifting under it.
+
+**Q: Three real bugs surfaced getting OLMo 3 working (chat-template
+crash, retry-on-timeout not actually retrying, bare-question empty
+completions) — why keep pushing through all three instead of reverting
+to OLMo 2 once the first one or two appeared?**
+
+Because none of them were reasons to doubt OLMo 3 itself — each was
+either a llama.cpp/model interaction issue with a clean root-cause fix
+(`--no-jinja`), a bug in code this session already wrote (the retry
+logic), or a real, fixable prompt-format mismatch (Q:/A: framing). None
+pointed at OLMo 3 being a worse choice than OLMo 2 — they pointed at gaps
+in the *scaffolding* around it, the same category of thing already hit
+and fixed for OLMo 2's own deployment (`huggingface-cli` deprecation,
+the LXC-create warning bug). Reverting because scaffolding needed fixing
+would have thrown out a strictly newer, more capable, still-Apache-2.0
+model for reasons that had nothing to do with the model.
+
+**Q: The retry-loop bug (timeout not retried) and the framing bug
+(empty completion on bare questions) look similar on the surface — why
+were they diagnosed as two separate things instead of one?**
+
+Because they produced genuinely different evidence once actually
+checked, not assumed: re-running the *exact* failing prompt directly
+against the guest (`curl` in a loop, 4 times) showed **100% reproducible
+empty output**, not intermittent failure — which ruled out "just a slow
+timeout that needs retrying" as the explanation, since a timeout-retry
+fix wouldn't touch a deterministic empty response. That single piece of
+direct evidence is what redirected the investigation from "retry harder"
+to "the prompt format itself doesn't work for this model" — worth
+remembering as a general debugging move: when a fix doesn't fully resolve
+a symptom, re-verify what's actually happening before assuming the first
+fix just needs to be bigger.
+
+---
+
 *See `docs/progress.md` §26 for the checklist this log's entries track
 against, and `docs/infra-topology.md` for the infrastructure-side design
 decisions made in the same planning conversation.*

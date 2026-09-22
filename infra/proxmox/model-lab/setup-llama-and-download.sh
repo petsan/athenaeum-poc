@@ -11,6 +11,18 @@
 #
 # Usage (all guests in manifest.tsv):
 #   SSH_PRIVATE_KEY_PATH=~/.ssh/athenaeum_poc ./setup-all.sh
+#
+# --no-jinja on the systemd ExecStart (real bug, found running this
+# against olmo3-7b): llama-server parses/validates a model's chat
+# template at STARTUP even when it's never used -- OLMo 3's template uses
+# a Jinja 'tojson' filter llama.cpp's built-in minimal parser doesn't
+# support, so the server crash-looped on every boot (systemd restarting
+# it every ~5s, error hidden behind a generic 503 "Loading model" unless
+# you check `journalctl -u llama-server`). Since every caller here only
+# ever uses the raw /completion endpoint (never /v1/chat/completions),
+# the chat template is never actually needed -- --no-jinja skips parsing
+# it entirely. Applied to every guest's ExecStart, not just OLMo 3's,
+# since any future model's template could hit the same gap.
 set -euo pipefail
 
 IP="${1:?usage: setup-llama-and-download.sh IP HF_REPO HF_FILE LABEL}"
@@ -58,7 +70,7 @@ Description=llama.cpp server -- ${LABEL} (Athenaeum model-lab candidate)
 After=network.target
 
 [Service]
-ExecStart=/opt/llama.cpp/build/bin/llama-server --model /opt/models/${HF_FILE} --host 0.0.0.0 --port ${PORT} -c 4096 --threads \$(nproc)
+ExecStart=/opt/llama.cpp/build/bin/llama-server --model /opt/models/${HF_FILE} --host 0.0.0.0 --port ${PORT} -c 4096 --threads \$(nproc) --no-jinja
 Restart=on-failure
 RestartSec=5
 

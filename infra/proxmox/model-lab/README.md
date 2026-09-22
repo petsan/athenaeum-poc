@@ -30,6 +30,16 @@ budget minus guests 104/106), verified via `pve-ops status`/`storage` at
 the time this was written (419GB RAM free, 1091GB disk free -- neither is
 remotely the constraint; vCPU is).
 
+## 2026-09-23 update: OLMo generation swap, plus a 32B comparison guest
+
+`olmo2-1b` was retired and replaced with **olmo3-7b** — OLMo 2 1B turned out not to be AI2's newest or biggest public model (verified live against Hugging Face: OLMo 3 and 3.1 exist, up to 32B, both Apache 2.0). `olmo3-7b` is now `model_backed_reasoning.py`'s `DEFAULT_MODEL` — the real fallback backend six of the seven Master Agents use.
+
+A separate, one-off **olmo3-32b** guest (VMID 117, `192.168.0.167`) was also stood up purely for a quality comparison before deciding anything further — it is **not** part of `manifest.tsv`'s standard set and **not** wired into `model_backed_reasoning.py`. Only 4 vCPU (the host cap was still 50% when these were created, and didn't have room for more without touching other guests): the four smallest comparison guests were briefly resized 2→1 vCPU, then restored to 2 once the cap was separately raised to 80% the same day. Expect olmo3-32b to be slow under CPU inference at 4 vCPU (~1 token/sec observed) — it's there to answer "what does the bigger model actually say," not to serve production load.
+
+**Two real bugs hit getting OLMo 3 actually working, both fixed at the root, not patched around:**
+- `llama-server` parses a model's chat template at *startup*, even though every caller here only ever uses the raw `/completion` endpoint. OLMo 3's template uses a Jinja `tojson` filter llama.cpp's built-in parser doesn't support, so the server crash-looped indefinitely — hidden behind a generic 503 "Loading model" unless `journalctl -u llama-server` was checked directly. Fixed with `--no-jinja` on every guest's `ExecStart` (not just OLMo 3's).
+- OLMo 3 (unlike OLMo 2) reliably returns an **empty** completion for a bare, unframed question — it needs explicit `Q: ...\nA:` framing to know a response is expected. `model_backed_reasoning.ask_model()` now wraps every question this way before it reaches any backend.
+
 ## The six candidates
 
 See `manifest.tsv` for the full VMID/IP/MAC/sizing table. **Verified

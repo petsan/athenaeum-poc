@@ -4,22 +4,34 @@
 #
 # Columns (tab-separated): label vmid hostname ip mac cores mem_mb disk_gb hf_repo hf_file
 #
-# VERIFIED against live Hugging Face API listings 2026-09-23 (each repo's
-# file list + license tag actually fetched, not assumed from training
-# knowledge -- see docs/brain-session-log.md for the two real corrections
-# this surfaced). Re-verify before reuse if this file is much older than
-# that date; quant repos and license tags do change.
+# VERIFIED against live Hugging Face API listings (each repo's file list +
+# license tag actually fetched, not assumed from training knowledge -- see
+# docs/brain-session-log.md for corrections this surfaced, most recently
+# 2026-09-23's OLMo generation swap). Re-verify before reuse if this file
+# is much older than that; quant repos and license tags do change.
+#
+# 2026-09-23: olmo2-1b retired and replaced with olmo3-7b -- OLMo 2 1B was
+# NOT AI2's newest or biggest public model (OLMo 3 / 3.1 exist, up to
+# 32B). The four smallest guests below were briefly resized 2->1 vCPU to
+# free budget for olmo3-7b plus a separate, not-in-this-file olmo3-32b
+# comparison guest (VMID 117, 192.168.0.167), then restored to 2 vCPU the
+# same day once the host cap was raised 50%->80% and made that
+# unnecessary -- the 1-vCPU setting was a real, if temporary, cause of
+# test timeouts under full-suite load, not just a cosmetic downgrade.
+# olmo3-32b is kept out of this manifest deliberately since it's a
+# one-off comparison box, not part of the standard set this file drives
+# via create-model-vms.sh/setup-all.sh.
 #
 # Licenses as verified: apache-2.0 for OLMo/Qwen/Granite/Mistral, mit for
-# Phi. One real catch during verification: Qwen2.5-3B-Instruct is NOT
-# apache-2.0 -- it's under the restrictive "Qwen Research License"
-# (non-commercial). Swapped for Qwen2.5-1.5B-Instruct, confirmed
+# Phi. One real catch during the original verification pass: Qwen2.5-3B-
+# Instruct is NOT apache-2.0 -- it's under the restrictive "Qwen Research
+# License" (non-commercial). Swapped for Qwen2.5-1.5B-Instruct, confirmed
 # apache-2.0, instead of silently keeping a mislicensed candidate.
 #
-# MACs are a new, distinct block (AA:CC:1x) from the existing guests'
+# MACs are a distinct block (AA:CC:1x) from the pre-existing guests'
 # AA:BB:xx MACs -- deliberately non-overlapping.
 
-olmo2-1b	110	athenaeum-modeltest-olmo2-1b	192.168.0.160	BC:24:11:AA:CC:10	2	4096	8	allenai/OLMo-2-0425-1B-Instruct-GGUF	OLMo-2-0425-1B-Instruct-Q4_K_M.gguf
+olmo3-7b	116	athenaeum-modeltest-olmo3-7b	192.168.0.166	BC:24:11:AA:CC:16	4	10240	12	bartowski/allenai_Olmo-3-7B-Instruct-GGUF	allenai_Olmo-3-7B-Instruct-Q4_K_M.gguf
 qwen-coder-1.5b	111	athenaeum-modeltest-qwen-coder-1-5b	192.168.0.161	BC:24:11:AA:CC:11	2	4096	8	Qwen/Qwen2.5-Coder-1.5B-Instruct-GGUF	qwen2.5-coder-1.5b-instruct-q4_k_m.gguf
 qwen2.5-1.5b	112	athenaeum-modeltest-qwen2-5-1-5b	192.168.0.162	BC:24:11:AA:CC:12	2	4096	8	Qwen/Qwen2.5-1.5B-Instruct-GGUF	qwen2.5-1.5b-instruct-q4_k_m.gguf
 phi-3.5-mini	113	athenaeum-modeltest-phi-3-5-mini	192.168.0.163	BC:24:11:AA:CC:13	2	6144	8	bartowski/Phi-3.5-mini-instruct-GGUF	Phi-3.5-mini-instruct-Q4_K_M.gguf
