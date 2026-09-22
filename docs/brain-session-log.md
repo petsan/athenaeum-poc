@@ -238,6 +238,57 @@ correctly without needing a new weighting scheme invented for this case.
 
 ---
 
+## 2026-09-22 — Evaluation Infrastructure (Phase 9b) design choices
+
+**Q: §9.2 asks for adversarial coverage of "each failure mode in Section
+8" — Section 8's table has 16 rows. Why does `ADVERSARIAL_CASES` only
+cover 6?**
+
+Because only 6 currently have a real, checkable mechanism behind them
+without a model backend. Building a "check" for e.g. "silent style
+drift" (Domain Fidelity Score) would either (a) require enough real
+reasoning volume to see a fingerprint actually drift, which a
+single-shot toy-agent call can't produce, or (b) be a hollow test that
+technically imports `domain_fidelity.py` and asserts something trivial
+just to claim coverage. Neither is honest. The six covered are named
+explicitly in the module and in `progress.md` precisely so this reads as
+"deliberately partial, here's exactly what's covered" rather than
+implicitly claiming full §8 coverage.
+
+**Q: The "remove reputability weighting" ablation came back identical to
+A1 — is that a test bug?**
+
+No — verified by reading `rounds.py`'s `synthesis_round` directly:
+reputability grades are snapshotted onto the *answer* after commit
+(`loop.py`'s `_attach_grades_and_record_outcomes`), and inform dispute
+resolution, but nothing in `synthesis_round` itself reads a reputability
+grade to change which claims survive or at what confidence. So "remove
+reputability weighting" and "keep it" really do produce the same output
+today, because the weighting this ablation is supposed to remove isn't
+wired into synthesis yet. This is flagged as a real architectural gap
+(§6.7 designs for it, the code doesn't implement it) rather than treated
+as a test to fix — exactly the outcome §9.7's own text anticipates
+("that is treated as a real finding... not a testing artifact to explain
+away"). Worth revisiting when reputability-weighted synthesis is
+actually built, not something to quietly patch over in this evaluation
+module.
+
+**Q: Why is contamination isolation (§9.9) a grep-based structural test
+instead of an actual access-control layer (separate store, permissions,
+etc.)?**
+
+Because there's currently exactly one ingestion entry point
+(`ingestion.py`'s `fetch()`), and it simply never imports
+`evaluation.py` — there's nothing for an access-control layer to guard
+against that doesn't already not exist. Building real access control here
+now would be exactly the kind of speculative infrastructure this
+project's own principles argue against (no future-proofing beyond what's
+needed) — if a second ingestion path is ever added, this structural test
+would need to grow to cover it too, and that's the natural trigger point,
+not now.
+
+---
+
 *See `docs/progress.md` §26 for the checklist this log's entries track
 against, and `docs/infra-topology.md` for the infrastructure-side design
 decisions made in the same planning conversation.*
