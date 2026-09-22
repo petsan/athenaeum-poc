@@ -342,3 +342,25 @@ code. Full corrected scorecard: `security-review-sandbox.md` Section 7.
 `execution_sandbox.enabled` still stays `false`.
 
 1 new test (109 total).
+
+## Before deploying to real hardware: run the preflight check
+
+`scripts/preflight_check.py` -- standalone (stdlib only, no repo import
+needed) re-validation of every scenario in `security-review-sandbox.md`,
+including the isolated `RLIMIT_CPU`-under-`unshare --fork` reproduction
+that determined this environment's one open finding. Run it on any new
+deployment target -- a fresh Proxmox VM or LXC, bare metal -- before
+trusting the scorecard in `security-review-sandbox.md` Section 7 to
+carry over:
+
+```bash
+sudo python3 scripts/preflight_check.py
+```
+
+If `RLIMIT_CPU` turns out to work correctly on that kernel (unlike the
+reference environment this was developed against), that's a genuine
+capability upgrade -- update `security-review-sandbox.md` Section 7
+accordingly rather than assuming the limitation is universal. Exit code
+0 means every scenario passed as specified; exit 1 means read the
+summary (a non-zero exit isn't automatically "unsafe," since the CPU
+finding has a known-good fallback already built into `sandbox.py`).
