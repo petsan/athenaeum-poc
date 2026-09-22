@@ -1,0 +1,18 @@
+[Unit]
+Description=vzdump snapshot backup of athenaeum-poc guests to local storage
+# Simplest possible backup: a self-updating (self-pruning) copy of each
+# guest's disk+config on a DIFFERENT underlying storage (local, the
+# host's root filesystem) than where the live disks actually live
+# (local-thin-multi). This is recreate-AND-restore-data protection for
+# accidental guest deletion or LVM-thin pool corruption -- it is NOT
+# off-host/off-site protection; a whole-host failure still loses both
+# copies. See infra/proxmox/README.md for that tradeoff stated plainly.
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+# --prune-backups keep-last=7 makes each run self-pruning: it deletes
+# older archives for the same guest past the 7 most recent, so this
+# never grows unbounded -- "self-updating," not "self-accumulating."
+ExecStart=/usr/bin/vzdump 104 106 --storage local --mode snapshot --compress zstd --prune-backups keep-last=7

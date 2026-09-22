@@ -1,0 +1,13 @@
+[Unit]
+Description=Daily schedule for pve-athenaeum-backup.service
+
+[Timer]
+OnCalendar=*-*-* 03:30:00
+# Catches up on a missed run if the host was off at 03:30 (e.g. right
+# after an accidental power-off, or if the host was mid-reboot) -- runs
+# once shortly after boot instead of silently waiting a full day.
+Persistent=true
+RandomizedDelaySec=10m
+
+[Install]
+WantedBy=timers.target
