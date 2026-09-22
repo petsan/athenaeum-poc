@@ -121,6 +121,16 @@ These aren't bugs in the sense of "code that was wrong" — they're incorrect as
 
 ---
 
+## Deployment host networking gotchas (Proxmox-specific, not code bugs)
+
+### 18. Docker's `FORWARD`-chain DROP policy silently breaks Proxmox bridge networking for every guest, not just Docker's own
+**What happened:** After extensive setup (static IP, MAC pinning, disabling Proxmox's per-guest and cluster-wide firewalls), the test LXC (VMID 104) still couldn't reach the LAN gateway, the internet, or be reached by another machine on the same subnet — while the Proxmox host itself could always reach the container fine, and ARP resolution for the container always succeeded.
+**Root cause:** The Proxmox host also runs Docker (for something unrelated to this project). Docker manages the kernel's `iptables`/`nftables` `FORWARD` chain directly, setting its default policy to `DROP` and only explicitly allowing traffic tied to its own managed bridges/interfaces. Because `bridge-nf-call-iptables` is active, this also catches ordinary L2-bridged IP traffic through `vmbr0` — any guest talking to the gateway, or another LAN machine talking to a guest — even though none of that traffic has anything to do with Docker. ARP isn't IP traffic, so it bypasses this chain entirely, which is exactly why ARP kept succeeding while ICMP/TCP silently failed. Host↔guest traffic was also unaffected, because that's the host's own INPUT/OUTPUT chain, not FORWARD — which made "the host can always reach the container" a misleading signal that things were mostly fine.
+**Fix:** One rule in the chain Docker guarantees it will never overwrite: `iptables -I DOCKER-USER -i vmbr0 -o vmbr0 -j ACCEPT`. Not yet confirmed persisted across a host reboot (no `iptables-persistent`/`netfilter-persistent` confirmed installed) — re-check after any reboot of `proxmox01`.
+**Lesson:** When a Linux host runs both a hypervisor (Proxmox) and a container engine (Docker) that each manage their own `iptables`/`nftables` rules, symptoms that look like a Proxmox/bridge/ARP/DHCP problem can actually be the *other* system's firewall rules, since both share the same kernel netfilter tables. The specific tell worth remembering: **ARP resolves fine but ICMP/TCP across the bridge doesn't** points at an IP-layer filter (something in `iptables -L FORWARD`), not an L2/bridge/ARP-cache problem — check that first, before spending time on Proxmox ACLs, per-guest/cluster firewall settings, MAC/ARP staleness, or physical-LAN theories (switch port-security, AP isolation, VLANs). All four were chased first here and were dead ends.
+
+---
+
 ## Recurring process mistake (not a code bug — a workflow one)
 
 ### 16. Duplicate "final" print statement when appending new steps to a narrated demo script
@@ -135,6 +145,7 @@ These aren't bugs in the sense of "code that was wrong" — they're incorrect as
 
 Before writing similar code again in this project:
 - **Any new sandboxing/namespace work:** re-read entries 5–7 and 17. Test enforcement directly, isolate failures to minimal reproductions, re-verify timing-sensitive fixes multiple times before trusting them, and never assume a mechanism verified on one environment (cgroups version, kernel, container runtime) carries over to the next deployment target unvalidated.
+- **Any Proxmox guest networking problem (unreachable gateway, unreachable from another LAN machine, DHCP not working):** re-read entry 18 first. Check `iptables -L FORWARD -n -v` before Proxmox ACLs, firewall settings, or physical-LAN theories — the ARP-works-but-ICMP-doesn't fingerprint means check the host's Docker/iptables rules first.
 - **Any new content-addressed or checkpoint code:** re-read entries 8–9. Be explicit about what's hashed vs. stored vs. derived, and make sure "verified" checks everything a caller would assume it checks.
 - **Any new API/serialization boundary:** re-read entry 10. Check the actual runtime type after a round-trip.
 - **Any new test:** re-read entries 11–14 before assuming a failing test means the implementation is wrong.
