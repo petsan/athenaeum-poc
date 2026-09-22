@@ -402,6 +402,17 @@ scale, not just at the infrastructure level.
 
 ---
 
+## 2026-09-23 — Model-lab manifest verified against live Hugging Face listings
+
+Per explicit request to verify rather than trust the manifest as first written. Queried `huggingface.co/api/models/<repo>` for real for all six candidates (file listing + license tag), not re-derived from memory. Two real corrections came out of it:
+
+1. **Qwen2.5-3B-Instruct is not apache-2.0.** It's under the "Qwen Research License" (`license_name: qwen-research`, non-commercial) -- confirmed via the model's own `cardData`. This directly fails the "legally fully modifiable" criterion the whole model-lab exercise exists to satisfy, so it would have been a real, consequential mistake to leave it in unverified. Every other Qwen2.5 size checked (0.5B/1.5B/7B) is genuinely apache-2.0, so this isn't "Qwen is restrictive," it's "license can vary *by size within one family*" -- worth remembering as a general lesson, not just fixed for this one model. Swapped to Qwen2.5-1.5B-Instruct.
+2. **Two smaller misses**, also only caught by querying the real API: `ibm-granite/granite-3.1-2b-instruct-GGUF` returned 401 (gated/auth-required), so switched to `bartowski/granite-3.1-2b-instruct-GGUF` (public, verified apache-2.0); OLMo's actual GGUF filename is `OLMo-2-0425-1B-Instruct-Q4_K_M.gguf`, not the lowercase `olmo-2-...` guessed originally.
+
+Nothing else in the original manifest needed changing -- Qwen2.5-Coder-1.5B, Phi-3.5-mini, and Mistral-7B-v0.3's repos/filenames/licenses were all correct as first written. Updated `manifest.tsv` and `model-lab/README.md` directly with the verified values, rather than leaving the correction only in this log.
+
+---
+
 *See `docs/progress.md` §26 for the checklist this log's entries track
 against, and `docs/infra-topology.md` for the infrastructure-side design
 decisions made in the same planning conversation.*

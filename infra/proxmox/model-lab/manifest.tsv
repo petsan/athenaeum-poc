@@ -4,22 +4,24 @@
 #
 # Columns (tab-separated): label vmid hostname ip mac cores mem_mb disk_gb hf_repo hf_file
 #
-# IMPORTANT: hf_repo/hf_file are my best-effort guesses at current GGUF
-# quantization repos on Hugging Face, not verified against a live listing
-# (this file is generated from training knowledge, not a fetch). Check
-# each repo actually has the named file before running
-# download-model.sh against it -- it fails loudly (404) rather than
-# silently, but check first anyway rather than relying on that.
-# All licenses below were Apache 2.0 (OLMo, Qwen, Granite, Mistral) or
-# MIT (Phi) at last verification -- re-check the model card, not just
-# this comment, before treating that as still true.
+# VERIFIED against live Hugging Face API listings 2026-09-23 (each repo's
+# file list + license tag actually fetched, not assumed from training
+# knowledge -- see docs/brain-session-log.md for the two real corrections
+# this surfaced). Re-verify before reuse if this file is much older than
+# that date; quant repos and license tags do change.
+#
+# Licenses as verified: apache-2.0 for OLMo/Qwen/Granite/Mistral, mit for
+# Phi. One real catch during verification: Qwen2.5-3B-Instruct is NOT
+# apache-2.0 -- it's under the restrictive "Qwen Research License"
+# (non-commercial). Swapped for Qwen2.5-1.5B-Instruct, confirmed
+# apache-2.0, instead of silently keeping a mislicensed candidate.
 #
 # MACs are a new, distinct block (AA:CC:1x) from the existing guests'
 # AA:BB:xx MACs -- deliberately non-overlapping.
 
-olmo2-1b	110	athenaeum-modeltest-olmo2-1b	192.168.0.160	BC:24:11:AA:CC:10	2	4096	8	allenai/OLMo-2-0425-1B-Instruct-GGUF	olmo-2-0425-1b-instruct-q4_k_m.gguf
+olmo2-1b	110	athenaeum-modeltest-olmo2-1b	192.168.0.160	BC:24:11:AA:CC:10	2	4096	8	allenai/OLMo-2-0425-1B-Instruct-GGUF	OLMo-2-0425-1B-Instruct-Q4_K_M.gguf
 qwen-coder-1.5b	111	athenaeum-modeltest-qwen-coder-1_5b	192.168.0.161	BC:24:11:AA:CC:11	2	4096	8	Qwen/Qwen2.5-Coder-1.5B-Instruct-GGUF	qwen2.5-coder-1.5b-instruct-q4_k_m.gguf
-qwen2.5-3b	112	athenaeum-modeltest-qwen2_5-3b	192.168.0.162	BC:24:11:AA:CC:12	2	6144	8	Qwen/Qwen2.5-3B-Instruct-GGUF	qwen2.5-3b-instruct-q4_k_m.gguf
+qwen2.5-1.5b	112	athenaeum-modeltest-qwen2_5-1_5b	192.168.0.162	BC:24:11:AA:CC:12	2	4096	8	Qwen/Qwen2.5-1.5B-Instruct-GGUF	qwen2.5-1.5b-instruct-q4_k_m.gguf
 phi-3.5-mini	113	athenaeum-modeltest-phi-3_5-mini	192.168.0.163	BC:24:11:AA:CC:13	2	6144	8	bartowski/Phi-3.5-mini-instruct-GGUF	Phi-3.5-mini-instruct-Q4_K_M.gguf
-granite-2b	114	athenaeum-modeltest-granite-2b	192.168.0.164	BC:24:11:AA:CC:14	2	4096	8	ibm-granite/granite-3.1-2b-instruct-GGUF	granite-3.1-2b-instruct-Q4_K_M.gguf
+granite-2b	114	athenaeum-modeltest-granite-2b	192.168.0.164	BC:24:11:AA:CC:14	2	4096	8	bartowski/granite-3.1-2b-instruct-GGUF	granite-3.1-2b-instruct-Q4_K_M.gguf
 mistral-7b	115	athenaeum-modeltest-mistral-7b	192.168.0.165	BC:24:11:AA:CC:15	4	10240	12	bartowski/Mistral-7B-Instruct-v0.3-GGUF	Mistral-7B-Instruct-v0.3-Q4_K_M.gguf

@@ -32,14 +32,25 @@ remotely the constraint; vCPU is).
 
 ## The six candidates
 
-See `manifest.tsv` for the full VMID/IP/MAC/sizing table. All are
-Apache 2.0 (OLMo, Qwen, Granite, Mistral) or MIT (Phi) licensed --
-verify each model card still says that before downloading, license terms
-aren't something to trust from memory. `manifest.tsv`'s `hf_repo`/`hf_file`
-columns are a best-effort guess at current GGUF quantization repos, not
-independently verified against a live Hugging Face listing -- if a
-download 404s, find the current repo/file on huggingface.co and edit the
-manifest, don't assume the model itself is unavailable.
+See `manifest.tsv` for the full VMID/IP/MAC/sizing table. **Verified
+against live Hugging Face API listings on 2026-09-23** (not just recalled
+from training knowledge) -- both the exact GGUF filenames and each
+repo's license tag were actually fetched and checked. All six are
+apache-2.0 (OLMo, Qwen, Granite, Mistral) or mit (Phi).
+
+**One real catch this verification surfaced, worth remembering:**
+Qwen2.5-3B-Instruct -- the original plan -- is NOT apache-2.0. It's under
+the restrictive "Qwen Research License" (non-commercial), unlike the
+0.5B/1.5B/7B Qwen2.5 sizes, which are. Swapped for Qwen2.5-1.5B-Instruct
+(confirmed apache-2.0) rather than silently keeping a candidate that
+fails the "legally fully modifiable" criterion. Lesson: a model family
+sharing one license across all its sizes is an assumption, not a fact --
+check every size actually intended for use, not just the family's
+flagship. A second, smaller correction: the official `ibm-granite`
+GGUF repo required auth (401) and OLMo's GGUF filename casing differed
+from the first guess (`OLMo-2-...` not `olmo-2-...`) -- both caught by
+querying the API rather than trusting the first plausible-looking repo
+name.
 
 ## Running it
 
