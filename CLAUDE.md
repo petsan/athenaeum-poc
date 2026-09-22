@@ -77,20 +77,36 @@ These aren't aspirational — every one of them is here because violating it (or
   invariant enforced in `config.py` itself (`disallow_paid_apis`), not
   just a policy.
 - Before marking any task "done," run the actual test suite
-  (`pytest -q`, currently 113/113) and update `docs/progress.md` — don't
+  (`pytest -q`, currently 202/202) and update `docs/progress.md` — don't
   let the checkpoint file go stale.
 
 ## Current status (see `docs/progress.md` for full detail)
 
-- Body: storage/checkpoint/scheduler/concurrency/ingestion/model-serving-
-  router/sandbox all implemented and tested against everything this
+- Body: storage/checkpoint/scheduler/concurrency/ingestion (now including
+  a real `fetch_url()` network fetch, not just `FixtureSource`)/model-
+  serving-router/sandbox/distributed worker dispatch (`distributed_worker.py`,
+  real cross-process, network-based, proven against an actual killed
+  worker process) all implemented and tested against everything this
   sandboxed dev environment could validate.
-- Brain: deliberation loop, six-Master-Agent structure (three implemented
-  as deterministic toy agents — Mathematics, Logic, Engineering — three
-  not yet built: Physics, Philosophy, Theology), Reputability Engine,
-  knowledge consolidation, domain fidelity monitoring all implemented.
-  No real LLM backend yet — `model_serving.py`'s router/eviction/fallback
-  logic is tested against a `MockBackend` only.
+- Brain: deliberation loop, all **six** Master Agents now implemented as
+  deterministic toy agents (Mathematics, Logic, Engineering, Physics,
+  Philosophy, Theology — no domain left unbuilt), Reputability Engine,
+  Model Fitness tracking, knowledge consolidation, domain fidelity
+  monitoring, Output Types (Research/Forecast/Recommendation, §5.4), Human
+  Input Pipeline and governance (§11), Content Integrity enforcement
+  (§12, verified by construction), and Evaluation Infrastructure (§9b —
+  ground-truth benchmarks, a 6-case adversarial suite, calibration
+  tracking, baselines/ablations, non-compensatory integrity gates) all
+  implemented. Engineering's `verify_code()`/`verify_claim()` run real,
+  unmocked code in the Body's sandbox — the first Master Agent capability
+  that's genuinely real end-to-end, not a stand-in. No real LLM backend
+  yet — `model_serving.py`'s router/eviction/fallback logic is tested
+  against a `MockBackend` only; this remains the single biggest gap
+  separating every agent's current deterministic-toy behavior from real
+  reasoning. `docs/infra-topology.md` (brainbox XSmall/Medium/Large/
+  XLarge sizing convention, CPU-RAM-only pending GPU nodes) and
+  `docs/brain-session-log.md` (running decision log) added 2026-09-22 —
+  see `docs/progress.md` §§27–34 for the full session.
 - **Proxmox is live and access is set up** (see `deployment-playbook.md`,
   `infra/proxmox/`, and the project's own memory notes) — a scoped API
   token, a standing test LXC (VMID 104, `athenaeum-preflight`,
