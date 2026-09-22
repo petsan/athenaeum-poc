@@ -21,11 +21,32 @@ def test_model_backed_claim_returns_none_when_backend_unreachable():
                                model_name="nonexistent-model") is None
 
 
+def _stub_gpu_unavailable(monkeypatch):
+    """These three tests isolate ask_model's CPU-path retry logic by
+    monkeypatching LlamaCppBackend -- but ask_model now tries an elastic
+    GPU worker FIRST (Section 4.3), and if one happens to be online (as it
+    genuinely is when the Windows 3070 Ti box is running), it answers for
+    real and short-circuits the very CPU-path logic these tests exist to
+    exercise. Stubbing the GPU path to always report unavailable makes
+    these tests correct regardless of whether a real worker happens to be
+    up at the moment they run -- exactly the elasticity this module is
+    built around, now visible in test isolation too."""
+    import athenaeum_brain.model_backed_reasoning as mbr
+    from athenaeum_body.model_serving import BackendUnavailable
+
+    class AlwaysUnavailable:
+        def infer(self, spec, question):
+            raise BackendUnavailable("stubbed: no GPU worker for this test")
+
+    monkeypatch.setattr(mbr, "build_elastic_gpu_backend", lambda: AlwaysUnavailable())
+
+
 def test_ask_model_retries_on_empty_or_whitespace_completion(monkeypatch):
     """Real finding: OLMo 2's own sampling occasionally returns a
     near-empty completion (observed directly: a single space). Verified
     here deterministically by forcing the first two attempts empty."""
     import athenaeum_brain.model_backed_reasoning as mbr
+    _stub_gpu_unavailable(monkeypatch)
     responses = iter([" ", "", "a real answer"])
 
     class FakeBackend:
@@ -48,6 +69,7 @@ def test_ask_model_retries_on_timeout_not_just_empty_completion(monkeypatch):
     attempt raises BackendUnavailable, the second succeeds."""
     import athenaeum_brain.model_backed_reasoning as mbr
     from athenaeum_body.model_serving import BackendUnavailable
+    _stub_gpu_unavailable(monkeypatch)
 
     attempts = iter([BackendUnavailable("simulated timeout"), "a real answer"])
 
@@ -69,6 +91,7 @@ def test_ask_model_retries_on_timeout_not_just_empty_completion(monkeypatch):
 def test_ask_model_returns_none_after_exhausting_attempts_on_repeated_timeout(monkeypatch):
     import athenaeum_brain.model_backed_reasoning as mbr
     from athenaeum_body.model_serving import BackendUnavailable
+    _stub_gpu_unavailable(monkeypatch)
 
     class AlwaysTimesOut:
         def __init__(self, *a, **kw):

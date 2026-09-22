@@ -16,12 +16,21 @@ predate this convention and aren't retrofitted into it.
 
 ## 1. Constraint this whole document works inside
 
-- **This host has no GPU capacity online yet.** Everything below is CPU/system-RAM
-  only. Any model backend a brainbox runs is a CPU-quantized `llama.cpp` backend
-  (per `body-design.md` §4.5's already-designed CPU-fallback path), not a
-  vLLM/GPU path. This is a real capability ceiling, not a temporary inconvenience
-  to design around — when GPU nodes do come online, this table gets a genuine GPU
-  tier added, not an XLarge tier stretched to pretend to be one.
+- **This *Proxmox host* has no GPU capacity, still.** Everything in the tier
+  table below remains CPU/system-RAM only — no change there. **Updated
+  2026-09-23:** a real GPU path now exists, but deliberately *outside* this
+  host entirely — `infra/elastic-workers/` implements body-design.md §4.3's
+  "opportunistic compute... never a dependency" as a pool of
+  independently-owned machines (starting with one Windows desktop's RTX
+  3070 Ti) that register themselves in `elastic_workers.yaml` and can go
+  online/offline at the operator's will. `elastic_workers.py`'s
+  `ElasticGPUBackend` health-checks every worker fresh before every call,
+  and `ModelServingLayer.request()` falls back to the CPU guests
+  transparently the instant one goes dark — proven, not just designed
+  (see `docs/brain-session-log.md`). This tier table still governs
+  *Proxmox-hosted* guests specifically; the elastic pool is a genuinely
+  separate topology, not a stretched XLarge tier pretending to be a GPU
+  slot.
 - **Hard cap raised 2026-09-23 (explicit user decision, was 50%):** at most
   80% of the host's real CPU/RAM for anything created here (`CLAUDE.md`),
   confirmed specs: 2× Xeon E5-2690 v2 = 40 threads, ~503GB RAM →
@@ -118,9 +127,13 @@ speculative infrastructure ahead of a real need for it.
 
 ## 5. Explicitly out of scope here
 
-- A GPU tier — not designed until GPU nodes are actually online; adding one
-  speculatively now risks the same "40 cores / 512GB / 10 GPUs" placeholder-vs-
-  reality mismatch `CLAUDE.md` already warns about elsewhere.
+- ~~A GPU tier — not designed until GPU nodes are actually online...~~
+  **Partially done, 2026-09-23**: a real, working GPU path exists via
+  `infra/elastic-workers/`, but deliberately as an *elastic pool outside
+  this Proxmox host*, not a Proxmox-hosted GPU tier — see §1. A genuine
+  Proxmox-hosted GPU tier (a card physically in `proxmox01` with real
+  PCIe passthrough) is still undesigned and still blocked on that
+  hardware actually existing in that chassis.
 - Auto-scaling / orchestration logic (deciding *when* to spin a tier up or
   down) — this document defines the shapes of the boxes, not the policy for
   provisioning them; that's a separate decision for whenever real load

@@ -1,0 +1,20 @@
+# Elastic, opportunistic worker pool (body-design.md Section 4.3/6.1).
+#
+# Each entry is a machine that MAY be online right now -- add it here
+# once, then bring it up or down at will. elastic_workers.py health-checks
+# every worker fresh before every real call; this file being present, or
+# a worker being listed, is never treated as proof it's actually up.
+#
+# name: short label used in logs/errors.
+# endpoint: http://host:port where its llama-server (or compatible
+#   OpenAI/llama.cpp-style /health + /completion API) listens.
+# models: which model name(s) (matching model_lab_registry.py's naming
+#   convention) this worker can serve. Multiple workers may list the same
+#   model name -- the first one that answers a live health check wins,
+#   giving basic failover/spread if more than one machine happens to be
+#   online for the same model.
+
+workers:
+  - name: petsa-desktop-3070ti
+    endpoint: http://192.168.0.85:8090
+    models: [olmo3-7b]

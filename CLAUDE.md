@@ -80,7 +80,7 @@ These aren't aspirational — every one of them is here because violating it (or
   invariant enforced in `config.py` itself (`disallow_paid_apis`), not
   just a policy.
 - Before marking any task "done," run the actual test suite
-  (`pytest -q`, currently 240/240) and update `docs/progress.md` — don't
+  (`pytest -q`, currently 248/248) and update `docs/progress.md` — don't
   let the checkpoint file go stale.
 
 ## Current status (see `docs/progress.md` for full detail)
@@ -122,6 +122,16 @@ These aren't aspirational — every one of them is here because violating it (or
   XLarge sizing convention, CPU-RAM-only pending GPU nodes) and
   `docs/brain-session-log.md` (running decision log) added 2026-09-22 —
   see `docs/progress.md` §§27–34 for the full session.
+- **A real, elastic GPU worker pool now exists outside the Proxmox host**
+  (`src/athenaeum_body/elastic_workers.py`, `elastic_workers.yaml`,
+  `infra/elastic-workers/windows-gpu-worker/`, 2026-09-23) — independently
+  owned machines (starting with one Windows desktop's RTX 3070 Ti running
+  OLMo 3 7B at ~84 tok/s) that can be brought online/offline at will;
+  health is checked live on every call, never cached, and both
+  `ModelServingLayer.request()` and `model_backed_reasoning.ask_model()`
+  fall back to the CPU model-lab guests transparently the instant a
+  worker goes dark — see `docs/progress.md` §39 and
+  `docs/brain-session-log.md` for the design reasoning.
 - **Proxmox is live and access is set up** (see `deployment-playbook.md`,
   `infra/proxmox/`, and the project's own memory notes) — a scoped API
   token, a standing test LXC (VMID 104, `athenaeum-preflight`,

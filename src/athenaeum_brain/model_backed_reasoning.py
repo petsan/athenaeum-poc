@@ -25,6 +25,7 @@ human_input.py already uses for justified-but-unverified testimony.
 from __future__ import annotations
 from athenaeum_body.model_lab_registry import MODEL_LAB_ENDPOINTS
 from athenaeum_body.model_serving import LlamaCppBackend, ModelSpec, BackendUnavailable
+from athenaeum_body.elastic_workers import build_elastic_gpu_backend
 from .claims import Claim
 
 DEFAULT_MODEL = "olmo3-7b"  # was olmo2-1b until 2026-09-23 -- OLMo 2 1B
@@ -62,22 +63,38 @@ def ask_model(question: str, model_name: str = DEFAULT_MODEL, n_predict: int = 9
     if model_name not in MODEL_LAB_ENDPOINTS:
         return None
     framed_question = f"Q: {question}\nA:"
-    backend = LlamaCppBackend(endpoints={model_name: MODEL_LAB_ENDPOINTS[model_name]},
-                               n_predict=n_predict, timeout_seconds=timeout_seconds)
     spec = ModelSpec(name=model_name, vram_gb=0)
+    cpu_backend = LlamaCppBackend(endpoints={model_name: MODEL_LAB_ENDPOINTS[model_name]},
+                                   n_predict=n_predict, timeout_seconds=timeout_seconds)
+    # Section 4.3/6.1: an opportunistic GPU worker (elastic_workers.py) is
+    # preferred when one is configured AND healthy for this model right
+    # now -- checked fresh on every attempt, never assumed from earlier in
+    # the process. Implemented directly here rather than via
+    # ModelServingLayer: that class's registry/CAS/LRU-eviction machinery
+    # exists for routing across MANY models sharing a VRAM budget, which
+    # this single-fixed-model utility function doesn't need -- constructing
+    # a throwaway ModelRegistry just to satisfy that API would be ceremony
+    # without benefit. The actual "never crash, fall back to CPU"
+    # discipline is the same either way.
+    gpu_backend = build_elastic_gpu_backend()
+
     for _ in range(max_attempts):
+        response = None
         try:
-            response = backend.infer(spec, framed_question)
+            response = gpu_backend.infer(spec, framed_question)
         except BackendUnavailable:
-            # Real bug caught running this under the full test suite's
-            # back-to-back load: this used to `return None` immediately
-            # on ANY timeout, never using the remaining retry attempts --
-            # only an empty-string response was retried. A transient
-            # timeout under load is exactly the kind of recoverable
-            # failure max_attempts exists for; falling through to the
-            # next loop iteration (instead of returning) is the actual
-            # fix, not just a bigger timeout.
-            continue
+            try:
+                response = cpu_backend.infer(spec, framed_question)
+            except BackendUnavailable:
+                # Real bug caught running this under the full test suite's
+                # back-to-back load: this used to `return None` immediately
+                # on ANY timeout, never using the remaining retry attempts
+                # -- only an empty-string response was retried. A
+                # transient timeout under load is exactly the kind of
+                # recoverable failure max_attempts exists for; falling
+                # through to the next loop iteration (instead of
+                # returning) is the actual fix, not just a bigger timeout.
+                continue
         if response and response.strip():
             return response
     return None

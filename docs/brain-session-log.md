@@ -536,6 +536,64 @@ fix just needs to be bigger.
 
 ---
 
+---
+
+## 2026-09-23 — Elastic GPU worker pool design choices
+
+**Q: "I don't want to make this Windows machine a permanent dependency,
+nor any specific machine... I want the scalability to be fully elastic" —
+what did that actually constrain in the implementation, beyond "add a GPU
+backend"?**
+
+Three concrete things, all load-bearing: (1) health has to be checked
+live on every call, never cached at process-start or on a fixed interval
+— a stale "worker is up" flag is exactly the kind of state that would
+make a machine going offline mid-session an actual crash risk rather than
+a graceful fallback; (2) the failure path has to be the same
+`BackendUnavailable` exception every other stateless-lease-holder
+component in this codebase already uses (`LlamaCppBackend`,
+`distributed_worker.py`), not a new error type, so `ModelServingLayer`
+and `ask_model()` could catch it with the same discipline they already
+had, rather than needing bespoke handling for "GPU worker specifically";
+(3) the worker manifest (`elastic_workers.yaml`) has to support more than
+one entry per model and more than one machine shape from day one, even
+though only one worker exists right now, because "multiple such machines
+with various configurations" was named explicitly as expected, not
+speculative.
+
+**Q: Why a hand-edited YAML manifest instead of push-based
+self-registration (the worker calls home when it starts)?**
+
+Because self-registration solves a problem this project doesn't have yet
+— discovering workers nobody told the system about — at the cost of a
+new network-facing write path (something has to authenticate an
+unsolicited "I exist" message) that a hand-edited file entirely avoids.
+One human-owned line in `elastic_workers.yaml` is simpler, more legible,
+and matches this project's own "don't build speculative infrastructure"
+principle (already applied to auto-scaling policy in
+`docs/infra-topology.md` §5). If a fleet of many transient workers ever
+makes hand-editing genuinely painful, that's the trigger to build
+registration — not before.
+
+**Q: The three broken unit tests (GPU worker answering for real instead
+of hitting the intended CPU-path mock) — was this a bug in
+`elastic_workers.py` itself?**
+
+No, and worth stating precisely why not: the module did exactly what it's
+designed to do — checked a real, currently-online worker, got a real
+answer, used it. The bug was in test isolation, not in production logic:
+three tests that intended to exercise `ask_model()`'s CPU-only retry
+behavior only ever monkeypatched `LlamaCppBackend`, silently assuming no
+GPU backend would answer first. That assumption held by accident for as
+long as no real worker existed; the moment one did (this session,
+deliberately), the assumption broke. Fixed by making the GPU path's
+unavailability explicit and deterministic in those three tests
+(`_stub_gpu_unavailable`), rather than by weakening `ask_model()`'s real
+GPU-first preference to make the tests pass more easily — the tests were
+wrong about what they were isolating, not the code.
+
+---
+
 *See `docs/progress.md` §26 for the checklist this log's entries track
 against, and `docs/infra-topology.md` for the infrastructure-side design
 decisions made in the same planning conversation.*

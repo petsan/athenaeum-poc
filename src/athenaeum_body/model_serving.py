@@ -172,11 +172,22 @@ class ModelServingLayer:
         self.registry.verify_weights_intact(model_name)  # 3.4 tamper check on every load
 
         if self.gpu_available:
-            if model_name not in self.gpu.loaded:
-                self._evict_lru_until_fits(spec.vram_gb)  # 4.5.3 LRU eviction
-                self.gpu.load(spec)
-            self._touch(model_name)
-            return {"response": self.gpu.infer(spec, prompt), "backend": "gpu", "model": model_name}
+            try:
+                if model_name not in self.gpu.loaded:
+                    self._evict_lru_until_fits(spec.vram_gb)  # 4.5.3 LRU eviction
+                    self.gpu.load(spec)
+                self._touch(model_name)
+                return {"response": self.gpu.infer(spec, prompt), "backend": "gpu", "model": model_name}
+            except BackendUnavailable:
+                # Section 6.1: opportunistic compute is "never a
+                # dependency" -- an elastic GPU worker (elastic_workers.py)
+                # can go offline at any moment (its owner closes the
+                # laptop, turns the machine off, whatever) and that is a
+                # ROUTINE event, not a failure this layer should propagate.
+                # Fall through to CPU exactly as if gpu_available had been
+                # False from the start; nothing above this call ever sees
+                # the exception.
+                pass
 
         # 4.5.2/4.5.3: GPU unavailable -> transparent CPU fallback, not an error
         if model_name not in self.cpu.loaded:
