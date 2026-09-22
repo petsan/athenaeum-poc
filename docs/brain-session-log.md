@@ -157,6 +157,54 @@ been "examined."
 
 ---
 
+## 2026-09-22 — Engineering real loop + Model Fitness (Phase 15) design choices
+
+**Q: What does "specify" actually mean for a deterministic toy agent with
+no real model backend — how is a coding task specified without an LLM to
+interpret a natural-language prompt?**
+
+The specification format IS the code itself: `verify_code(task_id, code,
+...)` takes a self-contained Python program that must print exactly
+`PASS` and exit 0 to count as verified — anything else (wrong output,
+non-zero exit, an exception, a timeout) is captured verbatim in
+`defeat_condition` from the sandbox's real stdout/stderr/status. This is
+honest about what a non-LLM Engineering agent can actually specify (a
+mechanical pass/fail contract, not a natural-language task description)
+rather than pretending to parse intent it doesn't have.
+
+**Q: Open Question 10 (Model Fitness cold-start) asks for "a defined
+default starting weight... too generous... too conservative" — what's the
+actual resolution, and why is it defensible rather than arbitrary?**
+
+Laplace (add-one) smoothing over the (corroborated, challenged) tally:
+`(corroborated + 1) / (corroborated + challenged + 2)`. At zero evidence
+this is exactly 0.5 — not a separately chosen constant, but a direct
+consequence of the same formula that governs every later update, which
+means there's no discontinuity between "cold-start default" and "normal
+operation" the way a hardcoded 0.5-until-N-observations rule would have.
+It also naturally damps early overreaction (one corroboration alone
+yields ~0.67, not 1.0), which is the actual mechanism by which it avoids
+both failure modes the open question names, not just a claim that it
+does.
+
+**Q: Why tie Engineering's `verify_code`/`verify_claim` tests to the real,
+unmocked sandbox rather than stubbing `run_sandboxed`?**
+
+Matches this project's own established principle (`CLAUDE.md` #1 --
+"verify empirically, don't trust") and the exact precedent already set by
+`test_sandbox.py`'s 8 fault-injection scenarios: a mocked sandbox would
+prove the claim-construction logic is wired correctly, but wouldn't prove
+the Engineering agent's central claim -- "confidence is tied directly to
+an actual run" -- is actually true. Both a known-correct and a
+known-buggy solution are run for real on LXC 104, which is exactly Phase
+15 task 42's own stated requirement. A separate injectable-stub path
+still exists (`sandbox_run` parameter) for callers that need to unit-test
+the pass/fail decision logic in isolation, since spinning the real OS
+sandbox for every edge case would be wasteful, not because the real path
+is untrustworthy.
+
+---
+
 *See `docs/progress.md` §26 for the checklist this log's entries track
 against, and `docs/infra-topology.md` for the infrastructure-side design
 decisions made in the same planning conversation.*

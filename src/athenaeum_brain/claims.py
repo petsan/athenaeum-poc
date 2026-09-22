@@ -31,6 +31,9 @@ class Claim:
     output_type_relevance: List[str] = None  # which of research|forecast|recommendation
                                      # (output_types.py) this claim bears on; None until an
                                      # agent/round sets it explicitly -- not yet mandatory
+    serving_model: str = None       # which local model (Body's registry) produced this
+                                     # claim, for Model Fitness tracking (Section 6.7) --
+                                     # None for a deterministic, non-model-backed claim
     claim_id: str = field(default_factory=next_claim_id)
 
     def to_dict(self) -> dict:

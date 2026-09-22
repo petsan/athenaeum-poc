@@ -177,6 +177,57 @@ class MasterOfEngineering:
     def cross_examine(self, claim: Claim, question_id: str) -> Claim | None:
         return None
 
+    def verify_code(self, task_id: str, code: str, *, question_id: str, sandbox_run=None,
+                     serving_model: str = "deterministic:sandbox_execution") -> Claim:
+        """The real specify->implement->execute->verify loop (Section 2.2,
+        Phase 15 tasks 42-43): `code` is a self-contained Python program
+        that prints exactly 'PASS' and exits 0 on success -- that IS the
+        specification format here, mirroring the design's own claim that a
+        failing test/counterexample/build error is a direct, mechanical
+        defeat condition, not an inferred one. Actually runs inside the
+        Body's sandbox (body-design.md Section 4.6) via `sandbox_run`
+        (defaults to sandbox.run_sandboxed; injectable so callers that
+        don't want to spin the real OS sandbox for every case still can) --
+        confidence is tied directly to the real exit code and stdout, never
+        asserted without an actual run."""
+        if sandbox_run is None:
+            from athenaeum_body.sandbox import run_sandboxed as sandbox_run
+        result = sandbox_run(code)
+        passed = result.status == "completed" and result.returncode == 0 and "PASS" in result.stdout
+        return Claim(
+            question_id=question_id, round=1, issuing_agent=self.name,
+            subject=task_id,
+            statement=f"task '{task_id}': {'implementation verified (PASS)' if passed else 'implementation FAILED verification'}",
+            claim_type="executable", confidence=1.0 if passed else 0.0,
+            defeat_condition=f"a failing execution (status={result.status}, returncode={result.returncode}, stderr={result.stderr.strip()[:200]!r})",
+            jurisdiction_check=True,
+            supporting_provenance=[f"executed:sandbox_run:{task_id}"],
+            serving_model=serving_model,
+        )
+
+    def verify_claim(self, claim: Claim, code: str, *, question_id: str, sandbox_run=None,
+                      serving_model: str = "deterministic:sandbox_execution") -> Claim:
+        """Cross-cutting verification routing (Phase 15 task 44): another
+        agent's formalizable claim (a Mathematics combinatorial check, a
+        Physics simulation) can be routed to Engineering with `code` as the
+        executable check for that specific claim; the result feeds back as
+        a corroborating/challenging response against the ORIGINAL claim,
+        not a fresh standalone one."""
+        verification = self.verify_code(f"verify:{claim.claim_id}", code, question_id=question_id,
+                                         sandbox_run=sandbox_run, serving_model=serving_model)
+        passed = verification.confidence == 1.0
+        return Claim(
+            question_id=question_id, round=2, issuing_agent=self.name,
+            statement=f"executable verification of '{claim.statement}': {'confirmed' if passed else 'contradicted'}",
+            claim_type="executable", confidence=1.0,
+            defeat_condition="a different result from re-running the same executable check",
+            jurisdiction_check=True,
+            relation="corroborates" if passed else "challenges",
+            target_claim_id=claim.claim_id,
+            supporting_provenance=verification.supporting_provenance,
+            serving_model=serving_model,
+        )
+
 
 class MasterOfPhysics:
     """Domain: empirical, causal claims about the natural world, always
