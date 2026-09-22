@@ -185,4 +185,12 @@ With that fixed: direct SSH to the container now works (`ssh -i ~/.ssh/athenaeum
 
 `execution_sandbox.enabled` stays `false`, unchanged — the CPU-time gap alone (mitigated by wall-clock kill) is enough reason on its own, independent of the fork-containment fix above.
 
-Twenty commits pending (docs + `sandbox.py` fix + test additions from this session not yet committed as of this writing).
+Twenty commits total.
+
+## 23. Deployment playbook, then validated by rebuilding VMID 104 clean
+
+Wrote `deployment-playbook.md` — everything from Section 22 distilled into a single mechanical procedure (one `.proxmox.env` config template, one SSH key) reusable for standing up scoped Proxmox access for *any* future project on this host, not just Athenaeum. `CLAUDE.md` was also stale relative to Sections 22–23 (still said sixteen bugs, 109/109 tests, `RLIMIT_CPU` as an open question) — synced.
+
+Immediately validated the playbook for real: destroyed VMID 104 and rebuilt it from scratch via the exact Section 6 procedure. One mistake surfaced and corrected in the process — `pct set 104 -unprivileged 0` on an already-created guest fails (`unable to modify read-only option`), even though that exact constraint was already written into the playbook minutes earlier; the correct sequence is destroy + `pct create ... -unprivileged 0 ...` from scratch. Also newly documented: a rebuilt guest gets fresh SSH host keys even reusing the same IP, which trips the client's "host identification changed" warning — expected, not an incident, clear with `ssh-keygen -R`. Post-rebuild: SSH verified working, cgroups v2 `pids` controller present, filesystem genuinely clean. Both new findings folded into `deployment-playbook.md` itself, at the point in the procedure where they'd actually be hit.
+
+Twenty-two commits total.

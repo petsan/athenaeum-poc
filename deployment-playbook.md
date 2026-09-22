@@ -204,6 +204,10 @@ ssh -i ~/.ssh/<project-name>_poc -o StrictHostKeyChecking=accept-new root@<STATI
 ```
 If this fails after Section 7's fix is applied, check basic reachability first (`ping <STATIC_IP>` from wherever you're SSHing from) before assuming it's SSH-specific — most failures at this stage turn out to be Section 6 or 7, not SSH configuration itself.
 
+**Rebuilding an existing guest (destroy + recreate, e.g. to get back to a clean filesystem):** a fresh guest generates fresh SSH host keys even when it reuses the same IP/MAC, so the client-side SSH client will refuse to connect with a "REMOTE HOST IDENTIFICATION HAS CHANGED" warning. This is expected, not an actual MITM, *provided you just destroyed and recreated that guest yourself* — confirm that before clearing it. Clear the stale entry before retrying: `ssh-keygen -R <STATIC_IP> -f ~/.ssh/known_hosts`.
+
+Also: **`unprivileged` cannot be changed with `pct set` after creation — it errors `unable to modify read-only option: 'unprivileged'`.** To change it, the guest must be destroyed and recreated with the correct value passed to `pct create` from the start (`pct stop <VMID> && pct destroy <VMID>`, then re-run the Section 6 `pct create` with the flag you actually want). Don't try to "fix up" an existing guest's privilege mode in place — this was gotten wrong once even with this exact constraint already documented above, worth a second explicit callout here at the point where the mistake actually happens.
+
 ---
 
 ## 9. Verification checklist before calling the environment "ready"
