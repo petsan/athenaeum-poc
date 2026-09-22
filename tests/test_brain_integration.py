@@ -61,4 +61,6 @@ def test_jurisdictional_conflict_survives_body_engine_and_resume(tmp_path):
 
     answer = log2.read_latest()["shared_state"]["answer"]
     assert len(answer["plural_answers"]) == 1
-    assert len(answer["committed"]) == 2
+    # Mathematics + Engineering's conflicting conclusions, plus Philosophy's
+    # standalone is-ought claim on this normative-phrased question
+    assert len(answer["committed"]) == 3

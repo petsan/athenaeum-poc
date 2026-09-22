@@ -5,9 +5,15 @@ commits them.
 """
 from __future__ import annotations
 from .claims import Claim
-from .agents import MasterOfMathematics, MasterOfLogic, MasterOfEngineering
+from .agents import (
+    MasterOfMathematics, MasterOfLogic, MasterOfEngineering,
+    MasterOfPhysics, MasterOfPhilosophy, MasterOfTheology,
+)
 
-ALL_AGENTS = [MasterOfMathematics(), MasterOfLogic(), MasterOfEngineering()]
+ALL_AGENTS = [
+    MasterOfMathematics(), MasterOfLogic(), MasterOfEngineering(),
+    MasterOfPhysics(), MasterOfPhilosophy(), MasterOfTheology(),
+]
 
 
 def framing_round(question: str, question_id: str) -> dict:

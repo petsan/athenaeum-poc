@@ -34,8 +34,12 @@ def test_jurisdictional_conflict_produces_plural_answer_not_forced_consensus():
     statements = {c["statement"] for c in pa["conclusions"]}
     assert any("rounds to 3" in s for s in statements)
     assert any("rounds to 2" in s for s in statements)
-    # both conclusions are legitimately committed -- neither silently dropped
-    assert len(result["committed"]) == 2
+    # both conclusions are legitimately committed -- neither silently dropped,
+    # plus Philosophy's standalone is-ought claim on this normative-phrased
+    # question ("how SHOULD we round..."), a real, separate concern from the
+    # Mathematics/Engineering numeric conflict this test otherwise targets
+    assert len(result["committed"]) == 3
+    assert any(c.issuing_agent == "Philosophy" for c in result["committed"])
     assert result["dissent"] == []
 
 def test_non_conflicting_question_produces_no_plural_answer():

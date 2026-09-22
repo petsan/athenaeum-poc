@@ -176,3 +176,170 @@ class MasterOfEngineering:
 
     def cross_examine(self, claim: Claim, question_id: str) -> Claim | None:
         return None
+
+
+class MasterOfPhysics:
+    """Domain: empirical, causal claims about the natural world, always
+    paired with a stated defeat condition (Section 2.2). Here: real
+    kinematics -- free-fall time from a stated drop height, computed via
+    d = (1/2) g t^2, not asserted. Cross-examines by independently
+    re-deriving another claim's stated fall time and challenging on
+    disagreement, the same re-derivation pattern Mathematics uses."""
+    name = "Physics"
+    domain_keywords = ("fall", "falling", "drop", "gravity", "velocity", "acceleration", "force")
+    _G = 9.8  # m/s^2, standard gravity approximation
+
+    def in_jurisdiction(self, question: str) -> bool:
+        return any(k in question.lower() for k in self.domain_keywords)
+
+    def explore(self, question: str, question_id: str) -> list[Claim]:
+        if not any(k in question.lower() for k in ("fall", "falling", "drop")):
+            return []
+        import re
+        claims = []
+        for token in question.replace("?", "").split():
+            m = re.match(r"^(\d+(?:\.\d+)?)m?$", token)
+            if not m:
+                continue
+            h = float(m.group(1))
+            if h <= 0:
+                continue
+            t = (2 * h / self._G) ** 0.5
+            claims.append(Claim(
+                question_id=question_id, round=1, issuing_agent=self.name,
+                subject=m.group(1),
+                statement=f"an object falling from {m.group(1)}m takes approximately {t:.2f}s to hit the ground (v0=0, g={self._G} m/s^2)",
+                claim_type="empirical", confidence=0.95,
+                defeat_condition=f"a differing result under d = 0.5 * g * t^2 with g={self._G} m/s^2, or a measured fall time that disagrees beyond air-resistance-scale tolerance",
+                jurisdiction_check=True,
+                supporting_provenance=["computed:kinematics_free_fall"],
+            ))
+        return claims
+
+    def cross_examine(self, claim: Claim, question_id: str) -> Claim | None:
+        if claim.issuing_agent == self.name or claim.claim_type != "empirical":
+            return None
+        import re
+        m = re.match(r"an object falling from ([\d.]+)m takes approximately ([\d.]+)s", claim.statement)
+        if not m:
+            return None
+        h, stated_t = float(m.group(1)), float(m.group(2))
+        actual_t = (2 * h / self._G) ** 0.5
+        agrees = abs(actual_t - stated_t) < 0.05
+        return Claim(
+            question_id=question_id, round=2, issuing_agent=self.name,
+            statement=f"independent re-derivation of '{claim.statement}': {'confirmed' if agrees else 'contradicted'} (recomputed {actual_t:.2f}s)",
+            claim_type="empirical", confidence=0.95,
+            defeat_condition=f"a different result under d = 0.5 * g * t^2 with g={self._G} m/s^2",
+            jurisdiction_check=True,
+            relation="corroborates" if agrees else "challenges",
+            target_claim_id=claim.claim_id,
+            supporting_provenance=["computed:kinematics_free_fall"],
+        )
+
+
+class MasterOfPhilosophy:
+    """Domain: epistemology, ethics, metaphysics; question-framing and
+    assumption-surfacing (Section 2.2). Never asserts a first-order
+    empirical/formal claim itself -- like Logic, its authority here is
+    about the SHAPE of a claim or question, not its content. Concretely:
+    (a) on a normative question, names the is-ought gap as a hidden
+    assumption rather than answering the substantive question; (b) on
+    cross-examination, flags any OTHER agent's claim that smuggles a
+    normative conclusion (should/ought/must) into a claim typed
+    'empirical' -- exactly the category-conflation error Section 2.2
+    calls out by name."""
+    name = "Philosophy"
+    domain_keywords = ("should", "ought", "must", "good", "right", "wrong", "value")
+    _normative_words = ("should", "ought", "must")
+
+    def in_jurisdiction(self, question: str) -> bool:
+        return any(k in question.lower() for k in self.domain_keywords)
+
+    def explore(self, question: str, question_id: str) -> list[Claim]:
+        q = question.lower()
+        if not any(w in q for w in self._normative_words):
+            return []
+        return [Claim(
+            question_id=question_id, round=1, issuing_agent=self.name,
+            statement=(
+                "this question asks for a normative ('ought') conclusion; deriving one validly "
+                "requires at least one explicit normative premise (the is-ought gap), which the "
+                "question as framed does not supply"
+            ),
+            claim_type="normative", confidence=0.9,
+            defeat_condition="an explicit normative premise is supplied in the question or its framing",
+            jurisdiction_check=True,
+            supporting_provenance=["reasoning:is-ought_gap"],
+        )]
+
+    def cross_examine(self, claim: Claim, question_id: str) -> Claim | None:
+        if claim.issuing_agent == self.name or claim.claim_type != "empirical":
+            return None
+        stmt = claim.statement.lower()
+        if not any(w in stmt for w in self._normative_words):
+            return None
+        return Claim(
+            question_id=question_id, round=2, issuing_agent=self.name,
+            statement=f"claim '{claim.statement}' is typed empirical but asserts a normative conclusion -- category error (is-ought conflation)",
+            claim_type="procedural", confidence=0.9,
+            defeat_condition="the claim is retyped normative, or the normative wording is shown to be non-prescriptive in context",
+            jurisdiction_check=True, relation="challenges",
+            target_claim_id=claim.claim_id,
+            supporting_provenance=["reasoning:is-ought_gap"],
+        )
+
+
+class MasterOfTheology:
+    """Domain: the history, structure, and internal logic of religious/
+    metaphysical traditions, argued from within each tradition's own
+    premises, never with empirical-grade confidence (Section 2.2). Here:
+    a small, real lookup of named traditions' documented positions, always
+    emitted as claim_type 'traditional' with confidence capped below
+    empirical certainty. Cross-examination enforces the discipline
+    mechanically: any claim typed 'traditional' but asserted at
+    near-empirical confidence is flagged, jointly implementing what
+    Section 6.4 assigns to Logic/Philosophy/Theology together."""
+    name = "Theology"
+    domain_keywords = ("tradition", "doctrine", "scripture", "faith", "religion")
+    _TRADITIONS = {
+        "stoicism": "the Stoics hold that virtue is the only true good, and that external things are indifferent to a life well-lived",
+        "buddhism": "Buddhism's Four Noble Truths hold that suffering arises from craving/attachment, and that its cessation is attainable",
+        "epicureanism": "the Epicureans hold that the good life consists in ataraxia (freedom from disturbance), attained through modest, deliberate pleasure",
+    }
+    _TRADITIONAL_CONFIDENCE_CAP = 0.75
+
+    def in_jurisdiction(self, question: str) -> bool:
+        q = question.lower()
+        return any(k in q for k in self.domain_keywords) or any(t in q for t in self._TRADITIONS)
+
+    def explore(self, question: str, question_id: str) -> list[Claim]:
+        q = question.lower()
+        claims = []
+        for tradition, position in self._TRADITIONS.items():
+            if tradition in q:
+                claims.append(Claim(
+                    question_id=question_id, round=1, issuing_agent=self.name,
+                    subject=tradition,
+                    statement=f"according to {tradition}: {position}",
+                    claim_type="traditional", confidence=self._TRADITIONAL_CONFIDENCE_CAP,
+                    defeat_condition=f"a citation from {tradition}'s primary sources or standard critical commentary showing this misrepresents its actual position",
+                    jurisdiction_check=True,
+                    supporting_provenance=[f"corpus:{tradition}_primary_sources"],
+                ))
+        return claims
+
+    def cross_examine(self, claim: Claim, question_id: str) -> Claim | None:
+        if claim.issuing_agent == self.name or claim.claim_type != "traditional":
+            return None
+        if claim.confidence < self._TRADITIONAL_CONFIDENCE_CAP + 0.2:
+            return None
+        return Claim(
+            question_id=question_id, round=2, issuing_agent=self.name,
+            statement=f"claim '{claim.statement}' is typed traditional but asserted at confidence {claim.confidence}, which carries empirical-grade certainty a faith-premised claim must not claim (Section 6.4)",
+            claim_type="procedural", confidence=0.9,
+            defeat_condition="the claim's confidence is lowered to reflect its premise-dependent status",
+            jurisdiction_check=True, relation="challenges",
+            target_claim_id=claim.claim_id,
+            supporting_provenance=["policy:traditional_confidence_discipline"],
+        )
