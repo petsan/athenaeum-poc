@@ -364,3 +364,13 @@ accordingly rather than assuming the limitation is universal. Exit code
 0 means every scenario passed as specified; exit 1 means read the
 summary (a non-zero exit isn't automatically "unsafe," since the CPU
 finding has a known-good fallback already built into `sandbox.py`).
+
+## Known bugs and lessons
+
+`known-bugs.md` — every real bug hit during development, catalogued
+with root cause, fix, and the generalizable lesson, organized by
+category (shell/OS gotchas, namespace-isolation gotchas, storage
+correctness, API data-shape, test-authoring, documentation accuracy,
+and one recurring process mistake worth naming explicitly). Read the
+relevant section before starting similar work, not just when something
+breaks -- that's the point of writing it down.
