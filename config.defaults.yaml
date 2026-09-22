@@ -30,7 +30,8 @@ model_serving:
   gpu_wait_vs_cpu_fallback_threshold_seconds: 10
 
 execution_sandbox:
-  enabled: false                        # off until dedicated security review (Section 4.6)
+  enabled: false                        # reference impl exists (sandbox.py) and passes 6/8 review
+                                         # scenarios -- still false; see security-review-sandbox.md Section 7
   network_egress: false                 # hard invariant
   cpu_time_limit_seconds: 30
   memory_limit_mb: 2048
