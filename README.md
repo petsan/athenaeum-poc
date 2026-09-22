@@ -374,3 +374,25 @@ correctness, API data-shape, test-authoring, documentation accuracy,
 and one recurring process mistake worth naming explicitly). Read the
 relevant section before starting similar work, not just when something
 breaks -- that's the point of writing it down.
+
+## Design documents (added to the repo)
+
+`docs/` — the actual design intent this code implements, previously only
+delivered as standalone chat files and never committed here (a real gap,
+caught when asked "what about the Brain" during a Claude Code handoff):
+
+- `docs/design.md` — original full-system document (concurrency/multi-
+  question model, reputability-arbitration resolution).
+- `docs/body-design.md` — infrastructure design: storage tiers,
+  elasticity, the Local Model Serving Layer, the sandboxed execution
+  capability. Read before touching anything under `src/athenaeum_body/`.
+- `docs/brain-design.md` — cognitive design: the deliberation loop, the
+  six Master Agents (including Engineering, added for coding competence),
+  the Reputability Engine, knowledge consolidation, domain fidelity
+  monitoring, human input governance. Read before touching anything
+  under `src/athenaeum_brain/` -- the toy agents in `agents.py` are a
+  deliberately narrow, deterministic proof-of-work slice of what this
+  document actually specifies, not the finished design.
+- `docs/estimate.md` — effort estimate for the Body backlog.
+- `docs/progress.md` — the resumable session-history checkpoint. Read
+  this FIRST in any new session, including a fresh Claude Code one.
