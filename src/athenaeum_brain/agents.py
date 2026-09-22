@@ -1,13 +1,19 @@
 """
-Toy, deterministic Master Agents (Section 2).
+Master Agents (Section 2): narrow, real deterministic computation first,
+a real model-backed fallback second (added 2026-09-23, model_backed_
+reasoning.py -- OLMo 2 via the model-lab guests, infra/proxmox/model-lab/).
 
-These stand in for LLM-backed reasoning, which needs the Body's Local
-Model Serving Layer (not yet built -- see progress.md). To keep this
-slice honest and independently checkable without an LLM, each agent's
-claims are backed by real, verifiable computation in a narrow domain,
-not hand-waved text. This proves the deliberation *mechanics*
-(claim structure, jurisdiction, cross-examination, commit boundary),
-not reasoning quality.
+Every agent below tries its own hand-checkable computation FIRST (real
+primality, kinematics, sandboxed execution, dated-event chronology --
+this proves the deliberation *mechanics*, claim structure/jurisdiction/
+cross-examination/commit-boundary, independent of any model's reasoning
+quality). Only when that finds nothing relevant for a question the agent
+IS routed to does it fall back to a real model call -- never a guess
+dressed up as certainty: fallback claims carry deliberately capped
+confidence (model_backed_reasoning.FALLBACK_CONFIDENCE) rather than the
+1.0 reserved for mechanically-verified claims. Logic is the one
+deliberate exception: Section 2.2 requires it never assert first-order
+claims, so it has no fallback path at all, by construction.
 
 Registration (added 2026-09-22, alongside the World News agent): every
 Master Agent class below is decorated with @master_agent, which appends
@@ -23,6 +29,7 @@ before anyone gets around to adding one)."""
 from __future__ import annotations
 import re
 from .claims import Claim
+from .model_backed_reasoning import model_backed_claim
 
 _REGISTRY: list[type] = []
 
@@ -69,6 +76,15 @@ class MasterOfMathematics:
         return any(k in question.lower() for k in self.domain_keywords)
 
     def explore(self, question: str, question_id: str) -> list[Claim]:
+        claims = self._explore_deterministic(question, question_id)
+        if not claims and self.in_jurisdiction(question):
+            fallback = model_backed_claim(agent_name=self.name, question=question,
+                                           question_id=question_id, claim_type="formal")
+            if fallback:
+                claims = [fallback]
+        return claims
+
+    def _explore_deterministic(self, question: str, question_id: str) -> list[Claim]:
         claims = []
         for token in question.replace("?", "").split():
             if token.isdigit():
@@ -192,6 +208,20 @@ class MasterOfEngineering:
         return any(k in question.lower() for k in self.domain_keywords)
 
     def explore(self, question: str, question_id: str) -> list[Claim]:
+        claims = self._explore_deterministic(question, question_id)
+        if not claims and self.in_jurisdiction(question):
+            # Section 2.2: "a design/architecture claim requiring
+            # qualitative review, not asserted with the same confidence
+            # grammar as a verified implementation" -- this IS that case,
+            # so claim_type stays 'empirical', never 'executable' (that
+            # type is reserved for verify_code()'s actual sandbox runs).
+            fallback = model_backed_claim(agent_name=self.name, question=question,
+                                           question_id=question_id, claim_type="empirical")
+            if fallback:
+                claims = [fallback]
+        return claims
+
+    def _explore_deterministic(self, question: str, question_id: str) -> list[Claim]:
         if "round" not in question.lower():
             return []
         claims = []
@@ -284,6 +314,15 @@ class MasterOfPhysics:
         return any(k in question.lower() for k in self.domain_keywords)
 
     def explore(self, question: str, question_id: str) -> list[Claim]:
+        claims = self._explore_deterministic(question, question_id)
+        if not claims and self.in_jurisdiction(question):
+            fallback = model_backed_claim(agent_name=self.name, question=question,
+                                           question_id=question_id, claim_type="empirical")
+            if fallback:
+                claims = [fallback]
+        return claims
+
+    def _explore_deterministic(self, question: str, question_id: str) -> list[Claim]:
         if not any(k in question.lower() for k in ("fall", "falling", "drop")):
             return []
         import re
@@ -349,6 +388,15 @@ class MasterOfPhilosophy:
         return any(k in question.lower() for k in self.domain_keywords)
 
     def explore(self, question: str, question_id: str) -> list[Claim]:
+        claims = self._explore_deterministic(question, question_id)
+        if not claims and self.in_jurisdiction(question):
+            fallback = model_backed_claim(agent_name=self.name, question=question,
+                                           question_id=question_id, claim_type="normative")
+            if fallback:
+                claims = [fallback]
+        return claims
+
+    def _explore_deterministic(self, question: str, question_id: str) -> list[Claim]:
         q = question.lower()
         if not any(w in q for w in self._normative_words):
             return []
@@ -407,6 +455,20 @@ class MasterOfTheology:
         return any(k in q for k in self.domain_keywords) or any(t in q for t in self._TRADITIONS)
 
     def explore(self, question: str, question_id: str) -> list[Claim]:
+        claims = self._explore_deterministic(question, question_id)
+        if not claims and self.in_jurisdiction(question):
+            # capped at the same confidence as the registry lookup below,
+            # not FALLBACK_CONFIDENCE's default -- a model-backed claim
+            # about a tradition is still a traditional-premised claim,
+            # subject to the exact same 6.4 discipline as a registry hit.
+            fallback = model_backed_claim(agent_name=self.name, question=question,
+                                           question_id=question_id, claim_type="traditional",
+                                           confidence=self._TRADITIONAL_CONFIDENCE_CAP)
+            if fallback:
+                claims = [fallback]
+        return claims
+
+    def _explore_deterministic(self, question: str, question_id: str) -> list[Claim]:
         q = question.lower()
         claims = []
         for tradition, position in self._TRADITIONS.items():
@@ -493,6 +555,15 @@ class MasterOfWorldNews:
         return any(k in q for k in self.domain_keywords) or bool(self._find_events(question))
 
     def explore(self, question: str, question_id: str) -> list[Claim]:
+        claims = self._explore_deterministic(question, question_id)
+        if not claims and self.in_jurisdiction(question):
+            fallback = model_backed_claim(agent_name=self.name, question=question,
+                                           question_id=question_id, claim_type="empirical")
+            if fallback:
+                claims = [fallback]
+        return claims
+
+    def _explore_deterministic(self, question: str, question_id: str) -> list[Claim]:
         q = question.lower()
         events = self._find_events(question)
         if len(events) != 2:

@@ -79,7 +79,7 @@ These aren't aspirational — every one of them is here because violating it (or
   invariant enforced in `config.py` itself (`disallow_paid_apis`), not
   just a policy.
 - Before marking any task "done," run the actual test suite
-  (`pytest -q`, currently 225/225) and update `docs/progress.md` — don't
+  (`pytest -q`, currently 238/238) and update `docs/progress.md` — don't
   let the checkpoint file go stale.
 
 ## Current status (see `docs/progress.md` for full detail)
@@ -105,15 +105,18 @@ These aren't aspirational — every one of them is here because violating it (or
   implemented. Engineering's `verify_code()`/`verify_claim()` run real,
   unmocked code in the Body's sandbox — the first Master Agent capability
   that's genuinely real end-to-end, not a stand-in. No real LLM backend
-  yet backing any agent's claims — `model_serving.py` now has a real
+  yet for most reasoning — `model_serving.py` now has a real
   `LlamaCppBackend` (2026-09-23) talking to six live model-lab guests
   (`infra/proxmox/model-lab/`, one CPU-quantized open-weight model each:
   OLMo-2-1B, Qwen2.5-Coder-1.5B, Qwen2.5-1.5B, Phi-3.5-mini, Granite-3.1-2B,
   Mistral-7B-v0.3), proven end-to-end including `evaluation.py`'s
-  previously-blocked B1 baseline. Every Master Agent's own claims are
-  still deterministic toy logic, not yet wired to this backend — that
-  remains the single biggest gap between current behavior and real
-  reasoning. `docs/infra-topology.md` (brainbox XSmall/Medium/Large/
+  previously-blocked B1 baseline. **Six of seven Master Agents now have a
+  real OLMo 2 fallback** (`model_backed_reasoning.py`) for when their own
+  narrow deterministic computation finds nothing — Logic is the one
+  deliberate exception (§2.2: never asserts first-order claims, so no
+  fallback path exists for it at all). Deterministic computation still
+  always wins when it finds something; the fallback only fires on a
+  genuine "nothing to say" gap. `docs/infra-topology.md` (brainbox XSmall/Medium/Large/
   XLarge sizing convention, CPU-RAM-only pending GPU nodes) and
   `docs/brain-session-log.md` (running decision log) added 2026-09-22 —
   see `docs/progress.md` §§27–34 for the full session.

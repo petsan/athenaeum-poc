@@ -432,6 +432,59 @@ No -- lowering `n_predict` to 64 by default. Raising the timeout treats a real, 
 
 ---
 
+## 2026-09-23 — OLMo 2 as the shared Master Agent fallback: design choices
+
+**Q: You presented three options (shared backend, new eighth agent, one
+pilot agent) and I picked shared backend — what did that actually
+constrain in the implementation?**
+
+Two things, both load-bearing: (1) the fallback had to be generic across
+agent types, not hand-tuned per agent's own reasoning style, since the
+same mechanism serves all six eligible agents — that's why
+`model_backed_reasoning.py` is one small, agent-agnostic module rather
+than six bespoke integrations; (2) it had to respect each agent's
+*existing* claim-typing discipline rather than impose a uniform one —
+Philosophy's fallback is `normative` specifically because `empirical`
+would be the exact category error Philosophy's own cross-examination
+polices in *other* agents (§2.2's category-conflation rule would be
+violated by Philosophy's own claim if this weren't caught). Getting this
+wrong would have meant the agent violating, in its own fallback claims,
+the exact discipline it enforces on everyone else.
+
+**Q: Why does the fallback check `self.in_jurisdiction(question)` again,
+when `explore()` is only ever called by `rounds.py` for agents already
+confirmed routed?**
+
+Because `explore()` is also called directly in many existing tests,
+bypassing routing entirely (`ph.explore("is 17 prime?", "q1")` to check
+Philosophy correctly does nothing for an unrelated question). Without the
+guard, that direct call would have triggered a real network call to OLMo
+2 and very likely produced SOME response, breaking the `== []`
+assertions those tests already depended on — not because the tests were
+wrong, but because "silently abstain outside real jurisdiction" is a real
+design discipline (`agents.py`'s own module docstring), and `explore()`
+should honor it regardless of who's calling it, not just when routing
+happens to have already filtered the caller.
+
+**Q: Two real reliability issues surfaced only under the full test
+suite's back-to-back load, not in isolation — timeout and occasional
+near-empty completions. Why fix both centrally in `ask_model()` rather
+than in each agent or each test?**
+
+Because both are backend-level characteristics, true regardless of which
+agent or caller hits them: the six model-lab guests queue concurrent
+requests rather than reject them (so a tight timeout will eventually trip
+under load no matter who's asking), and OLMo 2's own sampling
+occasionally produces near-empty output for an ordinary prompt (true of
+the model, not of any particular caller's prompt). Patching one test that
+happened to hit it first would have left the same characteristic latent
+for the next agent, the next test, or real production use — fixing it
+once in the shared helper is the same "generic contract, not one caller's
+workaround" choice already made for `distributed_worker.py` and
+`loop.py` earlier in this session.
+
+---
+
 *See `docs/progress.md` §26 for the checklist this log's entries track
 against, and `docs/infra-topology.md` for the infrastructure-side design
 decisions made in the same planning conversation.*
