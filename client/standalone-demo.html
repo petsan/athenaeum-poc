@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Athenaeum</title>
+<style>
+  :root {
+    --bg: #f7f6f2; --fg: #1c1a17; --card: #ffffff; --border: #ddd8cd;
+    --accent: #6b4f3f; --muted: #78716a; --commit: #2f6b3f; --dissent: #8a3a2b;
+    box-sizing: border-box;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #16140f; --fg: #eee9df; --card: #201d17; --border: #3a352b;
+      --accent: #c9a876; --muted: #a39a8a; --commit: #7bc98f; --dissent: #e08a72;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #16140f; --fg: #eee9df; --card: #201d17; --border: #3a352b;
+    --accent: #c9a876; --muted: #a39a8a; --commit: #7bc98f; --dissent: #e08a72;
+  }
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--fg);
+    font-family: -apple-system, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+  header { padding: 16px 16px 8px; }
+  header h1 { font-size: 1.3rem; margin: 0 0 4px; }
+  header p { margin: 0; color: var(--muted); font-size: 0.85rem; }
+  .banner { font-size: 0.78rem; color: var(--muted); background: var(--card);
+    border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; margin: 10px 0; }
+  main { padding: 8px 16px 32px; max-width: 640px; margin: 0 auto; }
+  .row { display: flex; gap: 8px; margin: 12px 0; }
+  input[type=text] { flex: 1; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--border);
+    background: var(--card); color: var(--fg); font-size: 1rem; }
+  button { padding: 12px 18px; border-radius: 10px; border: none; background: var(--accent);
+    color: var(--bg); font-weight: 600; font-size: 1rem; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 14px; }
+  .chip { font-size: 0.78rem; padding: 6px 10px; border-radius: 999px; border: 1px solid var(--border);
+    background: var(--card); color: var(--fg); }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+    padding: 14px 16px; margin: 10px 0; }
+  .q { font-weight: 600; margin-bottom: 8px; }
+  .claim { padding: 6px 0; border-top: 1px solid var(--border); font-size: 0.92rem; }
+  .claim:first-of-type { border-top: none; }
+  .tag { font-size: 0.72rem; padding: 2px 7px; border-radius: 6px; margin-right: 6px; }
+  .tag.commit { background: color-mix(in srgb, var(--commit) 20%, transparent); color: var(--commit); }
+  .tag.dissent { background: color-mix(in srgb, var(--dissent) 20%, transparent); color: var(--dissent); }
+  .plural-note { font-size: 0.82rem; color: var(--muted); margin-top: 4px; font-style: italic; }
+  .empty { color: var(--muted); text-align: center; padding: 30px 0; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Athenaeum</h1>
+  <p>Deliberation loop demo -- runs entirely on this page.</p>
+</header>
+<main>
+  <div class="banner">This page runs the same toy deliberation logic (framing → exploration → cross-examination → synthesis) as the Python proof-of-work repo, ported to JavaScript so you can try it here on your phone right now. It's not connected to a live server -- for that, deploy <code>athenaeum_body.api</code> and point a client at it.</div>
+  <div class="row">
+    <input id="q" type="text" placeholder="ask a question..." />
+    <button id="go">Ask</button>
+  </div>
+  <div class="chips">
+    <button class="chip" data-q="is 17 prime?">is 17 prime?</button>
+    <button class="chip" data-q="is 91 prime?">is 91 prime?</button>
+    <button class="chip" data-q="how should we round 2.5?">round 2.5?</button>
+  </div>
+  <div id="results"><div class="empty">No questions yet.</div></div>
+</main>
+<script>
+// ---- Ported from src/athenaeum_brain/agents.py + rounds.py ----
+function isPrime(n) {
+  if (n < 2) return false;
+  for (let d = 2; d * d <= n; d++) if (n % d === 0) return false;
+  return true;
+}
+function roundHalfUp(x) { return Math.floor(x + 0.5); }
+function roundHalfEven(x) {
+  const f = Math.floor(x), diff = x - f;
+  if (diff < 0.5) return f;
+  if (diff > 0.5) return f + 1;
+  return (f % 2 === 0) ? f : f + 1;
+}
+
+function mathematicsExplore(question) {
+  const claims = [];
+  for (const tok of question.replace("?", "").split(" ")) {
+    if (/^\d+$/.test(tok)) {
+      const n = parseInt(tok, 10);
+      claims.push({agent: "Mathematics", statement: `${n} is ${isPrime(n) ? "prime" : "not prime"}`, subject: null});
+    }
+  }
+  if (question.toLowerCase().includes("round")) {
+    for (const tok of question.replace("?", "").split(" ")) {
+      const v = parseFloat(tok);
+      if (!isNaN(v) && /[\d.]/.test(tok)) {
+        claims.push({agent: "Mathematics", statement: `${tok} rounds to ${roundHalfUp(v)} (classical round-half-up convention)`, subject: v});
+      }
+    }
+  }
+  return claims;
+}
+function engineeringExplore(question) {
+  const claims = [];
+  if (!question.toLowerCase().includes("round")) return claims;
+  for (const tok of question.replace("?", "").split(" ")) {
+    const v = parseFloat(tok);
+    if (!isNaN(v) && /[\d.]/.test(tok)) {
+      claims.push({agent: "Engineering", statement: `${tok} rounds to ${roundHalfEven(v)} (IEEE-754 round-half-to-even convention)`, subject: v});
+    }
+  }
+  return claims;
+}
+
+function deliberate(question) {
+  const explored = [...mathematicsExplore(question), ...engineeringExplore(question)];
+  if (explored.length === 0) {
+    return {committed: [], dissent: [{statement: "no routed agent recognized this question (toy demo only knows primality and rounding)"}], plural_answers: []};
+  }
+  // group by subject (Section 4.2) -- same normalize-by-value logic as the Python version
+  const groups = {};
+  const standalone = [];
+  for (const c of explored) {
+    if (c.subject !== null && c.subject !== undefined) {
+      (groups[c.subject] ||= []).push(c);
+    } else standalone.push(c);
+  }
+  const committed = [...standalone];
+  const plural_answers = [];
+  for (const subject in groups) {
+    const group = groups[subject];
+    committed.push(...group);
+    const agents = new Set(group.map(c => c.agent));
+    const statements = new Set(group.map(c => c.statement));
+    if (group.length >= 2 && agents.size > 1 && statements.size > 1) {
+      plural_answers.push({chaired_by: "Logic", conclusions: group});
+    }
+  }
+  return {committed, dissent: [], plural_answers};
+}
+// ---- end port ----
+
+const results = document.getElementById("results");
+const input = document.getElementById("q");
+const go = document.getElementById("go");
+
+function renderAnswer(question, answer) {
+  const card = document.createElement("div");
+  card.className = "card";
+  let html = `<div class="q">${question}</div>`;
+  if (answer.plural_answers.length) {
+    for (const pa of answer.plural_answers) {
+      html += `<div class="plural-note">Jurisdictional conflict, chaired by ${pa.chaired_by} -- both conclusions stand, neither is picked as a winner:</div>`;
+      for (const c of pa.conclusions) html += `<div class="claim"><span class="tag commit">${c.agent}</span>${c.statement}</div>`;
+    }
+  } else {
+    for (const c of answer.committed) html += `<div class="claim"><span class="tag commit">${c.agent}</span>${c.statement}</div>`;
+  }
+  for (const d of answer.dissent) html += `<div class="claim"><span class="tag dissent">unrouted</span>${d.statement}</div>`;
+  card.innerHTML = html;
+  if (results.querySelector(".empty")) results.innerHTML = "";
+  results.prepend(card);
+}
+function ask(q) {
+  const question = (q || input.value).trim();
+  if (!question) return;
+  renderAnswer(question, deliberate(question));
+  input.value = "";
+}
+go.addEventListener("click", () => ask());
+input.addEventListener("keydown", e => { if (e.key === "Enter") ask(); });
+document.querySelectorAll(".chip").forEach(el => el.addEventListener("click", () => ask(el.dataset.q)));
+</script>
+</body>
+</html>

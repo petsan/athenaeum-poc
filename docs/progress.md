@@ -154,6 +154,17 @@ Built `scripts/preflight_check.py` — standalone (stdlib only, no repo import n
 
 Eighteen commits total.
 
-## 20. Suggested next step
+## 20. Suggested next step — superseded by Section 21
 
-Still waiting on the Proxmox server. Once it's up: run `preflight_check.py` there first, before deploying anything else. If `RLIMIT_CPU` turns out to work on that kernel, `sandbox.py` gets a small, well-defined change (switch it back to primary CPU-time enforcement, keep wall-clock as a backstop) — otherwise, no code change needed, current behavior already matches. Either way, that single run resolves the last open question in Task 23g.
+## 21. Full consolidation into one self-contained package
+
+Everything that had been living as separate chat deliverables is now actually in the repo:
+- `CLAUDE.md` — new, read automatically by Claude Code on startup, points at every doc below plus the hard constraints (50% resource cap, no bare-host deployment, sandbox stays disabled until re-validated on the real host).
+- `docs/` — `design.md`, `body-design.md` (+ PDF), `brain-design.md` (+ PDF), `estimate.md`, and this file (`progress.md`) — all previously chat-only, now committed.
+- `client/standalone-demo.html` — the self-contained JS port of the deliberation loop, runs with zero backend.
+
+Nothing meaningful is external to the repo anymore. One zip is the whole project: design intent, implementation, tests, bug history, and session history together.
+
+Nineteen commits total.
+
+**Still waiting on the Proxmox server.** Once it's up: run `scripts/preflight_check.py` there first, before deploying anything else. If `RLIMIT_CPU` turns out to work on that kernel, `sandbox.py` gets a small, well-defined change (switch it back to primary CPU-time enforcement, keep wall-clock as a backstop) — otherwise, no code change needed, current behavior already matches.
