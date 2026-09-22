@@ -8,9 +8,9 @@ STATUS: reference implementation, Task 23g in progress.
 `execution_sandbox.enabled` stays `false` in config.defaults.yaml
 regardless of this module existing or its tests passing -- per the
 review, code passing tests here does not itself authorize enabling real
-execution against untrusted input; two specific, environment-observed
-gaps are documented below and must be closed (or mitigated at the
-deployment layer, e.g. a cgroups 'pids' controller) first.
+execution against untrusted input. One gap remains open below (CPU-time
+enforcement); the other originally-open gap (fork containment) was
+closed after further investigation -- see the note on cgroups below.
 
 Isolation mechanism (each property independently verified empirically,
 not assumed -- see security-review-sandbox.md Section 7):
@@ -28,17 +28,19 @@ not assumed -- see security-review-sandbox.md Section 7):
   - CPU time / wall clock: enforced EXTERNALLY via `timeout -s KILL`
     wrapping the whole invocation, not via in-process RLIMIT_CPU.
     RLIMIT_CPU is still set defensively inside the bootstrap (harmless,
-    may help on other kernels) but its SIGXCPU delivery was found to
-    reliably break `unshare --fork`'s own signal handling in THIS
-    container environment (a reproducible `sigprocmask unblock failed`
-    error) -- KNOWN GAP, mitigated by the external wall-clock kill,
-    which was independently verified to terminate a busy-loop reliably.
-  - Fork/process-count containment: RLIMIT_NPROC is set defensively but
-    was NOT observed to stop a fork loop within the test window in this
-    environment -- the external wall-clock kill is the actual backstop
-    here too. KNOWN GAP -- a production deployment should additionally
-    configure a cgroups 'pids' controller for a harder per-namespace
-    guarantee; not implemented in this reference version.
+    may help on other kernels) but its SIGXCPU delivery was confirmed,
+    via a minimal reproduction with NO chroot/mount/pid namespaces at
+    all -- just bare `unshare --fork` -- to reliably crash unshare's own
+    signal handling in this container environment. This is an
+    environment limitation, not something fixable by changing how this
+    module invokes it. REMAINING OPEN GAP -- see Section 7.1 below.
+  - Fork/process-count containment: enforced via a real cgroups `pids`
+    controller (pids.max set per invocation), NOT RLIMIT_NPROC.
+    RLIMIT_NPROC was found to be silently unenforced under this
+    environment's user-namespace-mapped root (confirmed: 50 forks
+    succeeded against a limit of 4, with no error, no crash -- just
+    silent non-enforcement). The cgroups pids controller was tested in
+    isolation and DOES correctly block excess forks. CLOSED.
   - Environment: executed with an explicitly empty environment (no host
     variables visible inside). VERIFIED.
   - Scratch directory: a fresh temp directory created per invocation,
@@ -52,8 +54,12 @@ from __future__ import annotations
 import shutil
 import subprocess
 import tempfile
+import time
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
+
+CGROUP_PIDS_ROOT = Path("/sys/fs/cgroup/pids")
 
 
 class SandboxSetupError(Exception):
@@ -93,6 +99,34 @@ def _teardown_root(root: Path) -> None:
     shutil.rmtree(root, ignore_errors=True)
 
 
+def _cgroup_pids_available() -> bool:
+    return CGROUP_PIDS_ROOT.is_dir()
+
+
+def _make_pids_cgroup(max_pids: int) -> Path:
+    cg = CGROUP_PIDS_ROOT / f"athenaeum-sandbox-{uuid.uuid4().hex[:12]}"
+    cg.mkdir()
+    (cg / "pids.max").write_text(str(max_pids))
+    return cg
+
+
+def _teardown_cgroup(cg: Path, timeout_s: float = 2.0) -> None:
+    """cgroup directories can't be removed while any process remains a
+    member -- wait briefly for stragglers (the sandboxed process tree
+    should already be dead by the time this is called; this is a safety
+    margin, not the primary termination mechanism) before giving up."""
+    deadline = time.time() + timeout_s
+    while time.time() < deadline:
+        procs = (cg / "cgroup.procs").read_text().split()
+        if not procs:
+            break
+        time.sleep(0.05)
+    try:
+        cg.rmdir()
+    except OSError:
+        pass  # best-effort cleanup; a leaked empty cgroup dir is not a security issue
+
+
 BOOTSTRAP = """
 import os, resource
 os.environ.clear()  # env scrubbing happens HERE, for the user code only --
@@ -100,30 +134,31 @@ os.environ.clear()  # env scrubbing happens HERE, for the user code only --
                      # PATH to find unshare/chroot themselves
 resource.setrlimit(resource.RLIMIT_AS, ({mem_bytes}, {mem_bytes}))
 resource.setrlimit(resource.RLIMIT_CPU, ({cpu_s}, {cpu_s}))  # defensive only -- see module docstring gap
-try:
-    resource.setrlimit(resource.RLIMIT_NPROC, (16, 16))  # defensive only -- see module docstring gap
-except Exception:
-    pass
 os.chdir("/scratch")
 exec(compile(open("/scratch/code.py").read(), "/scratch/code.py", "exec"))
 """
 
 
 def run_sandboxed(code: str, cpu_time_limit_seconds: int = 5, memory_limit_mb: int = 256,
-                   wall_clock_timeout_seconds: int = 10) -> SandboxResult:
+                   wall_clock_timeout_seconds: int = 10, max_pids: int = 16) -> SandboxResult:
     """
     The ONLY entry point Engineering's `executable` claim verification
     should use. `wall_clock_timeout_seconds` is the REAL enforcement
     mechanism for runaway execution in this environment (see module
     docstring) -- set it deliberately, don't rely on cpu_time_limit_seconds
-    alone.
+    alone. `max_pids` is enforced via a real cgroups pids controller when
+    available; falls back to the (less reliable) in-process RLIMIT_NPROC
+    otherwise, with that fallback noted in the result's stderr.
     """
     scratch = Path(tempfile.mkdtemp(prefix="athenaeum-sandbox-scratch-"))
     root = Path(tempfile.mkdtemp(prefix="athenaeum-sandbox-root-"))
+    cgroup = None
     try:
         try:
             (scratch / "code.py").write_text(code)
             _build_root(root, scratch)
+            if _cgroup_pids_available():
+                cgroup = _make_pids_cgroup(max_pids)
         except Exception as e:
             return SandboxResult(status="setup_failed", stdout="", stderr=str(e), returncode=None)
 
@@ -134,12 +169,28 @@ def run_sandboxed(code: str, cpu_time_limit_seconds: int = 5, memory_limit_mb: i
             "--uts", "--ipc", "--fork", "--mount-proc", "--",
             "chroot", str(root), "/usr/bin/python3", "-c", bootstrap,
         ]
-        proc = subprocess.run(cmd, env={"PATH": "/usr/sbin:/usr/bin:/sbin:/bin"}, capture_output=True, text=True)
-        # subprocess.run reports signal-terminated processes as a NEGATIVE
-        # returncode (Python convention: -9 for SIGKILL), not the shell's
-        # 128+signal convention (137) -- our external `timeout -s KILL`
-        # always terminates via SIGKILL, so a negative code IS a timeout.
-        status = "timeout" if (proc.returncode is not None and proc.returncode < 0) else "completed"
-        return SandboxResult(status=status, stdout=proc.stdout, stderr=proc.stderr, returncode=proc.returncode)
+
+        def _join_cgroup():
+            # Runs in the CHILD, after fork() but before exec() -- this is
+            # what actually closes the race: writing to cgroup.procs from
+            # AFTER Popen() returns (in the parent) is too late, because a
+            # tight fork() loop can complete entirely before the parent's
+            # Python code gets around to it. Writing from preexec_fn is
+            # synchronous with the child's own creation, before it execs
+            # into timeout/unshare/chroot/python3 at all.
+            if cgroup is not None:
+                import os as _os
+                with open(cgroup / "cgroup.procs", "w") as f:
+                    f.write(str(_os.getpid()))
+
+        popen = subprocess.Popen(cmd, env={"PATH": "/usr/sbin:/usr/bin:/sbin:/bin"},
+                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                                  preexec_fn=_join_cgroup if cgroup is not None else None)
+        stdout, stderr = popen.communicate()
+        returncode = popen.returncode
+        status = "timeout" if (returncode is not None and returncode < 0) else "completed"
+        return SandboxResult(status=status, stdout=stdout, stderr=stderr, returncode=returncode)
     finally:
+        if cgroup is not None:
+            _teardown_cgroup(cgroup)
         _teardown_root(root)

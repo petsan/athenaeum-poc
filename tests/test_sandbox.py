@@ -48,6 +48,25 @@ except Exception:
     assert result.stdout.count("PASS:read:") == 3
     assert "PASS:write" in result.stdout
 
+def test_scenario_4_fork_containment_via_cgroups():
+    code = """
+import os, sys
+count = 0
+try:
+    for _ in range(50):
+        pid = os.fork()
+        if pid == 0:
+            os._exit(0)
+        count += 1
+except OSError:
+    print(f"PASS:forks_blocked_after_{count}")
+"""
+    result = run_sandboxed(code, wall_clock_timeout_seconds=10, max_pids=5)
+    assert result.status == "completed"
+    assert "PASS:forks_blocked_after_" in result.stdout
+    blocked_after = int(result.stdout.split("PASS:forks_blocked_after_")[1].split("\n")[0])
+    assert blocked_after < 50  # confirm it was actually blocked early, not allowed to run all 50
+
 def test_scenario_5_wall_clock_timeout_terminates_busy_loop():
     code = "x = 0\nwhile True:\n    x += 1\n"
     result = run_sandboxed(code, wall_clock_timeout_seconds=3)

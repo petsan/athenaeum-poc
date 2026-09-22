@@ -316,3 +316,29 @@ timeout-detection logic was checking for the wrong number entirely.
 8 new tests (108 total). **Needs `CAP_SYS_ADMIN` to run** -- will not
 pass in an unprivileged CI runner without extra setup; noted here rather
 than discovered by a confusing CI failure later.
+
+## Continuing 23g: closing the fork-containment gap for real
+
+Didn't leave the two gaps from the last session as permanent -- went
+back and investigated further. **Fork containment is now closed**: a
+real cgroups `pids` controller does work in this environment (confirmed
+by a minimal test outside any of this module's code), but wiring it into
+`sandbox.py` initially had a genuine race condition -- the sandboxed
+process was joined to the cgroup *after* `Popen()` returned, by which
+point a tight `fork()` loop can complete entirely before the controlling
+code gets around to it. Fixed by joining from `preexec_fn`, which runs
+synchronously in the child before it execs into anything. Verified
+stable across repeated runs, not just a single lucky pass.
+
+**CPU-time enforcement remains genuinely open** -- confirmed, via a
+minimal reproduction with no chroot or other namespaces at all, that
+`unshare --fork` itself crashes on `SIGXCPU` delivery in this container
+environment. That rules out this module's own composition as the cause;
+it's an environment limitation. The external wall-clock `timeout -s
+KILL` mitigation stands as the real enforcement mechanism for CPU-bound
+code. Full corrected scorecard: `security-review-sandbox.md` Section 7.
+
+**7 of 8 scenarios now pass exactly as originally specified.**
+`execution_sandbox.enabled` still stays `false`.
+
+1 new test (109 total).
