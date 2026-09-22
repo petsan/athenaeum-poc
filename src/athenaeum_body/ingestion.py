@@ -5,13 +5,23 @@ one-time seed-load path. No reputability judgment here (that's the
 Brain's Section 6) -- this only decides whether a source is even
 *eligible* to be fetched at all (license/ToS/paid-access), mechanically.
 
-No real network access in this environment -- `fetch()` takes a
-FixtureSource standing in for a real HTTP fetch, exactly the same
-substitution pattern used for MockBackend (model_serving.py) and
-simulate_tier2_outage (tiered.py): the interface is real and testable,
-the transport underneath is swapped for something deterministic.
+Real network fetch (`fetch_url`, added 2026-09-22) is now available now
+that a real, internet-connected guest exists (VMID 104/106) -- the
+"no real network available here" blocker noted in earlier sessions no
+longer applies. `FixtureSource` remains the normalized shape both a real
+fetch and a hand-authored test fixture produce -- the class name predates
+`fetch_url` and is kept rather than churned across every caller/test for a
+rename alone; what changed is that it's no longer ONLY ever hand-authored.
+The same substitution-seam pattern used elsewhere (MockBackend in
+model_serving.py, simulate_tier2_outage in tiered.py) still applies for
+anything that wants a fixture without a real network round-trip -- both
+paths now genuinely exist side by side, not one superseding the other.
 """
 from __future__ import annotations
+import urllib.error
+import urllib.parse
+import urllib.request
+import urllib.robotparser
 from dataclasses import dataclass
 from .schemas import ProvenanceEntry
 from .storage.content_addressed import ContentAddressedStore
@@ -19,12 +29,61 @@ from .storage.content_addressed import ContentAddressedStore
 
 @dataclass
 class FixtureSource:
-    """Stand-in for a fetched URL: what a real HTTP client would report."""
+    """The normalized shape of a fetched URL -- what a real HTTP client
+    reported (fetch_url) OR a hand-authored stand-in for one (tests)."""
     url: str
     content: bytes
     license: str          # e.g. "public-domain", "cc-by", "all-rights-reserved"
     is_paid_or_metered: bool = False
     robots_disallowed: bool = False
+
+
+class FetchError(Exception):
+    """A real network fetch failed outright (DNS, connection, HTTP error
+    status, timeout) -- distinct from IngestionRejected, which is a
+    successful fetch that then failed the license/ToS/paid-access checks.
+    Never silently swallowed; the caller decides how to handle it."""
+
+
+def _robots_allowed(url: str, user_agent: str) -> bool:
+    """Real robots.txt check via the stdlib parser. Fails OPEN (allowed)
+    only when robots.txt itself is unreachable or absent -- absence of a
+    robots.txt is not a disallow signal; a genuinely failed fetch of the
+    page itself is a separate, loud FetchError raised by fetch_url, not
+    silently converted into a robots disallow here."""
+    parsed = urllib.parse.urlparse(url)
+    robots_url = f"{parsed.scheme}://{parsed.netloc}/robots.txt"
+    rp = urllib.robotparser.RobotFileParser()
+    rp.set_url(robots_url)
+    try:
+        rp.read()
+    except Exception:
+        return True
+    return rp.can_fetch(user_agent, url)
+
+
+def fetch_url(url: str, *, license: str, is_paid_or_metered: bool = False,
+               timeout_seconds: float = 10.0,
+               user_agent: str = "AthenaeumIngestionBot/0.1") -> FixtureSource:
+    """A real HTTP GET (stdlib `urllib` only -- no new dependency, matching
+    api.py's own stdlib-only convention), plus a real robots.txt check.
+    `license` and `is_paid_or_metered` remain caller-supplied, exactly as
+    they always were on FixtureSource -- neither is mechanically
+    determinable from an HTTP response alone, so this doesn't pretend
+    otherwise; a human/curator still asserts them, same as for a
+    hand-authored fixture. Never uses credentials or an API key of any
+    kind, keeping every fetch this function performs a plain, freely
+    accessible GET (Section 6.6's hard floor, config.py's
+    disallow_paid_apis)."""
+    robots_disallowed = not _robots_allowed(url, user_agent)
+    req = urllib.request.Request(url, headers={"User-Agent": user_agent})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout_seconds) as resp:
+            content = resp.read()
+    except (urllib.error.URLError, OSError) as e:
+        raise FetchError(f"fetch failed for {url!r}: {e}") from e
+    return FixtureSource(url=url, content=content, license=license,
+                          is_paid_or_metered=is_paid_or_metered, robots_disallowed=robots_disallowed)
 
 
 class IngestionRejected(Exception):

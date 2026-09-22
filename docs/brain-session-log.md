@@ -289,6 +289,34 @@ not now.
 
 ---
 
+## 2026-09-22 — Ingestion real fetch (opportunistic item) design choice
+
+**Q: `FixtureSource` is now also the real fetch's return type — shouldn't
+it be renamed to something like `FetchedSource`?**
+
+Probably, in a codebase with more runway, but not done here: the class is
+referenced in `ingestion.py` itself plus two existing test files, and a
+rename would touch all of them for a naming-only change with zero
+behavioral difference. Kept as-is and the reason documented in its own
+docstring (it's now the shared shape both paths produce, not exclusively
+a test fixture anymore) rather than silently leaving the now-slightly-
+misleading name unexplained. If a third real caller of this shape shows
+up later, that's the natural trigger to actually do the rename, not now.
+
+**Q: Why does a genuinely failed page fetch (DNS error, timeout, HTTP
+error) raise `FetchError` instead of being folded into the existing
+`IngestionRejected`?**
+
+Because they're different facts about the world: `IngestionRejected`
+means "we successfully reached this source and its license/ToS/paid-
+access properties disqualify it" — a policy decision. `FetchError` means
+"we never even got content to evaluate" — a network fact. Conflating them
+would hide, from any caller trying to distinguish "this source is
+policy-ineligible" from "this source was temporarily unreachable, retry
+later," exactly the information that distinction exists to preserve.
+
+---
+
 *See `docs/progress.md` §26 for the checklist this log's entries track
 against, and `docs/infra-topology.md` for the infrastructure-side design
 decisions made in the same planning conversation.*
