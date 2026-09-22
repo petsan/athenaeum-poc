@@ -74,3 +74,32 @@ This document identifies what must be true and what must be tested. It does not:
 ## 6. Recommendation
 
 `execution_sandbox.enabled` should remain `false` until every property in Section 3 is implemented and every scenario in Section 4 has a passing automated test. Given this project's established pattern of not marking anything "done" without an actual passing test to point to, the same standard should apply here — arguably more strictly, given what's at stake if this specific component is wrong. This review does not recommend a timeline or deprioritize this work; it only insists that when it does happen, it happens against these criteria rather than being inferred after the fact from whatever gets built first.
+
+---
+
+## 7. Implementation scorecard (added after Task 23g was started)
+
+A reference implementation (`src/athenaeum_body/sandbox.py`) was built against Sections 3–4 above and empirically tested — every scenario below was actually run, not assumed. **`execution_sandbox.enabled` remains `false` regardless of these results** — passing tests here is necessary, not sufficient, per Section 5, and two specific gaps below are unresolved.
+
+| Scenario (Section 4) | Result | Mechanism | Notes |
+|---|---|---|---|
+| 1 — DNS, raw socket, HTTP egress | **PASS** | Empty network namespace (`unshare --net`) | Fails at the OS level, not an application-layer block |
+| 2 — Read outside scratch (absolute, traversal, symlink) | **PASS** | `chroot` into a minimal root with only `/usr`, `/lib`, `/lib64` (read-only) and a fresh `/scratch` bind-mounted | Paths outside the mounted set don't exist in the sandbox's filesystem view at all — structural, not permission-based |
+| 3 — Write outside scratch | **PASS** | Same mechanism as scenario 2 | |
+| 4 — Child process / fork containment | **PARTIAL — see gap below** | PID namespace (process becomes PID 1, no host visibility); `RLIMIT_NPROC` set defensively | The namespace correctly hides host processes, but `RLIMIT_NPROC` did not reliably stop a fork loop within the test window in this environment; contained only by the external wall-clock kill, not by the in-process limit itself |
+| 5 — CPU time limit exceeded | **PASS, but not via the originally-specified mechanism — see gap below** | External `timeout -s KILL` wrapping the whole invocation | In-process `RLIMIT_CPU` (SIGXCPU) was found to reliably break `unshare --fork`'s own signal handling in this container environment (reproducible `sigprocmask unblock failed` error) — abandoned as the enforcement mechanism, kept only as a harmless defensive setting |
+| 6 — Memory limit exceeded | **PASS** | `RLIMIT_AS`, set by the harness before untrusted code runs | Synchronous `MemoryError`, no signal-delivery involved — none of scenario 5's problem applies here |
+| 7 — Scratch directory fresh across invocations | **PASS** | Fresh `tempfile.mkdtemp()` per call, verified empty at the start of a second invocation after the first wrote to it | |
+| 8 — Environment variables scrubbed | **PASS** | `os.environ.clear()` called from inside the bootstrap, before untrusted code runs | Initially miscomposed — passing an empty environment to the *outer* orchestration commands broke `unshare`/`chroot`'s own ability to find each other via `PATH`; fixed by giving the outer commands a minimal `PATH` and scrubbing the environment from inside the bootstrap instead, exactly where the guarantee actually needs to hold |
+
+### 7.1 Two unresolved gaps, stated plainly
+1. **CPU-time enforcement relies on an external wall-clock kill, not `RLIMIT_CPU`.** This is arguably an acceptable, even conventional, defense-in-depth pattern on its own — most sandboxes use an external watchdog regardless — but it means the *specific* mechanism Section 3's table originally called for (a kernel-enforced in-process limit) does not work as specified in this container environment, and that discrepancy should not be silently absorbed into "the requirement is satisfied anyway."
+2. **Fork/process-count containment likewise relies on the external wall-clock kill rather than `RLIMIT_NPROC`.** A production deployment should add a cgroups `pids` controller for a genuine per-namespace hard limit, independent of the external timeout — not implemented in this reference version.
+
+Both gaps share a root cause: this specific container/kernel environment's interaction with `unshare --fork`'s signal handling is not fully reliable for signal-delivered rlimits, only for synchronous ones (`RLIMIT_AS`) and external process termination (`timeout -s KILL`). Whoever deploys this for real should re-run the full scenario suite (`tests/test_sandbox.py`) against the actual target kernel/container runtime before trusting this scorecard to carry over — it is a report on *this* environment, not a general guarantee.
+
+### 7.2 What would need to be true before this review's recommendation (Section 6) changes
+- Either the two gaps above are closed (e.g., a working `RLIMIT_CPU`/`RLIMIT_NPROC` path on the actual production kernel, or a cgroups-based replacement implemented and tested), or
+- The design is revised to explicitly accept external wall-clock termination as the primary time/fork defense, with that decision made deliberately by whoever owns this system, not defaulted into by this document.
+
+Either way, that is a decision for whoever enables this in production, informed by this scorecard — not something this review resolves on its own.

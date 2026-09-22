@@ -274,3 +274,45 @@ a checklist), and eight concrete fault-injection scenarios that must
 each have a passing automated test before `execution_sandbox.enabled`
 can move from its current default of `false`. Linked from
 `acceptance-criteria.md`'s existing Task 23g entry.
+
+## Task 23g: sandboxed execution -- started, honestly scored, still disabled
+
+`src/athenaeum_body/sandbox.py`: real OS-level isolation (`unshare` +
+`chroot` into a minimal, freshly-built root -- not a restricted
+interpreter), built and tested against every scenario in
+`security-review-sandbox.md`. This environment turned out to have real
+privilege (root, `CAP_SYS_ADMIN`, working namespaces), so the reference
+implementation is genuine, not a stub.
+
+**6 of 8 scenarios pass exactly as specified.** Network egress,
+filesystem containment, memory limits, environment scrubbing, and
+scratch-directory freshness are all real, structural, OS-enforced
+guarantees -- verified by actually running each attack, not asserting it
+would fail. **2 gaps, stated plainly, not hidden:** CPU-time and
+fork-count containment both rely on an external wall-clock `timeout -s
+KILL` rather than the in-process `RLIMIT_CPU`/`RLIMIT_NPROC` originally
+specified, because those specific rlimits' signal delivery (`SIGXCPU`)
+reliably breaks `unshare --fork`'s own signal handling in this specific
+container environment -- a reproducible, documented finding, not a
+guess. Full scorecard and reasoning: `security-review-sandbox.md`
+Section 7.
+
+**`execution_sandbox.enabled` stays `false`.** Passing these tests
+doesn't authorize enabling real execution against untrusted input on its
+own -- that was true before this implementation existed and remains true
+now, exactly as the review's own Section 5 says it should.
+
+Three real bugs caught before delivery, each a genuine "looked right,
+wasn't" moment worth knowing about: (1) `env={}` passed to the *outer*
+orchestration command wiped `PATH`, breaking `unshare`'s own ability to
+find `chroot` -- fixed by scrubbing environment from *inside* the
+bootstrap instead, exactly where the guarantee needs to hold, not at the
+orchestration layer; (2) `chroot` lives in `/usr/sbin`, not `/usr/bin` --
+a minimal `PATH` had the wrong directory; (3) Python's `subprocess`
+reports a signal-killed process as a *negative* returncode (`-9` for
+SIGKILL), not the shell's `128+signal` convention (`137`) -- the
+timeout-detection logic was checking for the wrong number entirely.
+
+8 new tests (108 total). **Needs `CAP_SYS_ADMIN` to run** -- will not
+pass in an unprivileged CI runner without extra setup; noted here rather
+than discovered by a confusing CI failure later.
