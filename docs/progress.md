@@ -411,6 +411,16 @@ Per explicit request ("pipe [my 3070 Ti] through, so that proxmox-01... use the 
 
 **248/248 tests passing**, verified for real on LXC 104 (240 prior + 8 new in `tests/test_elastic_workers.py`). Full design reasoning in `docs/brain-session-log.md`.
 
+## 40. First live side-by-side comparison across every model-lab candidate, including the elastic GPU worker
+
+Per explicit request to run one adversarial prompt (an object-tracking scenario plus a letter-avoidance constraint) across "every LLM" and report output/tokens/time per model — the first time all eight live candidates (six standard model-lab guests, the one-off OLMo 3 32B comparison guest, and the elastic Windows GPU worker from Section 39) were queried side by side in one exercise. Ad hoc, not a permanent addition to the test suite or evaluation harness — run directly against each `llama-server`'s `/completion` endpoint via `curl`, timed with curl's own `%{time_total}`, token counts read from llama.cpp's real `timings` response block (`tokens_predicted`, `predicted_ms`), not estimated.
+
+**One real, reproducible finding, not a fluke:** all three OLMo 3 variants (7B CPU, 7B GPU, 32B) returned a **genuinely empty completion** on the raw, unframed prompt — the exact same failure mode already root-caused and fixed inside `ask_model()` (Section 38: OLMo 3 needs explicit continuation framing, unlike the other five model families). This ad hoc `curl` harness talks to the endpoints directly, bypassing `ask_model()`'s framing fix entirely, so the bug was still there to hit — confirms the earlier fix is real and necessary, not incidental. Re-ran all three with a `\n\n1.` continuation cue appended to the prompt; all three then answered normally (concise, and the only three of the eight to actually honor the "no letter e" constraint). No code changed — this was a live demonstration of an already-fixed, already-documented bug recurring in a context that doesn't go through the fix, not a new defect.
+
+**Secondary finding:** of the eight, `qwen-coder-1.5b` degenerated into verbatim repetition until it hit the token cap (400) rather than stopping — a real model-quality/stopping-criteria issue on that specific guest, not a harness bug (other guests on the same harness, same `n_predict`, stopped normally well under the cap).
+
+Not committed as a permanent fixture: no new file, no wiring into `evaluation.py`'s adversarial suite. If this kind of multi-model comparison becomes a recurring need, the natural next step is a small script wrapping this exact pattern (`curl` + `timings` block) rather than hand-typing it each time — not built here since it was a one-off request, matching this project's own "don't build speculative infrastructure" discipline.
+
 ### Explicitly not on this list
 Any application-level work beyond what `deployment-playbook.md` promises to deliver (verified SSH access to a correctly-networked guest, not a deployed application).
 
