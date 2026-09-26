@@ -9,7 +9,10 @@ from athenaeum_body.scheduler.work_unit import WorkUnit, RoundResult
 from athenaeum_body.reputability_store import ReputabilityStore
 from .rounds import framing_round, exploration_round, cross_examination_round, synthesis_round
 from .claims import Claim
-from .output_types import RESEARCH, build_research_answer, compose_answer
+from .output_types import (
+    RESEARCH, FORECAST, RECOMMENDATION, build_research_answer, compose_answer,
+    forecast_section_from_claims, recommendation_section_from_claims,
+)
 
 
 def _attach_grades_and_record_outcomes(result: dict, reputability: ReputabilityStore) -> dict:
@@ -72,19 +75,21 @@ def make_deliberation_handler(question: str, question_id: str, reputability: Rep
                 "dissent": result["dissent"],
                 "plural_answers": result["plural_answers"],
             }
-            # Section 5.4: attach the structured output-type section(s) the
-            # framing round classified this question as. Only Research is
-            # buildable purely from today's toy agents' claims (Forecast and
-            # Recommendation need explicit resolution/objective structure no
-            # agent produces yet -- see output_types.py's own builders for
-            # those, used directly once an agent supplies that structure).
+            # Section 5.4: one section per output type the framing round
+            # classified this question as. Forecast and Recommendation are
+            # built only from committed claims carrying that structure;
+            # when none do, the section says so explicitly rather than
+            # being silently left out.
             output_types = state["frame"].get("output_types", [RESEARCH])
             sections = {}
             if RESEARCH in output_types:
                 sections[RESEARCH] = build_research_answer(
                     answer["committed"], answer["dissent"], answer["plural_answers"])
-            answer["output_answer"] = compose_answer(
-                [t for t in output_types if t in sections], sections)
+            if FORECAST in output_types:
+                sections[FORECAST] = forecast_section_from_claims(answer["committed"])
+            if RECOMMENDATION in output_types:
+                sections[RECOMMENDATION] = recommendation_section_from_claims(answer["committed"])
+            answer["output_answer"] = compose_answer(output_types, sections)
             if reputability is not None:
                 answer = _attach_grades_and_record_outcomes(answer, reputability)
             return RoundResult(proposed_writes={"answer": answer}, done=True)

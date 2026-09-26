@@ -255,7 +255,7 @@ Earlier sections each ended with their own "suggested next step," repeatedly sup
 **Remaining Brain gaps (audited 2026-09-25 against `brain-design.md` §13's work breakdown — none are literal stubs, all are specified-but-unbuilt):**
 - [x] ~~Dispute resolution procedure (§6.4, task 9) — including Logic's circular-corroboration/independence check. Only `ReputabilityStore.log_dispute()` storage exists.~~ Done 2026-09-25, `dispute_resolution.py` — see Section 42.
 - [x] ~~Reputability standard versioning (§6.5, task 10).~~ Done 2026-09-26 — see Section 43.
-- [ ] Forecast and Recommendation builders wired into `loop.py` (§5.4, tasks 13–14) — builders exist, no producer.
+- [x] ~~Forecast and Recommendation builders wired into `loop.py` (§5.4, tasks 13–14) — builders exist, no producer.~~ Done 2026-09-26 (Phase A) — see Section 44.
 - [ ] Importance rating (§7.1, task 16) and reopen-with-diff (§7.3, task 18).
 - [ ] Idle-evolution rounds (§3.6).
 - [ ] Cross-agent verification routing, e.g. Mathematics → Engineering sandbox (task 44).
@@ -279,7 +279,7 @@ Earlier sections each ended with their own "suggested next step," repeatedly sup
 
 **Ordered milestones (each is one check-in):**
 1. ~~**§6.5 Reputability standard versioning**~~ — **done 2026-09-26, Section 43** (next up is item 2). Move `_grade_from_tally` into a versioned policy registry (v0 = today's rule, labelled as the seed standard of §6.1). Every `grade_versions` entry records the `standard_version` that produced it. `ReputabilityStore.adopt_standard(policy, rationale)` makes version N+1 govern new decisions only — never rewrites old grade entries. Extend `reevaluation.is_material` with §7.2's fourth trigger (a change of standard version that would alter the grade of a source the answer relied on). Tests: old grades keep their version tag, new outcomes use the new version, and materiality fires only when the re-grade actually differs.
-2. **Forecast/Recommendation producers (§5.4, tasks 13–14).** The builders exist in `output_types.py`; nothing produces their inputs. Add an optional structured payload on `Claim` (e.g. `forecast: {statement, probability, resolution_criterion, resolution_date}`) and have `loop.py` build the section when the frame asks for it *and* a committed claim carries one — otherwise the section explicitly says no agent produced one (honest, not silently omitted). Find one agent that can produce a genuine forecast deterministically before reaching for the model fallback.
+2. ~~**Forecast/Recommendation producers (§5.4, tasks 13–14).**~~ — **done 2026-09-26 as Phase A, Section 44.** The builders exist in `output_types.py`; nothing produces their inputs. Add an optional structured payload on `Claim` (e.g. `forecast: {statement, probability, resolution_criterion, resolution_date}`) and have `loop.py` build the section when the frame asks for it *and* a committed claim carries one — otherwise the section explicitly says no agent produced one (honest, not silently omitted). Find one agent that can produce a genuine forecast deterministically before reaching for the model fallback.
 3. **§7.1 importance rating + §7.3 reopen-with-diff.** Importance from framing (domains routed, output types) plus dependency count. Reopen = re-run the loop with the prior answer as context, `QuestionLedger.append_version`, and an explicit diff (committed claims added/removed, leading-conclusion change, weighted-confidence deltas, cause). Uses `consolidation.expand` first if the prior answer was compacted.
 4. **§3.6 Idle-evolution round.** A work-unit type that samples existing committed claims and re-runs cross-examination against current grades; is the natural caller for `resolve_dispute` (§42), consolidation `record_survival`, and `domain_fidelity.needs_review`. Feeds materiality from item 3.
 5. **Task 44 cross-agent verification routing.** Mathematics's formalizable claims (primality) routed to `MasterOfEngineering.verify_claim` so a sandbox run corroborates/challenges them. Sandbox stays behind its existing config gate.
@@ -289,6 +289,24 @@ Earlier sections each ended with their own "suggested next step," repeatedly sup
 9. **Remaining adversarial cases**, added as their mechanisms land: retroactive history rewriting (after 1), stale framing (after 3/4), silent authority creep (Logic never issues a first-order claim; checkable now), unfalsifiable-claims-as-physics, overconfidence drift (calibration store), lossy compaction, silent style drift, unjustified human-input skew, uncommitted canonical writes (checkable now). Aim to add the two "checkable now" ones opportunistically in milestone 1's session if it's small.
 
 **Infra items above in this section are untouched this session** (backup timer `OnBootSec` decision, auto-update mechanism) — still the owner's call, not Brain work.
+
+### Approved autonomous batch (2026-09-26)
+
+The owner approved this batch to run unattended, in whatever order works best, **committing and pushing to `master` at the end of every phase**. When the batch is done: run an end-to-end test, plan the next batch, and keep going. Keep this file, `known-bugs.md`, and all other docs current as each phase lands.
+
+| Phase | Scope | Status |
+|---|---|---|
+| A | Forecast/Recommendation producers (§5.4) — plan item 2 | **done** — §44 |
+| B | Importance rating + reopen-with-diff (§7.1, §7.3) — plan item 3 | open |
+| C | Idle-evolution round (§3.6) — plan item 4; standard amendments only *proposed* to the human checkpoint, never auto-adopted | open |
+| D | Cross-agent verification routing (task 44) — plan item 5; respects the existing sandbox gate | open |
+| E | Model admission gate + fitness weighting at synthesis (§6.7) — plan item 6 | open |
+| F | Domain Fidelity re-grounding/escalation (§2.4.3) — plan item 7 | open |
+| G | Audit sampling (§9.4–9.5) — plan item 8 | open |
+| H | Adversarial suite toward 15/15 (§8, §9.2) — plan item 9 | open |
+| I | *(optional)* README body refresh — **draft only; never pushed without the owner's review.** The top notice and LICENSE are never touched. | open |
+
+**Stop-and-wait conditions (from the approval):** a failing test whose root cause is unclear; the design is silent on a hard-to-reverse choice (e.g. persisted-state shape); an existing test's *meaning* (not just shape) would have to change; the Proxmox host goes down. **Never:** alter LICENSE/README notice, create/modify/destroy Proxmox guests, enable `execution_sandbox`, touch credentials or paid services, or write tests that require the GPU worker.
 
 - [ ] `execution_sandbox.enabled` stays `false` — not actionable right now (the CPU-time gap is a confirmed environment limitation on this specific kernel, not a bug to fix), but re-run `scripts/preflight_check.py` if this project is ever deployed to a *different* host, per `security-review-sandbox.md` Section 7.3/7.4.
 
@@ -494,6 +512,20 @@ One existing expectation changed: `test_content_integrity.py` pinned `current_gr
 **Not done here:** nothing yet *proposes* amendments — §6.5's "idle-evolution review re-examines the standard for internal consistency" needs the idle-evolution round (next-session plan item 4). `GRADE_WEIGHT` (synthesis, §41) is not part of the versioned standard; if it should be, that's a small follow-up.
 
 **286 passed, 1 skipped** on LXC 104 (273 prior + 13 new in `tests/test_standard_versioning.py`). Design reasoning in `docs/brain-session-log.md`.
+
+## 44. Forecast and Recommendation producers (§5.4) — Phase A, plus a real Physics parsing bug
+
+**Forecast producer (Physics).** For a forecast question ("will …") that states a time bound ("within 3 seconds", "in under 2.5 s", "more than 4 seconds"), `MasterOfPhysics` now issues, alongside its research claim, a forecast claim carrying a full `forecast` payload: statement, probability, resolution criterion (`measured time from release to ground contact <= 3s`), resolution source, deadline, the computed sensitivity (e.g. "resolves NO if air resistance adds more than 0.98s to the 2.02s vacuum fall time"), and its assumptions. The probability comes from how much room the vacuum fall time leaves for air resistance — which can only lengthen a fall — through an explicitly-labelled placeholder band table (`_SLACK_BANDS`). It lives only in the payload; the claim's `confidence` stays Physics's confidence in its own computation (§5.4's category error, tested).
+
+**Recommendation producer (Mathematics/Engineering).** Their rounding claims now carry `recommendation_option` — the option, the objective it serves (schoolbook convention vs. no systematic bias in sums), and its reversibility. `output_types.recommendation_section_from_claims` builds the section: when the options serve different objectives it chooses **none**, stating that which objective takes priority is the decision-maker's value judgment (§4.3, no manufactured winner); when there's one objective, every option it covers is chosen.
+
+**Loop wiring.** `loop.py` now emits a section for *every* output type the frame asks for. Forecast/Recommendation sections are built only from committed claims (a challenged forecast is dissent, not a forecast — tested); when nothing carries the structure, the section is an explicit `{"available": false, "reason": ...}` (e.g. "will it rain tomorrow?") instead of being silently dropped, which is what happened before.
+
+**Real bug found and fixed (known-bugs.md #21):** Physics took every bare number as a drop height — "did the berlin wall fall in 1989?" committed a 1989 m free-fall claim, and a forecast's "within 3 seconds" became a 3 m drop. Heights now need a length unit or a "from N" role. Three related weaknesses were reproduced but deliberately not fixed here and are now in known-bugs.md's new "Open known limitations" list: keyword routing over-reach (Physics is still *routed* Berlin Wall questions), Mathematics checking primality of any bare integer, and Engineering typing its in-process rounding as `executable` (deferred to Phase D).
+
+`schemas.md` brought current (it had drifted): Claim table gains `argument`, `output_type_relevance`, `reputability_factor`, `weighted_confidence`, `forecast`, `recommendation_option`, and an accurate `serving_model` note; Provenance `metadata.cites`; Reputability Grade's stored `decided_under`/`cause` and `current_grade()` projection; new Reputability Standard table.
+
+**310 passed, 1 skipped** on LXC 104 (286 prior + 24 new in `tests/test_output_producers.py`, parametrized). Design reasoning in `docs/brain-session-log.md`.
 
 ### Explicitly not on this list
 Any application-level work beyond what `deployment-playbook.md` promises to deliver (verified SSH access to a correctly-networked guest, not a deployed application).

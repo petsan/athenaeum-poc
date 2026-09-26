@@ -114,6 +114,11 @@ class MasterOfMathematics:
                     defeat_condition="a different result under the round-half-up rule",
                     jurisdiction_check=True,
                     supporting_provenance=["computed:decimal.ROUND_HALF_UP"],
+                    recommendation_option={
+                        "option": f"round half up ({token} -> {rounded})",
+                        "serves_objective": "matching the classical schoolbook convention most readers expect",
+                        "reversibility": "fully reversible while the unrounded values are kept",
+                    },
                 ))
         return claims
 
@@ -240,6 +245,11 @@ class MasterOfEngineering:
                 defeat_condition="a different result under decimal.ROUND_HALF_EVEN",
                 jurisdiction_check=True,
                 supporting_provenance=["computed:decimal.ROUND_HALF_EVEN"],
+                recommendation_option={
+                    "option": f"round half to even ({token} -> {rounded})",
+                    "serves_objective": "avoiding systematic upward bias when many rounded values are summed (the IEEE-754 default)",
+                    "reversibility": "fully reversible while the unrounded values are kept",
+                },
             ))
         return claims
 
@@ -322,29 +332,105 @@ class MasterOfPhysics:
                 claims = [fallback]
         return claims
 
+    # A number is a drop height only when it carries a length unit ("20m",
+    # "20 meters") or directly follows "from" without a time unit. Bare
+    # numbers used to be taken as heights, so "did the berlin wall fall in
+    # 1989?" produced a 1989 m free-fall claim (known-bugs.md #21).
+    _HEIGHT_WITH_UNIT = re.compile(r"(?<![\d.])(\d+(?:\.\d+)?)\s*(?:m|meters?|metres?)\b(?!/)")
+    _HEIGHT_AFTER_FROM = re.compile(
+        r"\bfrom\s+(\d+(?:\.\d+)?)(?![\w.])"  # whole number only: '19.6m' must not yield '19'
+        r"(?!\s*(?:s|secs?|seconds?|min|minutes?|hours?|%|mm|cm|km)\b)")
+    # "within 3 seconds", "in under 2.5 s", "in more than 4 seconds", ...
+    _TIME_BOUND = re.compile(
+        r"\b(within|in under|in less than|under|less than|in more than|more than|longer than|at least)\s+"
+        r"(\d+(?:\.\d+)?)\s*(?:s|secs?|seconds?)\b")
+    _AT_MOST = ("within", "in under", "in less than", "under", "less than")
+
+    def _heights(self, question: str) -> list[str]:
+        q = question.lower()
+        found = [m.group(1) for m in self._HEIGHT_WITH_UNIT.finditer(q)]
+        found += [m.group(1) for m in self._HEIGHT_AFTER_FROM.finditer(q)]
+        return [h for h in dict.fromkeys(found) if float(h) > 0]
+
     def _explore_deterministic(self, question: str, question_id: str) -> list[Claim]:
         if not any(k in question.lower() for k in ("fall", "falling", "drop")):
             return []
-        import re
         claims = []
-        for token in question.replace("?", "").split():
-            m = re.match(r"^(\d+(?:\.\d+)?)m?$", token)
-            if not m:
-                continue
-            h = float(m.group(1))
-            if h <= 0:
-                continue
+        for height in self._heights(question):
+            h = float(height)
             t = (2 * h / self._G) ** 0.5
             claims.append(Claim(
                 question_id=question_id, round=1, issuing_agent=self.name,
-                subject=m.group(1),
-                statement=f"an object falling from {m.group(1)}m takes approximately {t:.2f}s to hit the ground (v0=0, g={self._G} m/s^2)",
+                subject=height,
+                statement=f"an object falling from {height}m takes approximately {t:.2f}s to hit the ground (v0=0, g={self._G} m/s^2)",
                 claim_type="empirical", confidence=0.95,
                 defeat_condition=f"a differing result under d = 0.5 * g * t^2 with g={self._G} m/s^2, or a measured fall time that disagrees beyond air-resistance-scale tolerance",
                 jurisdiction_check=True,
                 supporting_provenance=["computed:kinematics_free_fall"],
             ))
+            forecast = self._forecast(question, question_id, height, t)
+            if forecast is not None:
+                claims.append(forecast)
         return claims
+
+    # Probability that a drop resolves the forecast's way, from how much
+    # room the vacuum fall time leaves for air resistance -- which can only
+    # LENGTHEN a fall, never shorten it. Explicitly a placeholder policy,
+    # same status as GRADE_WEIGHT: the direction of each step is physics,
+    # the exact numbers are not.
+    _SLACK_BANDS = ((0.25, 0.9), (0.10, 0.75), (0.0, 0.5))
+
+    def _forecast(self, question: str, question_id: str, height: str, t: float) -> Claim | None:
+        """Section 5.4: a genuine Forecast, only when the question asks for
+        one ('will ...') and states a time bound to resolve against. The
+        probability lives in the forecast payload, never in `confidence`
+        (which stays this agent's confidence in its own computation)."""
+        from .output_types import FORECAST, classify_output_type
+        if FORECAST not in classify_output_type(question):
+            return None
+        m = self._TIME_BOUND.search(question.lower())
+        if m is None:
+            return None
+        phrase, bound = m.group(1), float(m.group(2))
+        at_most = phrase in self._AT_MOST
+        slack = (bound - t) / t  # >0: the vacuum fall finishes before the bound
+        if at_most:
+            event = f"lands within {m.group(2)}s"
+            if slack < 0:
+                probability = 0.02
+                sensitivity = (f"the {t:.2f}s vacuum fall time already exceeds {m.group(2)}s and air "
+                               "resistance only lengthens it; resolves YES only if the height or g is wrong")
+            else:
+                probability = next(p for floor, p in self._SLACK_BANDS if slack >= floor)
+                sensitivity = f"resolves NO if air resistance adds more than {bound - t:.2f}s to the {t:.2f}s vacuum fall time"
+        else:
+            event = f"takes more than {m.group(2)}s to land"
+            if slack <= 0:
+                probability = 0.95
+                sensitivity = (f"the {t:.2f}s vacuum fall time already meets the bound and air resistance "
+                               "only lengthens it; resolves NO only if the height or g is wrong")
+            else:
+                probability = round(next(1 - p for floor, p in self._SLACK_BANDS if slack >= floor), 2)
+                sensitivity = f"resolves YES only if air resistance adds at least {bound - t:.2f}s to the {t:.2f}s vacuum fall time"
+        statement = f"forecast: an object dropped from {height}m {event} (probability {probability:.2f})"
+        return Claim(
+            question_id=question_id, round=1, issuing_agent=self.name,
+            statement=statement, claim_type="empirical", confidence=0.95,
+            defeat_condition="a timed drop from this height resolving the other way",
+            jurisdiction_check=True,
+            supporting_provenance=["computed:kinematics_free_fall"],
+            output_type_relevance=[FORECAST],
+            forecast={
+                "statement": f"an object dropped from rest at {height}m {event}",
+                "probability": probability,
+                "resolution_criterion": f"measured time from release (v0=0) to ground contact {'<=' if at_most else '>'} {m.group(2)}s",
+                "resolution_source": "a direct timing measurement of the drop",
+                "deadline": "when the drop is performed",
+                "sensitivity": sensitivity,
+                "assumptions": ["released from rest", f"g = {self._G} m/s^2",
+                                "air resistance not modelled (it can only lengthen the fall)"],
+            },
+        )
 
     def cross_examine(self, claim: Claim, question_id: str) -> Claim | None:
         if claim.issuing_agent == self.name or claim.claim_type != "empirical":

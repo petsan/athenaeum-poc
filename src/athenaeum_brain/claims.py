@@ -39,6 +39,12 @@ class Claim:
                                      # using grades AT TIME OF USE -- None if unweighted
     weighted_confidence: float = None  # confidence * reputability_factor; `confidence`
                                      # itself stays the issuing agent's own, untouched value
+    forecast: dict = None            # Section 5.4: keyword args for output_types.
+                                     # build_forecast_answer when this claim IS a forecast;
+                                     # its probability is kept here, never in `confidence`
+    recommendation_option: dict = None  # Section 5.4: {'option', 'serves_objective',
+                                     # 'reversibility'} when this claim's conclusion is one
+                                     # course of action a Recommendation can weigh
     claim_id: str = field(default_factory=next_claim_id)
 
     def to_dict(self) -> dict:

@@ -99,6 +99,7 @@ These aren't bugs in the sense of "code that was wrong" — they're incorrect as
 **What happened:** A test called `MasterOfMathematics().cross_examine(claim, ...)` where `claim.issuing_agent == "Mathematics"` — but `cross_examine` correctly, deliberately returns `None` immediately when an agent is asked to examine its own claim (Section 3.3's design: agents don't cross-talk with themselves). The test's assumption was wrong, not the code.
 **Fix:** Construct the test claim with a different `issuing_agent` so the cross-examination path actually runs.
 **Lesson:** When a test fails, check whether the *code* is wrong or the *test's setup* violates an intentional invariant the code correctly enforces — don't assume test failure always means implementation bug.
+**Recurred 2026-09-25** (`tests/test_dispute_resolution.py`): a test expected Theology to flag an overconfident `traditional` claim that the test had issued *as Theology*. Same invariant, different agent. Caught on the first run and fixed the same way. Because it recurred, the habit to build is: whenever a test fixture sets `issuing_agent`, check it isn't the agent whose `cross_examine` the test is exercising.
 
 ### 13. Test read the wrong level of nested checkpoint state on resume
 **What happened:** A resume test did `runner2 = SingleUnitRunner(log2, shared_state=state)` where `state = log2.read_latest()` — but `read_latest()` returns the *whole* checkpoint object (`{"units": {...}, "shared_state": {...}}`), not the `shared_state` sub-object directly.
@@ -109,6 +110,26 @@ These aren't bugs in the sense of "code that was wrong" — they're incorrect as
 **What happened:** A test expected a source to reach `"rejected"` after 1 corroboration + 3 challenges, but the policy's actual rule requires **zero** corroborations before "rejected" — the test's own expectation was wrong, not the grading logic.
 **Fix:** Rewrote the test scenario to have 0 corroborations before accumulating challenges.
 **Lesson:** When writing a test against a policy you just wrote yourself, re-read the policy's actual conditions rather than writing the test from memory/intuition of what you meant it to do — the two can silently diverge.
+
+---
+
+## Brain reasoning bugs (wrong claims from real agent logic)
+
+### 21. Physics treated every bare number in a question as a drop height
+**What happened:** `MasterOfPhysics._explore_deterministic` matched any token of the form `N` or `Nm` as a height. "did the berlin wall fall in 1989?" (routed to Physics by the keyword "fall") produced the committed claim *"an object falling from 1989m takes approximately 20.15s to hit the ground"*; "is 17 prime and does a ball fall 4.9m in 1 second?" produced free-fall claims for 17 m and 1 m as well as 4.9 m; a forecast question's time bound ("within 3 seconds") became a 3 m drop. Found 2026-09-26 while designing Phase A's forecast parser — first noticed as three Physics claims in a Section 41 probe, then reproduced directly.
+**Root cause:** The parser only asked "is this a number?", never "is this number a length?". Unit-less numbers are years, counts, candidate primes and durations far more often than heights.
+**Fix:** A number is a height only when it carries a length unit (`20m`, `20 meters`, not `20 m/s`) or directly follows "from" with no other unit; the "from" match requires the whole number, so `19.6m` can't also yield `19`. Seven parametrized cases in `tests/test_output_producers.py` pin each shape.
+**Lesson:** When extracting a quantity from free text, require the thing that makes it *that* quantity (its unit, or its grammatical role) — "it's numeric" is never enough. Every other numeric parser in `agents.py` has the same weakness (see the open limitation below for Mathematics).
+
+---
+
+## Open known limitations (found, not yet fixed)
+
+Real, reproduced behaviours that are wrong or weak but deliberately not fixed in the change that found them — kept here so they aren't rediscovered from scratch. Move an entry up into a numbered bug when it's fixed.
+
+- **Keyword routing over-reaches.** Physics is routed any question containing "fall" or "drop", including "the fall of the Berlin Wall". Since #21 it no longer makes a *deterministic* claim there, but it is still routed, so with a live model its fallback path can issue a Physics claim about a political event. Keyword jurisdiction is the POC's stated simplification; Domain Fidelity's overreach rate (§2.4) is the mechanism meant to surface this. (Found 2026-09-26.)
+- **Mathematics checks primality of any bare integer** in a question it's routed to — "is 17 prime and does a ball fall 4.9m in 1 second?" also commits "1 is not prime". Same root cause class as #21. (Found 2026-09-26.)
+- **Engineering's rounding claims are typed `executable`** although they come from an in-process `decimal` computation, not a sandbox run. The design reserves `executable` for real sandboxed execution (brain-design.md §3.5, §8 "unverified execution claims"), and `model_backed_reasoning.py` already follows that rule. Changing it alters the Engineering-vs-Mathematics plural-answer tests' fixtures, so it belongs with the cross-agent verification work (Phase D) where executable claims get re-examined. (Found 2026-09-26.)
 
 ---
 
@@ -162,7 +183,8 @@ Before writing similar code again in this project:
 - **Any new script meant to run directly on the Proxmox host** (not a guest): re-read entry 19. Don't assume `jq`/`curl`/anything beyond a stock install is present — that assumption is only safe for the guest-side tooling this project deliberately installed it on.
 - **Any new content-addressed or checkpoint code:** re-read entries 8–9. Be explicit about what's hashed vs. stored vs. derived, and make sure "verified" checks everything a caller would assume it checks.
 - **Any new API/serialization boundary:** re-read entry 10. Check the actual runtime type after a round-trip.
-- **Any new test:** re-read entries 11–14 before assuming a failing test means the implementation is wrong.
+- **Any new test:** re-read entries 11–14 before assuming a failing test means the implementation is wrong (entry 12 has recurred once already).
+- **Any new parser that pulls numbers or quantities out of question text:** re-read entry 21 and the open limitations list — require a unit or grammatical role, never just "it's numeric".
 - **Any new demo/narrated script:** re-read entry 16 before appending to it.
 - **Any security or reliability claim in a design doc:** re-read entry 15 before writing "both X and Y share a cause" — prove it, don't infer it.
 

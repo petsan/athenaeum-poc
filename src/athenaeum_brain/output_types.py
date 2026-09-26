@@ -38,6 +38,20 @@ def classify_output_type(question: str) -> list[str]:
     return types
 
 
+def _evidence_weight(c: dict) -> float:
+    """weighted_confidence when synthesis set it (Section 4.1), otherwise
+    the issuing agent's raw confidence."""
+    w = c.get("weighted_confidence")
+    return c.get("confidence", 0.0) if w is None else w
+
+
+def unavailable_section(output_type: str, reason: str) -> dict:
+    """Section 5.4: when the frame asks for an output type no committed
+    claim can support, the answer says so explicitly -- never a silently
+    missing section, and never a section filled with guessed structure."""
+    return {"output_type": output_type, "available": False, "reason": reason}
+
+
 def build_research_answer(committed: list[dict], dissent: list[dict], plural_answers: list[dict]) -> dict:
     """Section 5.2/5.4: leading conclusion, alternatives, dissent, citations.
     When the underlying claims are jurisdictionally plural (Section 4.2),
@@ -50,10 +64,7 @@ def build_research_answer(committed: list[dict], dissent: list[dict], plural_ans
     and every other committed claim is kept as supporting, never dropped."""
     leading, supporting = None, []
     if committed and not plural_answers:
-        def weight(c):
-            w = c.get("weighted_confidence")
-            return c.get("confidence", 0.0) if w is None else w
-        leading = max(committed, key=weight)  # first-seen wins ties
+        leading = max(committed, key=_evidence_weight)  # first-seen wins ties
         supporting = [c for c in committed if c is not leading]
     citations = sorted({src for c in committed for src in c.get("supporting_provenance", [])})
     return {
@@ -136,6 +147,63 @@ def build_recommendation_answer(*, decision_maker: str, objectives: list[str], c
         "review_trigger": review_trigger,
         "value_laden": True,
     }
+
+
+def forecast_section_from_claims(committed: list[dict]) -> dict:
+    """Builds the Forecast section from committed claims that carry a
+    `forecast` payload (Section 5.4). Only committed claims count -- a
+    forecast that failed cross-examination is dissent, not a forecast.
+    The highest-evidence-weight one leads; any others are kept, never
+    dropped."""
+    carriers = [c for c in committed if c.get("forecast")]
+    if not carriers:
+        return unavailable_section(
+            FORECAST, "no committed claim carried a forecast's required structure "
+                      "(resolution criterion, source, deadline, sensitivity)")
+    carriers.sort(key=_evidence_weight, reverse=True)
+    lead, rest = carriers[0], carriers[1:]
+    section = build_forecast_answer(**lead["forecast"])
+    section.update({
+        "available": True,
+        "issuing_agent": lead["issuing_agent"],
+        "claim_id": lead["claim_id"],
+        "additional_forecasts": [
+            {**build_forecast_answer(**c["forecast"]), "issuing_agent": c["issuing_agent"],
+             "claim_id": c["claim_id"]} for c in rest],
+    })
+    return section
+
+
+def recommendation_section_from_claims(committed: list[dict]) -> dict:
+    """Builds the Recommendation section from committed claims that each
+    describe one course of action (`recommendation_option`, Section 5.4).
+    When the options serve different objectives, no option is chosen:
+    which objective matters more is the decision-maker's value judgment,
+    and picking one here would manufacture a winner exactly as Section 4.3
+    forbids for plural answers. A single available option is chosen, with
+    its objective stated."""
+    carriers = [c for c in committed if c.get("recommendation_option")]
+    if not carriers:
+        return unavailable_section(
+            RECOMMENDATION, "no committed claim described a course of action to weigh "
+                            "(option, the objective it serves, and its reversibility)")
+    options = [{**c["recommendation_option"], "issuing_agent": c["issuing_agent"],
+                "claim_id": c["claim_id"]} for c in carriers]
+    objectives = list(dict.fromkeys(o["serves_objective"] for o in options))
+    if len(objectives) == 1:
+        # One objective: every option is the same policy applied to a
+        # different subject, so all of them are chosen, none dropped.
+        chosen = "; ".join(dict.fromkeys(o["option"] for o in options))
+    else:
+        chosen = ("none chosen -- the options serve different objectives, and which objective "
+                  "takes priority is the decision-maker's value judgment (Section 4.3)")
+    reversibility = "; ".join(dict.fromkeys(o["reversibility"] for o in options))
+    section = build_recommendation_answer(
+        decision_maker="the requester", objectives=objectives, constraints=[],
+        chosen_option=chosen, alternatives=options, reversibility=reversibility,
+        review_trigger="the decision-maker states which objective takes priority, or a new option is proposed")
+    section["available"] = True
+    return section
 
 
 def compose_answer(output_types: list[str], sections: dict) -> dict:

@@ -751,6 +751,55 @@ idle-evolution review (§3.6), next-session plan item 4.
 
 ---
 
+## 2026-09-26 — Forecast and Recommendation producers (§5.4, Phase A): design choices
+
+**Q: Why is Physics the forecast producer, and why is it a genuine
+forecast rather than a research claim in disguise?**
+
+A dropped object's fall time is one of the few questions the toy agents
+can forecast without guessing: kinematics gives the vacuum fall time
+exactly, and the one ignored effect — air resistance — has a known
+*direction* (it can only lengthen the fall). So the forecast states a
+resolvable event (measured time vs. a stated bound), a probability, and
+a computed sensitivity naming exactly how much drag would flip it. That
+meets every field `build_forecast_answer` requires without inventing any.
+The probability bands are a placeholder; their ordering is physics.
+
+**Q: Why keep the probability out of `confidence`?**
+
+§5.4's named category error is conflating forecast probability with
+research confidence. The forecast claim's `confidence` (0.95) is
+Physics's confidence that its computation is right; the event
+probability (0.02 for a 45 m drop within 3 s) is a different quantity
+and lives only in the `forecast` payload. Tested directly.
+
+**Q: Why does the rounding Recommendation choose nothing?**
+
+The two options serve different objectives — matching the schoolbook
+convention vs. avoiding systematic bias when summing. Which matters more
+is a value judgment that belongs to whoever is deciding, not to any
+agent; picking one would manufacture a winner exactly as §4.3 forbids
+for plural answers. The section still does the useful work: it names
+both options, the objective each serves, their reversibility, and the
+trigger for revisiting. With one shared objective, every option it
+covers is chosen, since those are the same policy applied to different
+values rather than competing alternatives.
+
+**Q: Why emit an explicit "unavailable" section instead of omitting it?**
+
+Before this change a forecast question produced an answer with *no*
+forecast section and no explanation — indistinguishable from a bug.
+§5.4 classifies the question as asking for a forecast; the honest answer
+when no agent can produce one is to say so, with the reason.
+
+**Real bug on the way in (known-bugs.md #21):** designing the time-bound
+parser exposed that Physics read every bare number as a height, so "did
+the berlin wall fall in 1989?" committed a 1989 m free-fall claim.
+Fixed by requiring a length unit or a "from N" role; three related
+weaknesses are logged as open limitations rather than fixed in passing.
+
+---
+
 *See `docs/progress.md` §26 for the checklist this log's entries track
 against, and `docs/infra-topology.md` for the infrastructure-side design
 decisions made in the same planning conversation.*

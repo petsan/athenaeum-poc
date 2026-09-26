@@ -24,7 +24,7 @@ Concrete shapes for `body-design.md` Section 5.1's five stores and `brain-design
 |---|---|---|---|
 | `id` | str | yes | |
 | `content_hash` | str | yes | content-address (`sha256:...`) of the source |
-| `metadata` | dict | no | fetch date, license, etc. |
+| `metadata` | dict | no | `license`; optional `cites` (list of source ids this one cites or derives from, curator-supplied — read by `dispute_resolution.check_independence`, Section 6.4.2). `cites` is present only when non-empty. |
 
 ## Reputability Grade
 | Field | Type | Required | Notes |
@@ -33,7 +33,16 @@ Concrete shapes for `body-design.md` Section 5.1's five stores and `brain-design
 | `subject_type` | str | yes | `"source"` \| `"human"` \| `"model"` |
 | `grade` | str | yes | e.g. "foundational", "contested", "rejected" |
 | `rationale` | str | no | |
-| `version` | int | yes | standard version this grade was issued under (Section 6.5) |
+| `version` | int | yes | index of this decision in the subject's own grade history (increments only when the grade actually changes) |
+
+As implemented in `reputability_store.py` (Section 6.5, 2026-09-26): each stored grade entry also carries `decided_under` (int — the standard version in force when it was decided) and `cause` (`"evidence"` \| `"standard_amendment"`); entries written before versioning existed read back as `decided_under: 0, cause: "evidence"`. `current_grade()` returns the projection `{grade, version, standard_version}`, where `standard_version` is the standard in force now — this is what answers snapshot as `source_grades_at_use`.
+
+## Reputability Standard (Section 6.5)
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `version` | int | yes | 0 is the seed standard (Section 6.1); strictly increasing; the list never shrinks |
+| `params` | dict | yes | exactly `rejected_min_challenges`, `foundational_min_corroborations` (positive ints) |
+| `rationale` | str | yes | non-empty; why this version was adopted |
 
 ## Question Ledger Entry
 | Field | Type | Required | Notes |
@@ -61,6 +70,12 @@ Concrete shapes for `body-design.md` Section 5.1's five stores and `brain-design
 | `supporting_provenance` | list[str] | no | |
 | `status` | str | yes | `proposed\|committed` (Section 4.4) |
 | `subject` | str | no | conflict-grouping key (see `rounds.py`; still a simplification, Section 4.2) |
-| `serving_model` | str | no | which local model produced this (Section 6.7) — not yet wired into the POC's deterministic agents |
+| `argument` | dict | no | `{premises: [...], conclusion: str}` for Logic's validity check (Section 2.2) |
+| `output_type_relevance` | list[str] | no | which of `research\|forecast\|recommendation` the claim bears on |
+| `serving_model` | str | no | which local model produced this (Section 6.7); set on Engineering's sandbox-verified claims and on every model-backed fallback claim, `None` for purely deterministic claims |
+| `reputability_factor` | float | no | set only by `synthesis_round` (Section 4.1): weakest-link grade weight across `supporting_provenance`, grades at time of use |
+| `weighted_confidence` | float | no | `confidence × reputability_factor`; `confidence` itself is never modified |
+| `forecast` | dict | no | Section 5.4: keyword args for `output_types.build_forecast_answer` (`statement, probability, resolution_criterion, resolution_source, deadline, sensitivity, assumptions`) when the claim *is* a forecast. The probability lives only here, never in `confidence`. |
+| `recommendation_option` | dict | no | Section 5.4: `{option, serves_objective, reversibility}` when the claim's conclusion is one course of action a Recommendation can weigh |
 
 **Not yet specified:** the Model Registry entry shape beyond what `model_serving.py` implements (name, vram_gb, capabilities, weights_ref) — fine for now, revisit once a real backend is integrated.
