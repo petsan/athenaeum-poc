@@ -338,7 +338,21 @@ Same rules and stop conditions. Each item is a real gap found while building bat
 | P | **Automatic compaction and de-compaction in idle evolution** — §10.3 says compaction is *performed by* an idle-evolution process, but idle cycles only record survival; §10.5 requires expanding a compacted claim before resolving a challenge to it, which idle disputes don't do yet. | **done** — §61, known-bugs #29 |
 | Q | **Maintainer restart recovery** — its queue is in memory (§56's stated limitation), so a restart strands queued or mid-way questions. Persist the unit registry in the Maintainer's own checkpoint and resubmit on start; deliberations resume from their last completed round. | **done** — §62 |
 | R | **Refresh the narrated demo** (`demo_brain.py`) to show batches 1–2 end to end; mind known-bugs #16 (the final-print trap). | **done** — §63 |
-| — | End-to-end test extended, then plan batch 4. | open |
+| — | End-to-end test extended, then plan batch 4. | **done** — §64 |
+
+**Batch 3 (O–R) complete 2026-09-26.**
+
+### Batch 4 (self-planned 2026-09-26)
+
+Same rules and stop conditions. Again, each item is a gap found while building, not new scope.
+
+| Phase | Scope | Status |
+|---|---|---|
+| S | **Feed calibration (§5.3, §9.3)** — the per-agent calibration store — "the accountability mechanism" — is never written outside tests. Idle re-examination is exactly when a claim's fate becomes known: record survived claims as verified and challenged/unsupported ones as overturned, per agent at the confidence it claimed; the Maintainer's audits then report `calibration_drift` per agent. | open |
+| T | **Grade weights into the versioned standard** — synthesis's `GRADE_WEIGHT` (§41) sits outside the reputability standard §43 versioned, so it can't evolve under the same review; move it into the standard's params with v0 = today's values. | open |
+| U | **Ingestion feeds the Belief Graph** — ingested sources and their `cites` become `source` nodes and `cites` edges, so dispute resolution and consolidation can read citation data from the graph instead of a hand-passed map. | open |
+| V | **Mobile client: async mode and history** — the client only knows the synchronous call; let it submit async, poll status, and show versions/diffs and maintenance activity. | open |
+| — | End-to-end test extended; README draft refreshed (local, still unpushed); plan batch 5. | open |
 
 - [ ] `execution_sandbox.enabled` stays `false` — not actionable right now (the CPU-time gap is a confirmed environment limitation on this specific kernel, not a bug to fix), but re-run `scripts/preflight_check.py` if this project is ever deployed to a *different* host, per `security-review-sandbox.md` Section 7.3/7.4.
 
@@ -783,6 +797,12 @@ Tested by throwing a Maintainer away mid-run (the crash) and building a new one 
 Known-bugs #16 (the final-banner trap, hit twice before) was respected — the existing banner was moved after the new steps, not left in place — and is now **guarded by a test**: `tests/test_demo_brain.py` runs the whole demo and asserts a clean exit, exactly one final banner at the very end, and 16/16.
 
 **Full live suite: 500 passed, 1 skipped** (GPU worker offline) — fully green, the flaky assertion passing this time. 501 collected.
+
+## 64. End-to-end test over batch 3
+
+`tests/test_end_to_end.py::test_lifecycle_across_a_restart_with_self_compaction`: a physical question routes to Physics alone (whole-word matching); a Maintainer is thrown away with two questions in flight and a new one recovers both, answering each exactly once; three more questions each bring an idle cycle, by the third of which idle evolution has compacted the surviving claims on its own; the consolidation audit passes over everything it compacted; audits ran every cycle. With the batch-1 and batch-2 scenarios, the end-to-end file now exercises all 22 phases together.
+
+**Full live suite: 501 passed, 1 skipped.** 502 collected.
 
 ### Explicitly not on this list
 Any application-level work beyond what `deployment-playbook.md` promises to deliver (verified SSH access to a correctly-networked guest, not a deployed application).

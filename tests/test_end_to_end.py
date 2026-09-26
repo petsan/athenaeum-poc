@@ -238,3 +238,48 @@ def test_full_lifecycle_through_the_maintainer(system):
     for qid in list(batch) + ["round-b"]:
         assert check_integrity_gates(s.ledger.get(qid).versions[-1])["passed"], qid
     assert run_adversarial_suite()["passed"] == 16
+
+
+# ---------------------------------------------------------------------------
+# Batch 3 (O-R): whole-word routing, idle-driven compaction, and a
+# Maintainer that is killed and replaced part-way through.
+# ---------------------------------------------------------------------------
+
+def test_lifecycle_across_a_restart_with_self_compaction(system):
+    from athenaeum_brain.maintenance import Maintainer, MaintenancePolicy
+    from athenaeum_brain.idle_evolution import IdleContext
+    from athenaeum_brain.rounds import framing_round
+
+    s = system
+    idle = IdleContext(ledger=s.ledger, reputability=s.rep, consolidation=s.cons, fidelity=s.fid,
+                       checkpoints=s.cp, consolidation_min_cycles=3, consolidation_min_sources=1)
+    make = lambda: Maintainer(idle=idle, log_for=s.log, audits=s.audits,
+                              policy=MaintenancePolicy(idle_every_questions=1, audit_every_cycles=1))
+
+    # Phase O: routing is by whole words and physical context
+    assert framing_round("does a ball fall faster than a feather?", "x")["routed_agents"] == ["Physics"]
+
+    # Phase Q: killed with work in flight, then replaced
+    m = make()
+    m.submit_question("p1", "is 17 prime?")
+    m.submit_question("p2", "how long does it take to fall 20 meters?")
+    m.tick(); m.tick(); m.tick()
+    del m
+    m = make()
+    assert sorted(m.recovered) == ["p1", "p2"]
+    m.run()
+    assert [c["statement"] for c in s.ledger.get("p1").versions[0]["committed"]] == ["17 is prime"]
+    assert len(s.ledger.get("p1").versions) == 1 and len(s.ledger.get("p2").versions) == 1
+
+    # Phase P: each new question brings another idle cycle; by the third,
+    # the surviving claims are compacted by idle evolution itself
+    for i in range(3):
+        m.submit_question(f"more{i}", f"is {23 + 6 * i} prime?")
+        m.run()
+    assert s.cons.get(PRIME_KEY)["tier"] == "C"
+    compacted = [k for k, e in s.cons.entries().items() if e["tier"] == "C"]
+    assert consolidation_audit(s.cons, audit_id="b3", min_cycles=3, min_sources=1)["failed"] == []
+    assert len(compacted) >= 2  # the fall-time claim too
+
+    # audits ran every cycle; the demo (Phase R) has its own test
+    assert len(s.audits.history("consolidation")) >= 3
