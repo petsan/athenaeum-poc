@@ -6,3 +6,7 @@ data/demo-run/
 .venv/
 .proxmox.env
 .env
+
+# runtime data, including reviewer token hashes (owner decision 7) -- never committed
+data/
+reviewers*.json

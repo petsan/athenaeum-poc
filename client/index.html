@@ -86,7 +86,10 @@
   <details class="panel" id="review">
     <summary>Awaiting human review: <span id="review-summary">...</span></summary>
     <ul id="review-items"></ul>
-    <div class="note">Approving happens outside this app for now: the API has no authentication.</div>
+    <div class="row">
+      <input id="token" type="password" autocomplete="off" placeholder="reviewer token (kept for this tab only)" />
+    </div>
+    <div class="note" id="review-status">Enter a reviewer token to approve or reject.</div>
   </details>
   <details class="panel" id="maint">
     <summary>Maintenance: <span id="maint-summary">...</span></summary>
@@ -271,11 +274,50 @@ async function refreshCheckpoints() {
     const all = (await getJSON("/api/checkpoints")).body;
     const pending = all.filter(c => c.status === "pending_human_checkpoint");
     document.getElementById("review-summary").textContent = pending.length ? `${pending.length}` : "nothing";
+    const actions = c => reviewerToken() ? ` <span class="actions">${
+      [["approve", "Approve"], ["reject_with_note", "Reject"], ["request_more_deliberation", "More deliberation"]]
+        .map(([d, label]) => `<button data-key="${esc(c.key)}" data-decision="${d}">${label}</button>`).join(" ")
+    }</span>` : "";
     document.getElementById("review-items").innerHTML = pending.length
-      ? pending.map(c => `<li>${describeCheckpoint(c)}</li>`).join("")
+      ? pending.map(c => `<li>${describeCheckpoint(c)}${actions(c)}</li>`).join("")
       : `<li>Nothing is waiting for a reviewer.</li>`;
   } catch (e) { /* retried on the next poll */ }
 }
+
+// Owner decision 7: a reviewer acts with their own token. It is kept for
+// this tab only (sessionStorage), sent only to this API, and never shown.
+const tokenInput = document.getElementById("token");
+function reviewerToken() { return (tokenInput.value || "").trim(); }
+try { tokenInput.value = sessionStorage.getItem("athenaeum-token") || ""; } catch (e) { /* no storage */ }
+tokenInput.addEventListener("change", () => {
+  try { sessionStorage.setItem("athenaeum-token", reviewerToken()); } catch (e) { /* no storage */ }
+  refreshCheckpoints();
+});
+
+async function decide(key, decision) {
+  const status = document.getElementById("review-status");
+  let note;
+  if (decision === "reject_with_note") {
+    note = prompt("Why is this rejected? (the note is kept with the checkpoint)");
+    if (!note) return;
+  }
+  try {
+    const { status: code, body } = await getJSON(`/api/checkpoints/${encodeURIComponent(key)}/decision`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${reviewerToken()}` },
+      body: JSON.stringify(note ? { decision, note } : { decision })
+    });
+    status.textContent = code === 200 ? `${key}: ${body.status}` : `${key}: refused (${code}) -- ${body.error}`;
+  } catch (e) {
+    status.textContent = `${key}: request failed -- ${e}`;
+  }
+  refreshCheckpoints();
+}
+
+document.getElementById("review-items").addEventListener("click", e => {
+  const { key, decision } = (e.target && e.target.dataset) || {};
+  if (key && decision) decide(key, decision);
+});
 
 const fetchedAs = new Map();   // id -> the summary signature its full entry was fetched for
 

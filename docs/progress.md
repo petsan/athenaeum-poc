@@ -1311,6 +1311,35 @@ The known-bugs open limitation is annotated: model-backed claims are now examine
 
 **Full live suite: 628 passed, 1 skipped.** 629 collected (616 prior + 13 new).
 
+## 93. Reviewer tokens and the write endpoints — Phase AP (decision 7)
+
+**Identity.** `athenaeum_body/reviewers.py` reads a local JSON file, `<data_dir>/reviewers.json` or `$ATHENAEUM_REVIEWERS_FILE`, holding each reviewer's id, role and the **SHA-256 hash** of their token, plus the curator ingestion allow-list. Details:
+- Only hashes are stored, so a leaked file leaks no usable token.
+- `authenticate` compares against every stored hash in constant time.
+- The file is re-read on every check, so adding or revoking a reviewer needs no restart.
+- `scripts/add_reviewer.py <id> <role> [--allow-host H]` mints a random token, stores its hash (and tries to make the file owner-only), and prints the token once; re-adding an id revokes the old token.
+- `.gitignore` now ignores `data/` (the API's default data dir, which wasn't ignored before) and `reviewers*.json`, so the file can't be committed by accident.
+
+**Endpoints.** Reads stay open, as decided; the two writes need `Authorization: Bearer <token>`:
+- **`POST /api/checkpoints/<key>/decision`** with `{"decision": "approve" | "reject_with_note" | "request_more_deliberation", "note"?}` goes through the existing `human_input.clear_checkpoint`. The reviewer id comes from the **token**, never the body (tested: a body claiming to be someone else is ignored). So §11.7's rules apply to who is really asking: only role `reviewer` may clear (403 otherwise), and the submitter can't clear their own checkpoint (409). An approved standard amendment is adopted by the next idle cycle, tested end to end over HTTP, and the adopted standard's rationale names the reviewer.
+- **`POST /api/ingestion`** with `{"sources": [{url, license, cites?, is_paid_or_metered?}]}`, for roles `owner` or `reviewer`, 1–50 sources (a placeholder):
+  - every URL must be http(s) with a host on the allow-list, exactly or as a subdomain;
+  - `content` (fixtures) is refused, so it stays Python-only;
+  - the batch is queued with a snapshot of the allow-list.
+- **Refusals:** 503 when no reviewers are configured, so writes are off by default, never open. 401 with `WWW-Authenticate: Bearer` for a missing or wrong token; 403 for a wrong role; 400 for a bad body; 404 for an unknown checkpoint; 409 for a conflict of interest. A refused caller's body is never read.
+
+**Redirects and SSRF.** Checking the submitted URL isn't enough: an allow-listed host could redirect the fetch to an internal address, and the response would be stored in the CAS. So:
+- A batch submitted over HTTP carries its allow-list, and its fetch checks the initial URL and **every redirect** (`ingestion._GuardedRedirects`, via `fetch_url(redirect_ok=)`).
+- robots.txt is fetched through the same guarded opener, because `RobotFileParser.read()` follows redirects on its own.
+- Tested with two local servers: a redirect from the allow-listed one to the other (reached as `localhost`, not listed) is rejected, and the internal server receives **no request at all**. A mutation that disables the guard makes the test fail, with the internal page ingested.
+- **Not covered:** DNS rebinding, where an allow-listed name resolves to an internal address. The allow-list is only as trustworthy as the names on it.
+
+**Client.** The review panel has a password-type token field, kept in `sessionStorage` for the tab only. With a token entered, each pending item gets Approve, Reject and More-deliberation buttons. Reject asks for the note first and sends nothing without one, and the outcome or refusal is shown. The smoke test covers the request path, the header and body, the prompt, a refusal, and clicks that aren't on a button.
+
+**Tests:** `tests/test_api_write_auth.py` has 17 (refusals, identity from the token, conflict, bad decisions, 404 and reject-keeps-pending, amendment adoption, allow-listed ingestion over real HTTP, bad specs refused before queueing, the redirect guard, and the reviewers file), plus the client smoke test.
+
+**Full live suite: 645 passed, 1 skipped.** 646 collected (629 prior + 17 new).
+
 ### Batch 10 (planned 2026-09-26, implementing the owner's decisions)
 
 The owner decided 2–5 and 7–10 on 2026-09-26, each as recommended in `docs/owner-decisions.md`; 6 waits on reading `README.draft.md`. Each phase implements one or two decisions. Where a decision changes an existing test's meaning, that change is now owner-approved and is called out in the phase's write-up.
@@ -1322,7 +1351,7 @@ The owner decided 2–5 and 7–10 on 2026-09-26, each as recommended in `docs/o
 | AM | 4 | Admit OLMo 3 7B with a written rationale, and wire a `ModelFitnessStore` into the API. Model claims start at 0.5 per agent and move with outcomes. | **done** — §90 |
 | AN | 5 | Human input triggers a checkpoint only at importance ≥ the re-evaluation threshold, configured alongside it. | **done** — §91 |
 | AO | 10 | During idle re-examination a model may challenge a model-backed claim. The challenge is dissent, and counts toward reputability, fitness and calibration only once the challenging model is admitted and `established`. | **done** — §92 |
-| AP | 7 | Per-reviewer tokens from a local config file (never in the repo) on new write endpoints: approve, reject or request more deliberation on a checkpoint, and submit ingestion. The reviewer id comes from the token, so §11's role and conflict-of-interest checks apply, and ingestion URLs are checked against a curator allow-list. | open |
+| AP | 7 | Per-reviewer tokens from a local config file (never in the repo) on new write endpoints: approve, reject or request more deliberation on a checkpoint, and submit ingestion. The reviewer id comes from the token, so §11's role and conflict-of-interest checks apply, and ingestion URLs are checked against a curator allow-list. | **done** — §93 |
 | AQ | 8 | One checkpoint log per question for the ledger, plus an index log, with a one-time migration of existing data. Re-measure with `scripts/measure_storage.py`. | open |
 | — | — | End-to-end test extended; live smoke; README draft refreshed. | open |
 

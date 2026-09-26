@@ -82,11 +82,18 @@ const fetch = async (path, opts = {}) => {
   } else if (path === "/api/questions") throw new Error("the client must poll the summary view");
   else if (path === "/api/maintenance") body = state.maintenance;
   else if (path === "/api/checkpoints") body = state.checkpoints;
+  else if (path.startsWith("/api/checkpoints/") && opts.method === "POST") {
+    decisions.push({ path, headers: opts.headers, body: JSON.parse(opts.body) });
+    ({ status, body } = state.decisionResponse);
+  }
   else { status = 404; body = { error: "not found" }; }
   return { status, json: async () => JSON.parse(JSON.stringify(body)) };
 };
 const timers = [];
-const context = vm.createContext({ document, fetch, setTimeout: (f, ms) => timers.push({ f, ms }), console });
+const decisions = [];
+let promptAnswer = null;
+const context = vm.createContext({ document, fetch, setTimeout: (f, ms) => timers.push({ f, ms }), console,
+                                   prompt: () => promptAnswer });
 vm.runInContext(script, context);
 const settle = async () => { for (let i = 0; i < 20; i++) await new Promise(r => setImmediate(r)); };
 const cardHtml = id => vm.runInContext(`cards.get(${JSON.stringify(id)}).innerHTML`, context);
@@ -185,5 +192,37 @@ const failures = document.getElementById("maint-events").innerHTML;
 assert.match(failures, /q-5: gave up after 3 failed attempts -- RuntimeError: boom/);
 assert.match(failures, /q-5: round failed \(attempt 1\), retrying/);
 assert.match(failures, /seed-1: ingested 2 source\(s\), rejected 1/);
+
+// --- owner decision 7: acting as a reviewer ---------------------------------
+const items = () => document.getElementById("review-items");
+assert.ok(!items().innerHTML.includes("<button"), "no actions without a token");
+document.getElementById("token").value = "  tok-123  ";
+document.getElementById("token").listeners.change();
+await settle();
+assert.match(items().innerHTML, /<button data-key="standard-amendment:idle-4" data-decision="approve">Approve<\/button>/);
+assert.match(items().innerHTML, /data-key="q-9" data-decision="reject_with_note">Reject/);
+
+state.decisionResponse = { status: 200, body: { key: "standard-amendment:idle-4", status: "current" } };
+items().listeners.click({ target: { dataset: { key: "standard-amendment:idle-4", decision: "approve" } } });
+await settle();
+const approved = decisions.at(-1);
+assert.equal(approved.path, "/api/checkpoints/standard-amendment%3Aidle-4/decision");
+assert.equal(approved.headers.Authorization, "Bearer tok-123");
+assert.deepEqual(approved.body, { decision: "approve" });
+assert.equal(document.getElementById("review-status").textContent, "standard-amendment:idle-4: current");
+
+promptAnswer = "";                                  // a rejection without a note is never sent
+items().listeners.click({ target: { dataset: { key: "q-9", decision: "reject_with_note" } } });
+await settle();
+assert.equal(decisions.length, 1);
+promptAnswer = "needs a source";
+state.decisionResponse = { status: 409, body: { error: "the reviewer clearing a checkpoint must not be the submitter" } };
+items().listeners.click({ target: { dataset: { key: "q-9", decision: "reject_with_note" } } });
+await settle();
+assert.deepEqual(decisions.at(-1).body, { decision: "reject_with_note", note: "needs a source" });
+assert.match(document.getElementById("review-status").textContent, /q-9: refused \(409\) -- the reviewer clearing/);
+items().listeners.click({ target: { dataset: {} } });  // a click that isn't on a button does nothing
+await settle();
+assert.equal(decisions.length, 2);
 
 console.log("client smoke: all checks passed");

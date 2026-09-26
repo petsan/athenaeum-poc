@@ -51,7 +51,7 @@ from athenaeum_body.model_fitness_store import ModelFitnessStore
 from athenaeum_body.belief_graph_store import BeliefGraphStore
 from athenaeum_body.audit_store import AuditStore
 from athenaeum_body.storage.content_addressed import ContentAddressedStore
-from athenaeum_body.ingestion import make_ingestion_unit
+from athenaeum_body.ingestion import make_ingestion_unit, fetch_url, host_allowed, FetchError
 from .loop import make_deliberation_unit
 from .idle_evolution import (
     IdleContext, make_idle_evolution_unit, apply_amendment_if_approved, feed_reevaluation,
@@ -142,8 +142,23 @@ class Maintainer:
                                         mirror=False)
 
     def _ingestion_unit(self, batch_id: str, info: dict):
+        fetch = self.fetch
+        allowlist = info.get("allowlist")
+        if allowlist is not None:
+            # Submitted over HTTP (owner decision 7): the curator allow-list
+            # snapshot taken at submission bounds the initial URL and every
+            # redirect, so an allow-listed host can't bounce the fetch
+            # anywhere else. Kept in the registry, so it survives restarts.
+            inner = fetch or fetch_url
+
+            def fetch(url, *, license):
+                if not host_allowed(url, allowlist):
+                    raise FetchError(f"{url!r} is not on the ingestion allow-list")
+                if inner is fetch_url:
+                    return fetch_url(url, license=license, redirect_ok=lambda u: host_allowed(u, allowlist))
+                return inner(url, license=license)
         return make_ingestion_unit(batch_id, info["sources"], self.ingestion_cas, self.belief_graph,
-                                   fetch=self.fetch)
+                                   fetch=fetch)
 
     def _unit_for(self, unit_id: str, info: dict):
         """A fresh unit for a registered one (after a restart or a failed round)."""
@@ -153,15 +168,21 @@ class Maintainer:
             return self._ingestion_unit(unit_id, info)
         return self._idle_unit(unit_id, info)
 
-    def submit_ingestion(self, batch_id: str, sources: list[dict]) -> None:
+    def submit_ingestion(self, batch_id: str, sources: list[dict], *, allowlist: list[str] | None = None,
+                         submitted_by: str | None = None) -> None:
         """Section 9: ingest a batch of sources (ingestion.source_from_spec
         specs) as a low-priority unit, one source per round, recorded in the
-        CAS and the Belief Graph. Questions are served first."""
+        CAS and the Belief Graph. Questions are served first. `allowlist`
+        (from the HTTP path) restricts every fetch to those hosts."""
         if self.ingestion_cas is None:
             raise ValueError("this Maintainer has no ingestion_cas to store source content in")
         if batch_id in self._m["units"]:
             raise ValueError(f"unit {batch_id!r} is already registered")
         info = {"kind": "ingestion", "sources": [dict(s) for s in sources]}
+        if allowlist is not None:
+            info["allowlist"] = list(allowlist)
+        if submitted_by is not None:
+            info["submitted_by"] = submitted_by
         self._m["units"][batch_id] = info
         self._save()
         self.scheduler.submit(self._ingestion_unit(batch_id, info))

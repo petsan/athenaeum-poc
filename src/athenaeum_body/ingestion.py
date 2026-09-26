@@ -52,18 +52,50 @@ class FetchError(Exception):
     Never silently swallowed; the caller decides how to handle it."""
 
 
-def _robots_allowed(url: str, user_agent: str) -> bool:
+def host_allowed(url: str, allowlist) -> bool:
+    """An http(s) URL whose host is on the curator allow-list, exactly or as
+    a subdomain of an entry (owner decision 7). Anything else -- another
+    scheme, no host, an unlisted host -- is not allowed."""
+    parsed = urllib.parse.urlparse(url)
+    if parsed.scheme not in ("http", "https") or not parsed.hostname:
+        return False
+    host = parsed.hostname.lower()
+    return any(host == entry or host.endswith("." + entry) for entry in allowlist)
+
+
+class _GuardedRedirects(urllib.request.HTTPRedirectHandler):
+    """Refuses any redirect whose target fails `ok`: an allow-listed host
+    must not be able to bounce a fetch to an internal address (SSRF)."""
+
+    def __init__(self, ok):
+        super().__init__()
+        self.ok = ok
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        if not self.ok(newurl):
+            raise urllib.error.URLError(f"redirect to {newurl!r} refused: not on the ingestion allow-list")
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+def _robots_allowed(url: str, user_agent: str, opener=None) -> bool:
     """Real robots.txt check via the stdlib parser. Fails OPEN (allowed)
     only when robots.txt itself is unreachable or absent -- absence of a
     robots.txt is not a disallow signal; a genuinely failed fetch of the
     page itself is a separate, loud FetchError raised by fetch_url, not
-    silently converted into a robots disallow here."""
+    silently converted into a robots disallow here. With a guarded
+    `opener`, robots.txt is fetched through it too: RobotFileParser.read()
+    would otherwise follow any redirect on its own."""
     parsed = urllib.parse.urlparse(url)
     robots_url = f"{parsed.scheme}://{parsed.netloc}/robots.txt"
     rp = urllib.robotparser.RobotFileParser()
     rp.set_url(robots_url)
     try:
-        rp.read()
+        if opener is None:
+            rp.read()
+        else:
+            req = urllib.request.Request(robots_url, headers={"User-Agent": user_agent})
+            with opener.open(req, timeout=10) as resp:
+                rp.parse(resp.read().decode("utf-8", errors="replace").splitlines())
     except Exception:
         return True
     return rp.can_fetch(user_agent, url)
@@ -71,7 +103,7 @@ def _robots_allowed(url: str, user_agent: str) -> bool:
 
 def fetch_url(url: str, *, license: str, is_paid_or_metered: bool = False,
                timeout_seconds: float = 10.0,
-               user_agent: str = "AthenaeumIngestionBot/0.1") -> FixtureSource:
+               user_agent: str = "AthenaeumIngestionBot/0.1", redirect_ok=None) -> FixtureSource:
     """A real HTTP GET (stdlib `urllib` only -- no new dependency, matching
     api.py's own stdlib-only convention), plus a real robots.txt check.
     `license` and `is_paid_or_metered` remain caller-supplied, exactly as
@@ -81,11 +113,16 @@ def fetch_url(url: str, *, license: str, is_paid_or_metered: bool = False,
     hand-authored fixture. Never uses credentials or an API key of any
     kind, keeping every fetch this function performs a plain, freely
     accessible GET (Section 6.6's hard floor, config.py's
-    disallow_paid_apis)."""
-    robots_disallowed = not _robots_allowed(url, user_agent)
+    disallow_paid_apis).
+
+    `redirect_ok(url) -> bool`, when given, is checked for every redirect
+    (of robots.txt and of the page): a refused redirect is a FetchError."""
+    opener = urllib.request.build_opener(_GuardedRedirects(redirect_ok)) if redirect_ok else None
+    robots_disallowed = not _robots_allowed(url, user_agent, opener)
     req = urllib.request.Request(url, headers={"User-Agent": user_agent})
     try:
-        with urllib.request.urlopen(req, timeout=timeout_seconds) as resp:
+        with (opener.open(req, timeout=timeout_seconds) if opener
+              else urllib.request.urlopen(req, timeout=timeout_seconds)) as resp:
             content = resp.read()
     except (urllib.error.URLError, OSError) as e:
         raise FetchError(f"fetch failed for {url!r}: {e}") from e
