@@ -113,6 +113,9 @@ class Maintainer:
             if self.idle_since_last_question or not self.ledger._state()["questions"]:
                 return None
             self._submit_idle()
+        upcoming = self.scheduler._heap[0][2]
+        if self._kinds.get(upcoming.id) == "question" and upcoming.round_index == 0:
+            self.ledger.set_status(upcoming.id, "active")  # queued -> active as its first round starts
         unit = self.scheduler.process_one_round()
         if unit.status != "completed":
             return None

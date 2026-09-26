@@ -37,6 +37,18 @@ class QuestionLedger:
         q["status"] = "completed"
         self.log.write_checkpoint(state, label="question_ledger")
 
+    STATUSES = ("queued", "active", "suspended", "completed", "archived")
+
+    def set_status(self, question_id: str, status: str) -> None:
+        """The Question Ledger lifecycle (schemas.md): queued -> active ->
+        completed, with suspended/archived available. append_version still
+        marks a question completed itself."""
+        if status not in self.STATUSES:
+            raise ValueError(f"unknown status {status!r}; expected one of {self.STATUSES}")
+        state = self._state()
+        state["questions"][question_id]["status"] = status
+        self.log.write_checkpoint(state, label="question_ledger")
+
     def update_importance(self, question_id: str, importance: float) -> None:
         """Section 7.1: importance is assigned at submission and revisable.
         The value itself is the Brain's judgment (reopening.importance_rating);

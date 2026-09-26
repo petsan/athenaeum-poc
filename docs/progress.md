@@ -321,7 +321,7 @@ Same rules and stop conditions as batch 1. Ordered so each phase builds on the l
 | K | **Mathematics bare-integer parsing** — primality only for integers the question actually asks about (same bug class as known-bugs #21); moves the open limitation into a fixed bug. | **done** — §54, known-bugs #25 |
 | L | **Belief Graph store** (schemas.md already specifies node/edge shapes): answers → claims → sources as real edges, written by the loop. `count_dependents` switches from its shared-claim proxy to real edges, and §7.2's second trigger ("a newly corroborated/challenged claim the framing round would route to the same question") becomes implementable. | **done** — §55 |
 | M | **Maintenance cadence** — a driver that runs idle cycles as low-priority units on the existing `MultiUnitScheduler` alongside questions, audits every N cycles, feeds re-evaluation, and applies approved amendments; the system then evolves without a human calling each function. | **done** — §56 (+ known-bugs #26 fixed) |
-| N | **Async API** — submit → poll over the ledger's `queued/active/completed` lifecycle (api.py's own stated limitation), plus read endpoints for versions and diffs. | open |
+| N | **Async API** — submit → poll over the ledger's `queued/active/completed` lifecycle (api.py's own stated limitation), plus read endpoints for versions and diffs. | **done** — §57 |
 | — | End-to-end test extended over J–N, then plan batch 3. | open |
 
 **Owner decisions accumulated so far (not in any batch — each needs a call from the owner):** (1) the OLMo 3 guest's memory problem, known-bugs.md #24; (2) the flaky `qwen2.5-1.5b` factual assertion; (3) what Engineering's reasoning style is while the sandbox is off (its `executable` rounding claims vs. the fidelity fingerprint); (4) which models to admit before the API passes a fitness store (§48); (5) whether §11.5's importance threshold should narrow when human input triggers a checkpoint (§45); (6) adopting `README.draft.md`.
@@ -700,6 +700,19 @@ Graph writes happen in the loop's final round and are idempotent by id, so a res
 **Known limitation, stated:** `MultiUnitScheduler`'s queue lives in memory. Everything completed is durable, but queued or mid-way units must be resubmitted after a restart (a resubmitted deliberation resumes from its last completed round). Not wired into the HTTP API yet — Phase N.
 
 **Verified offline** (OLMo 3 guest still degraded): **437 passed, 1 skipped, 3 failed**, the usual three `olmo3-7b` timeouts. 456 collected (449 prior + 7 new in `tests/test_maintenance.py`).
+
+## 57. Asynchronous API: submit → poll, driven by the Maintainer — Phase N
+
+`api.py` stated its own limitation — every request deliberated synchronously, fine only while agents finish in milliseconds. Now there are two paths over one set of stores (ledger, reputability, Belief Graph, consolidation, fidelity, checkpoints, audits), with every ledger access under one lock:
+- **Synchronous, unchanged:** `POST /api/questions` → 200 with the answer. The mobile client and all existing tests use this and are untouched; it now also records into the Belief Graph and rates importance with graph dependents.
+- **Asynchronous:** `POST /api/questions` with `{"async": true}` → **202** `{id, status: "queued"}` immediately. A single background worker drives a `Maintainer` (§56) one round at a time, taking the lock per round, so the question moves through the Question Ledger's `queued → active → completed` lifecycle (new `QuestionLedger.set_status`, validated against the schema's states) interleaved with idle cycles. Poll `GET /api/questions/<id>`.
+- **New reads:** `GET /api/questions/<id>/versions/<n>` (one ledger version, 404 out of range) and `GET /api/maintenance` (idle cycles run, queued units, pending amendments, recent events).
+
+The worker starts **lazily on the first async submission**, so a purely synchronous user never gets background idle cycles running over their questions (tested). A round that raises is recorded as an `error` event and the worker carries on, rather than dying silently and leaving every later async question queued forever. `build_app` keeps returning the same 4-tuple callers unpack, with the async functions attached as attributes.
+
+Tested against a real running server: async submit returns 202 without an answer and completes in the background; three async questions interleaved on the Maintainer each get their own correct answer (known-bugs #26 through the public API); versions fetch individually; an idle cycle runs once the queue goes quiet, with no error events.
+
+**Verified offline** (OLMo 3 guest still degraded): **442 passed, 1 skipped, 3 failed**, the usual three `olmo3-7b` timeouts. 461 collected (456 prior + 5 new in `tests/test_api_async.py`).
 
 ### Explicitly not on this list
 Any application-level work beyond what `deployment-playbook.md` promises to deliver (verified SSH access to a correctly-networked guest, not a deployed application).
