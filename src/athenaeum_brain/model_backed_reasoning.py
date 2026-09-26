@@ -63,8 +63,9 @@ def fallback_suppressed(agent_names):
 
 def ask_model(question: str, model_name: str = DEFAULT_MODEL, n_predict: int = 96,
               timeout_seconds: float = 120.0, max_attempts: int = 3) -> str | None:
-    """Returns the model's raw completion, or None if the backend is
-    unreachable. None is treated by every caller as 'no claim produced'
+    """Returns the model's answer -- its completion cut to the answer itself
+    (answer_only) -- or None if the backend is unreachable or only ever
+    answered with nothing. None is treated by every caller as 'no claim produced'
     -- the same outcome as an agent's own deterministic check finding
     nothing -- never as an error that should break the deliberation loop
     (Section 4.2's stateless-lease-holder discipline: a remote call
@@ -121,9 +122,24 @@ def ask_model(question: str, model_name: str = DEFAULT_MODEL, n_predict: int = 9
                 # through to the next loop iteration (instead of
                 # returning) is the actual fix, not just a bigger timeout.
                 continue
-        if response and response.strip():
-            return response
+        answer = answer_only(response or "")
+        if answer:
+            return answer
     return None
+
+
+def answer_only(completion: str) -> str:
+    """The answer the Q:/A: frame asked for, and nothing after it: the text
+    up to the first line break, stripped. A small model doesn't stop at the
+    end of its answer. Live, OLMo 3 answered "Gravity" and then carried on
+    with an invented instruction and a whole new "Q: how can i become more
+    assertive at work?" turn, all of which became the claim's statement
+    (known-bugs #35, found by the batch 9 live smoke). A claim is one
+    assertion, so the first line is the answer; whatever follows was never
+    asked for. A completion that skips straight to a new "Q:" turn has no
+    answer at all, and is treated as empty (so it is retried)."""
+    first = completion.strip().split("\n", 1)[0].strip()
+    return "" if first.startswith("Q:") else first
 
 
 def model_backed_claim(*, agent_name: str, question: str, question_id: str,

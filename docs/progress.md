@@ -413,8 +413,9 @@ Same rules and stop conditions. Most remaining substantive work now waits on own
 
 | Phase | Scope | Status |
 |---|---|---|
-| AH | **Live deployment smoke** — every end-to-end test stubs the model. Start the real API process (`python -m athenaeum_body.api`) on LXC 104 against the live model-lab guests, drive it over HTTP with a script (`scripts/live_smoke.py`): async questions including a model-only one, sync alongside, polls, health. Record real latencies, including how long polls take while a real model call runs (Phase AF under real conditions). Report, don't gate: live-model output isn't deterministic. | open |
+| AH | **Live deployment smoke** — every end-to-end test stubs the model. Start the real API process (`python -m athenaeum_body.api`) on LXC 104 against the live model-lab guests, drive it over HTTP with a script (`scripts/live_smoke.py`): async questions including a model-only one, sync alongside, polls, health. Record real latencies, including how long polls take while a real model call runs (Phase AF under real conditions). Report, don't gate: live-model output isn't deterministic. | **done** — §85, known-bugs #35 |
 | AI | **Decision briefs** — one document (`docs/owner-decisions.md`) laying out each open owner decision with the evidence gathered, the options, their costs, and a recommendation, so each can be settled in minutes. Documentation only; nothing is decided. | open |
+| AJ | **Submitting never waits behind a deliberation** (found by AH) — `POST /api/questions` with `async` takes the same lock as a worker round, so each submission waits up to a whole model call (live: about 40 s before four async submits and one sync question were all in). Record a submission durably in its own small inbox, return 202 at once, have the worker register it before its next round, and have a restart drain what's left. | open |
 | — | Final full live run; handoff notes. | open |
 
 - [ ] `execution_sandbox.enabled` stays `false` — not actionable right now (the CPU-time gap is a confirmed environment limitation on this specific kernel, not a bug to fix), but re-run `scripts/preflight_check.py` if this project is ever deployed to a *different* host, per `security-review-sandbox.md` Section 7.3/7.4.
@@ -1156,6 +1157,21 @@ Tests: `tests/test_api_health.py` (before any work; during a held model call, an
 `README.draft.md` is refreshed, still local. Batch 9 is planned above. It validates against the live models and prepares the owner decisions rather than adding scope.
 
 **Full live suite: 590 passed, 1 skipped.** 591 collected (590 prior + 1 new end-to-end test).
+
+## 85. Live deployment smoke — Phase AH
+
+Every end-to-end test stubs the model, so `scripts/live_smoke.py` drives a **real** API process (`serve()` on LXC 104, port 18080, a throwaway data dir) against the **live** model-lab guests over HTTP. It asks four async questions, two deterministic and two only a model can answer, plus one synchronous question alongside. It polls the summary and health, then reports answers, timings, poll latency and events. It fails only on an unreachable server, an error, or a question that never finishes. It doesn't gate on model wording.
+
+**First run, and the bug it found (known-bugs.md #35).** All five questions completed in about 40 s, but the Physics claim for "why do objects fall when dropped?" was committed as `Gravity \nExplain how the answer helps with the question.\n\nQ: how can i become more assertive at work?\nA: Practice saying "no" in lo…`. The model ran on past its answer into an invented instruction and a new Q:/A: turn, and the whole completion became the claim. Fixed centrally in `model_backed_reasoning.answer_only`: the answer is the completion up to its first line break, and a completion that starts a new `Q:` turn counts as empty and is retried. Pinned deterministically by `tests/test_model_answer_only.py` with the observed completion; the live model tests (`test_model_backed_reasoning.py`) all still pass.
+
+**Second run, after the fix:**
+- both model-only questions were committed as a clean `Physics: Gravity`, and "what force holds the moon in orbit?" now gets an answer at all;
+- `97 is prime` and `91 is not prime` came from the deterministic agents, and rounding produced its plural answer (Mathematics round-half-up vs Engineering IEEE-754, with Philosophy's is-ought note);
+- two idle cycles ran, the worker was alive afterwards, 24 rounds ran, and no problems were reported.
+
+**A second finding, now Phase AJ.** The script's polling didn't start until about 40 s in, because each **async submit** took the same lock as the worker's rounds and waited behind a live model call; the synchronous question waited 19.8 s the same way. Phase AF made reads independent of the lock, but not submits. So during a real deliberation, each tap of "Ask" in the client can hang for a whole model call. Because of that, this run couldn't measure poll latency *during* a real call. That remains covered by AF's held-call tests (under a second, vs 1.7 s before).
+
+**Full live suite: 594 passed, 1 skipped.** 595 collected (591 prior + 4 new in `tests/test_model_answer_only.py`).
 
 ### Explicitly not on this list
 Any application-level work beyond what `deployment-playbook.md` promises to deliver (verified SSH access to a correctly-networked guest, not a deployed application).

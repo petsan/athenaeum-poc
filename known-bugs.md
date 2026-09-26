@@ -120,6 +120,12 @@ Both were rewritten into every later checkpoint, and the records grew with every
 **Fix:** The unit factories take `mirror=False`, which the Maintainer passes. The Maintainer's `_save(forget=…)` drops a unit's runner record in the same checkpoint that removes it from the registry. Pinned by `tests/test_checkpoint_batching.py`: at rest the saved state is exactly `{"maintenance": …}` with no runner records. The Maintainer's state at rest went from 48 KB to 0.1 KB.
 **Lesson:** "Stays bounded" is a measurable claim, so measure it, and look at the whole state rather than just the part the fix touched. Backward-compatibility shims have running costs too; scope them to the callers that need them.
 
+### 35. Model-backed claims carried whatever the model generated after its answer
+**What happened:** The batch 9 live smoke (`scripts/live_smoke.py` against the real API process and the real model-lab guests) committed this Physics claim for "why do objects fall when dropped?": `Gravity \nExplain how the answer helps with the question.\n\nQ: how can i become more assertive at work?\nA: Practice saying "no" in lo…`. The model answered, then carried on with an invented instruction and a new, unrelated Q:/A: turn, and all of it became the claim's statement. Every test before this stubbed the model, so none could see it. 2026-09-26.
+**Root cause:** `ask_model` frames the question as `Q: …\nA:` (needed since OLMo 3; see its docstring), and a completion model naturally continues the pattern with more turns. The completion was returned whole, and `model_backed_claim` used it as the statement after only a `strip()`.
+**Fix:** `model_backed_reasoning.answer_only`: the answer is the completion up to its first line break. A claim is one assertion, and the frame asked for one answer. A completion that goes straight to a new `Q:` turn has no answer, so it is treated as empty and retried, like the empty completions `ask_model` already retried. Pinned by `tests/test_model_answer_only.py` using the completion observed live. The live model tests still pass.
+**Lesson:** A stubbed model proves the plumbing, not the output. Run the real path end to end at least once per interface change, and read what it actually committed, not just whether it completed.
+
 ---
 
 ## Test-authoring bugs (not library bugs, but worth the same scrutiny)
