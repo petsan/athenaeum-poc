@@ -145,20 +145,22 @@ function deliberate(question) {
 const results = document.getElementById("results");
 const input = document.getElementById("q");
 const go = document.getElementById("go");
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c =>
+  ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
 
 function renderAnswer(question, answer) {
   const card = document.createElement("div");
   card.className = "card";
-  let html = `<div class="q">${question}</div>`;
+  let html = `<div class="q">${esc(question)}</div>`;
   if (answer.plural_answers.length) {
     for (const pa of answer.plural_answers) {
-      html += `<div class="plural-note">Jurisdictional conflict, chaired by ${pa.chaired_by} -- both conclusions stand, neither is picked as a winner:</div>`;
-      for (const c of pa.conclusions) html += `<div class="claim"><span class="tag commit">${c.agent}</span>${c.statement}</div>`;
+      html += `<div class="plural-note">Jurisdictional conflict, chaired by ${esc(pa.chaired_by)} -- both conclusions stand, neither is picked as a winner:</div>`;
+      for (const c of pa.conclusions) html += `<div class="claim"><span class="tag commit">${esc(c.agent)}</span>${esc(c.statement)}</div>`;
     }
   } else {
-    for (const c of answer.committed) html += `<div class="claim"><span class="tag commit">${c.agent}</span>${c.statement}</div>`;
+    for (const c of answer.committed) html += `<div class="claim"><span class="tag commit">${esc(c.agent)}</span>${esc(c.statement)}</div>`;
   }
-  for (const d of answer.dissent) html += `<div class="claim"><span class="tag dissent">unrouted</span>${d.statement}</div>`;
+  for (const d of answer.dissent) html += `<div class="claim"><span class="tag dissent">unrouted</span>${esc(d.statement)}</div>`;
   card.innerHTML = html;
   if (results.querySelector(".empty")) results.innerHTML = "";
   results.prepend(card);

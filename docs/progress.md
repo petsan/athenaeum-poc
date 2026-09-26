@@ -351,7 +351,7 @@ Same rules and stop conditions. Again, each item is a gap found while building, 
 | S | **Feed calibration (§5.3, §9.3)** — the per-agent calibration store — "the accountability mechanism" — is never written outside tests. Idle re-examination is exactly when a claim's fate becomes known: record survived claims as verified and challenged/unsupported ones as overturned, per agent at the confidence it claimed; the Maintainer's audits then report `calibration_drift` per agent. | **done** — §65 |
 | T | **Grade weights into the versioned standard** — synthesis's `GRADE_WEIGHT` (§41) sits outside the reputability standard §43 versioned, so it can't evolve under the same review; move it into the standard's params with v0 = today's values. | **done** — §66 |
 | U | **Ingestion feeds the Belief Graph** — ingested sources and their `cites` become `source` nodes and `cites` edges, so dispute resolution and consolidation can read citation data from the graph instead of a hand-passed map. | **done** — §67 |
-| V | **Mobile client: async mode and history** — the client only knows the synchronous call; let it submit async, poll status, and show versions/diffs and maintenance activity. | open |
+| V | **Mobile client: async mode and history** — the client only knows the synchronous call; let it submit async, poll status, and show versions/diffs and maintenance activity. | **done** — §68 |
 | — | End-to-end test extended; README draft refreshed (local, still unpushed); plan batch 5. | open |
 
 - [ ] `execution_sandbox.enabled` stays `false` — not actionable right now (the CPU-time gap is a confirmed environment limitation on this specific kernel, not a bug to fix), but re-run `scripts/preflight_check.py` if this project is ever deployed to a *different* host, per `security-review-sandbox.md` Section 7.3/7.4.
@@ -829,6 +829,32 @@ Source-to-source citations (§42's independence check, §10.2's *independent* so
 `IdleContext` has a new `belief_graph` field and a new `citation_map()`: the hand-supplied `cites` merged with the graph's, deduplicated. Consolidation's promotion check, Logic-chaired dispute resolution and the Maintainer's consolidation audit all read it. The Maintainer hands its own graph to the idle context unless one was set explicitly. Tested end to end: two ingested sources promote a claim to Tier C after three cycles, but when the graph says one cites the other, the same claim stays in Tier B, with only one independent line of evidence.
 
 **Full live suite: 524 passed, 1 skipped.** 525 collected (516 prior + 9 new in `tests/test_ingestion_graph.py`).
+
+## 68. The mobile client goes asynchronous, with history — Phase V
+
+`client/index.html` only knew the synchronous call, which is the wrong one for LLM-backed deliberations that take minutes. It now:
+- submits asynchronously by default (a "wait for the answer" box keeps the synchronous call for quick questions);
+- lists the ledger's history on load, newest first;
+- polls every 2 s while anything is queued or active, and every 15 s otherwise, so versions that idle evolution's reopens add later still show up;
+- shows every version of an answer, with a reopened version's §7.3 diff (why, added/removed claims, weight changes, what happened to the leading conclusion);
+- adds a maintenance panel with idle cycles, queued units, amendments awaiting review and recent events.
+
+A card is only redrawn when its status, version count, chosen version or importance changes, so a reader's chosen version survives polling.
+
+**API:** `GET /api/questions` and `/api/questions/<id>` now include `question`, so a question still in the queue (no version yet) can be listed. The text comes from the Maintainer's registry, then from the latest version once answered.
+
+**Security fix — known-bugs.md #30:** the old client interpolated question and claim text straight into `innerHTML`. That was a stored-XSS hole once questions became listable to every viewer. Every interpolation is now escaped, and so is `standalone-demo.html`'s (self-XSS only there, since its text never leaves the page).
+
+**Testing without a browser:** `tests/client/client_smoke.mjs` runs the page's script under node against a minimal fake DOM, `fetch` and timer. It checks:
+- history order and pending display;
+- versions and the diff, and a chosen version surviving a refresh;
+- the maintenance panel and the poll cadence;
+- async vs. synchronous submit;
+- that a hostile statement is rendered escaped. A mutation that disables escaping makes it fail.
+
+`tests/test_client.py` runs the smoke test and skips when node is absent; nodejs 18 is now installed on LXC 104. Along the way, the guest sync script turned out never to have copied `client/` — the guest had been serving a stale page. Fixed.
+
+**Full live suite: 526 passed, 1 skipped.** 527 collected (525 prior + `tests/test_client.py` + one new test in `tests/test_api_async.py`).
 
 ### Explicitly not on this list
 Any application-level work beyond what `deployment-playbook.md` promises to deliver (verified SSH access to a correctly-networked guest, not a deployed application).

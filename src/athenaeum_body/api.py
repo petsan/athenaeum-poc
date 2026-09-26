@@ -143,14 +143,23 @@ def build_app(data_dir: Path) -> App:
                     "pending_amendments": sorted(maintainer.pending_amendments),
                     "recent_events": maintainer.events[-10:]}
 
+    def _with_question(entry: dict) -> dict:
+        # A queued question has no version yet, so its text comes from the
+        # Maintainer's registry; once answered, from its latest version.
+        if entry["versions"]:
+            question = entry["versions"][-1].get("question")
+        else:
+            question = maintainer._m["units"].get(entry["id"], {}).get("question")
+        return {**entry, "question": question}
+
     def list_questions() -> list:
         with lock:
-            return list(ledger._state()["questions"].values())
+            return [_with_question(q) for q in ledger._state()["questions"].values()]
 
     def get_question(qid: str):
         with lock:
             entry = ledger.get(qid)
-            return entry.to_dict() if entry else None
+            return _with_question(entry.to_dict()) if entry else None
 
     def health() -> dict:
         s = monitor.get_state()

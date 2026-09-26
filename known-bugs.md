@@ -86,6 +86,12 @@ These aren't bugs in the sense of "code that was wrong" — they're incorrect as
 **Fix:** Return the dicts directly; don't call `.to_dict()` on data that's already past that stage.
 **Lesson:** After any serialize/deserialize round-trip (a checkpoint, an HTTP response, a cache), verify the actual runtime type of what comes back — don't assume it's still the rich object type it started as.
 
+### 30. The mobile client rendered question and claim text as raw HTML
+**What happened:** `client/index.html` built each answer card by interpolating the question, agent names and claim statements straight into `innerHTML`. A question like `<img src=x onerror=…>` — or any claim statement echoing question text back — would run as script in every viewer's browser: stored XSS, since questions persist in the ledger and every client lists them. Found 2026-09-26 while rewriting the client for Phase V; there is no evidence it was ever triggered.
+**Root cause:** The page began as a single-user demo where the only text shown was what the user had just typed, so escaping never came up. Once the API gained listing (and now history), the same text reached other viewers.
+**Fix:** Every server- or user-supplied string goes through `esc()` before reaching `innerHTML`; `tests/client/client_smoke.mjs` (run by `tests/test_client.py`) asserts a markup-bearing statement is rendered escaped, and was checked to fail when escaping is disabled.
+**Lesson:** Any text that crosses a storage or network boundary is untrusted at render time, even in a demo. Prefer `textContent`; where HTML templating is used, escape at the interpolation site and test it with a hostile string.
+
 ---
 
 ## Test-authoring bugs (not library bugs, but worth the same scrutiny)
@@ -235,6 +241,7 @@ Before writing similar code again in this project:
 - **Any new script meant to run directly on the Proxmox host** (not a guest): re-read entry 19. Don't assume `jq`/`curl`/anything beyond a stock install is present — that assumption is only safe for the guest-side tooling this project deliberately installed it on.
 - **Any new content-addressed or checkpoint code:** re-read entries 8–9. Be explicit about what's hashed vs. stored vs. derived, and make sure "verified" checks everything a caller would assume it checks.
 - **Any new API/serialization boundary:** re-read entry 10. Check the actual runtime type after a round-trip.
+- **Any client-side rendering of stored or fetched text:** re-read entry 30 — escape every interpolation, and test with a hostile string.
 - **Any new test:** re-read entries 11–14 before assuming a failing test means the implementation is wrong (entry 12 has recurred once already).
 - **Any new claim statement template:** re-read entry 22 — statements must be self-contained, never "this question".
 - **Any new identifier that is persisted or crosses a process boundary:** re-read entry 23 — never a per-process counter.

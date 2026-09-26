@@ -85,3 +85,16 @@ def test_synchronous_use_never_starts_the_background_worker(tmp_path):
     app = build_app(tmp_path)
     app[0]("is 17 prime?")
     assert app.worker_thread == []
+
+
+def test_question_text_is_readable_before_and_after_it_is_answered(tmp_path):
+    """Batch 4, Phase V: the client lists questions still in the queue, which
+    have no ledger version yet -- their text comes from the Maintainer."""
+    app = build_app(tmp_path)
+    app.maintainer.submit_question("q-1", "is 17 prime?")  # queued, and no worker to take it
+    submit, list_questions, get_question, _ = app
+    assert [(q["id"], q["status"], q["question"]) for q in list_questions()] == [("q-1", "queued", "is 17 prime?")]
+    assert get_question("q-1")["question"] == "is 17 prime?"
+    app.maintainer.run()
+    assert get_question("q-1")["status"] == "completed" and get_question("q-1")["question"] == "is 17 prime?"
+    assert submit("is 21 prime?")["id"] == "q-2" and get_question("q-2")["question"] == "is 21 prime?"

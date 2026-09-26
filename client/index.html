@@ -7,7 +7,7 @@
 <style>
   :root {
     --bg: #f7f6f2; --fg: #1c1a17; --card: #ffffff; --border: #ddd8cd;
-    --accent: #6b4f3f; --muted: #78716a; --commit: #2f6b3f; --dissent: #8a3a2b;
+    --accent: #6b4f3f; --muted: #78716a; --commit: #2f6b3f; --dissent: #8a3a2b; --pending: #8a6d1f;
     box-sizing: border-box;
     padding-top: env(safe-area-inset-top, 0px);
     padding-bottom: env(safe-area-inset-bottom, 0px);
@@ -15,12 +15,12 @@
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
       --bg: #16140f; --fg: #eee9df; --card: #201d17; --border: #3a352b;
-      --accent: #c9a876; --muted: #a39a8a; --commit: #7bc98f; --dissent: #e08a72;
+      --accent: #c9a876; --muted: #a39a8a; --commit: #7bc98f; --dissent: #e08a72; --pending: #d8b85e;
     }
   }
   :root[data-theme="dark"] {
     --bg: #16140f; --fg: #eee9df; --card: #201d17; --border: #3a352b;
-    --accent: #c9a876; --muted: #a39a8a; --commit: #7bc98f; --dissent: #e08a72;
+    --accent: #c9a876; --muted: #a39a8a; --commit: #7bc98f; --dissent: #e08a72; --pending: #d8b85e;
   }
   html, body { height: 100%; }
   body {
@@ -28,14 +28,14 @@
     font-family: -apple-system, system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
   }
-  header { padding: 16px 16px 8px; }
+  header { padding: 16px 16px 8px; max-width: 640px; margin: 0 auto; }
   header h1 { font-size: 1.3rem; margin: 0 0 4px; }
   header p { margin: 0; color: var(--muted); font-size: 0.85rem; }
   #status { font-size: 0.8rem; color: var(--muted); margin-top: 6px; }
   main { padding: 8px 16px 32px; max-width: 640px; margin: 0 auto; }
-  .row { display: flex; gap: 8px; margin: 12px 0; }
+  .row { display: flex; gap: 8px; margin: 12px 0 4px; }
   input[type=text] {
-    flex: 1; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--border);
+    flex: 1; min-width: 0; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--border);
     background: var(--card); color: var(--fg); font-size: 1rem;
   }
   button {
@@ -43,17 +43,31 @@
     color: var(--bg); font-weight: 600; font-size: 1rem;
   }
   button:disabled { opacity: 0.5; }
+  .mode { font-size: 0.82rem; color: var(--muted); display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
   .card {
     background: var(--card); border: 1px solid var(--border); border-radius: 12px;
     padding: 14px 16px; margin: 10px 0;
   }
-  .q { font-weight: 600; margin-bottom: 8px; }
-  .claim { padding: 6px 0; border-top: 1px solid var(--border); font-size: 0.92rem; }
+  .q { font-weight: 600; margin-bottom: 4px; overflow-wrap: anywhere; }
+  .meta { font-size: 0.76rem; color: var(--muted); margin-bottom: 8px; }
+  .claim { padding: 6px 0; border-top: 1px solid var(--border); font-size: 0.92rem; overflow-wrap: anywhere; }
   .claim:first-of-type { border-top: none; }
-  .tag { font-size: 0.72rem; padding: 2px 7px; border-radius: 6px; margin-right: 6px; }
+  .tag { font-size: 0.72rem; padding: 2px 7px; border-radius: 6px; margin-right: 6px; white-space: nowrap; }
   .tag.commit { background: color-mix(in srgb, var(--commit) 20%, transparent); color: var(--commit); }
   .tag.dissent { background: color-mix(in srgb, var(--dissent) 20%, transparent); color: var(--dissent); }
-  .plural-note { font-size: 0.82rem; color: var(--muted); margin-top: 4px; font-style: italic; }
+  .tag.pending { background: color-mix(in srgb, var(--pending) 20%, transparent); color: var(--pending); }
+  .note { font-size: 0.82rem; color: var(--muted); margin-top: 4px; font-style: italic; }
+  .versions { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 8px; }
+  .versions button { padding: 4px 10px; font-size: 0.8rem; background: transparent; color: var(--accent);
+    border: 1px solid var(--border); font-weight: 500; }
+  .versions button.on { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+  .diff { font-size: 0.85rem; border-left: 3px solid var(--accent); padding: 4px 0 4px 10px; margin: 8px 0; }
+  .diff ul { margin: 2px 0; padding-left: 18px; }
+  .diff li { overflow-wrap: anywhere; }
+  details.panel { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 10px 16px; margin: 10px 0; }
+  details.panel summary { cursor: pointer; font-size: 0.9rem; font-weight: 600; }
+  details.panel ul { margin: 8px 0 0; padding-left: 18px; font-size: 0.84rem; }
+  details.panel li { overflow-wrap: anywhere; }
   .empty { color: var(--muted); text-align: center; padding: 30px 0; }
 </style>
 </head>
@@ -68,6 +82,11 @@
     <input id="q" type="text" placeholder="e.g. is 17 prime? / how should we round 2.5?" />
     <button id="go">Ask</button>
   </div>
+  <label class="mode"><input id="wait" type="checkbox"> wait for the answer (only for quick, deterministic questions)</label>
+  <details class="panel" id="maint">
+    <summary>Maintenance: <span id="maint-summary">...</span></summary>
+    <ul id="maint-events"></ul>
+  </details>
   <div id="results"><div class="empty">No questions yet.</div></div>
 </main>
 <script>
@@ -76,31 +95,161 @@ const results = document.getElementById("results");
 const statusEl = document.getElementById("status");
 const input = document.getElementById("q");
 const go = document.getElementById("go");
+const waitBox = document.getElementById("wait");
+
+// Every piece of text from the server or the user goes through esc():
+// question and claim text is arbitrary and must never be parsed as HTML.
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c =>
+  ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
+
+const questions = new Map();   // id -> latest ledger entry
+const selected = new Map();    // id -> version index the reader chose (absent: latest)
+const cards = new Map();       // id -> card element
+const rendered = new Map();    // id -> signature of what the card currently shows
+
+async function getJSON(path, opts) {
+  const r = await fetch(API + path, opts);
+  return { status: r.status, body: await r.json() };
+}
 
 async function checkHealth() {
   try {
-    const r = await fetch(API + "/api/health");
-    const h = await r.json();
+    const h = (await getJSON("/api/health")).body;
     statusEl.textContent = `connected -- ${h.cores_available} cores, ${h.dram_headroom_gb}GB DRAM headroom`;
+    return true;
   } catch (e) {
     statusEl.textContent = "cannot reach API -- is athenaeum_body.api running and reachable?";
+    return false;
   }
 }
 
-function renderAnswer(question, answer) {
-  const card = document.createElement("div");
-  card.className = "card";
-  let html = `<div class="q">${question}</div>`;
+function idNumber(id) { const m = /(\d+)$/.exec(id); return m ? Number(m[1]) : 0; }
+
+function renderClaims(answer) {
+  let html = "";
   for (const c of (answer.committed || [])) {
-    html += `<div class="claim"><span class="tag commit">${c.issuing_agent}</span>${c.statement}</div>`;
+    html += `<div class="claim"><span class="tag commit">${esc(c.issuing_agent)}</span>${esc(c.statement)}</div>`;
   }
   for (const pa of (answer.plural_answers || [])) {
-    html += `<div class="plural-note">Jurisdictional conflict, chaired by ${pa.chaired_by} -- both conclusions stand:</div>`;
+    html += `<div class="note">Jurisdictional conflict, chaired by ${esc(pa.chaired_by)} -- both conclusions stand.</div>`;
   }
   for (const d of (answer.dissent || [])) {
-    html += `<div class="claim"><span class="tag dissent">challenged</span>${d.claim.statement}</div>`;
+    html += `<div class="claim"><span class="tag dissent">challenged</span>${esc(d.claim && d.claim.statement)}</div>`;
+  }
+  if (!html) html = `<div class="note">No claim survived deliberation.</div>`;
+  return html;
+}
+
+function renderDiff(answer) {
+  const d = answer.diff;
+  if (!d) return "";
+  const list = (label, items) => items && items.length
+    ? `<div>${label}:</div><ul>${items.map(i => `<li>${esc(i)}</li>`).join("")}</ul>` : "";
+  const lead = d.leading_conclusion || {};
+  const leadText = {
+    changed: `leading conclusion changed: "${esc(lead.from)}" &rarr; "${esc(lead.to)}"`,
+    appeared: `leading conclusion appeared: "${esc(lead.to)}"`,
+    disappeared: `leading conclusion withdrawn: "${esc(lead.from)}"`,
+    unchanged: `leading conclusion unchanged (confidence ${esc(lead.confidence)})`,
+  }[lead.change] || "";
+  return `<div class="diff"><div><strong>Reopened</strong> -- why:</div>
+    <ul>${(d.cause || []).map(c => `<li>${esc(c)}</li>`).join("")}</ul>
+    ${list("added", d.added)}${list("removed", d.removed)}
+    ${list("weight changed", (d.weight_changes || []).map(w =>
+        `${w.claim}: ${w.direction} (${Number(w.from).toFixed(2)} → ${Number(w.to).toFixed(2)})`))}
+    ${leadText ? `<div>${leadText}</div>` : ""}</div>`;
+}
+
+function renderCard(entry) {
+  const versions = entry.versions || [];
+  const pending = entry.status === "queued" || entry.status === "active";
+  const latest = versions.length - 1;
+  const shown = Math.min(selected.has(entry.id) ? selected.get(entry.id) : latest, latest);
+  const signature = JSON.stringify([entry.status, versions.length, shown, entry.importance]);
+  if (rendered.get(entry.id) === signature) return;  // nothing new: don't disturb the card
+  rendered.set(entry.id, signature);
+
+  let card = cards.get(entry.id);
+  if (!card) {
+    card = document.createElement("div");
+    card.className = "card";
+    cards.set(entry.id, card);
+    if (results.querySelector(".empty")) results.innerHTML = "";
+    const newer = [...results.children].find(c => idNumber(c.dataset.id) < idNumber(entry.id));
+    card.dataset.id = entry.id;
+    results.insertBefore(card, newer || null);
+  }
+  const question = entry.question || (versions[latest] && versions[latest].question) || entry.id;
+  let html = `<div class="q">${esc(question)}</div>
+    <div class="meta">${esc(entry.id)} · ${pending ? `<span class="tag pending">${esc(entry.status)}</span>` : esc(entry.status)}
+    ${versions.length ? ` · importance ${Number(entry.importance).toFixed(2)}` : ""}</div>`;
+  if (versions.length > 1) {
+    html += `<div class="versions">${versions.map((_, i) =>
+      `<button data-v="${i}" class="${i === shown ? "on" : ""}">v${i + 1}${i === latest ? " (latest)" : ""}</button>`).join("")}</div>`;
+  }
+  if (shown >= 0) {
+    html += renderDiff(versions[shown]) + renderClaims(versions[shown]);
+  } else if (pending) {
+    html += `<div class="note">Deliberating in the background...</div>`;
   }
   card.innerHTML = html;
+  card.querySelectorAll(".versions button").forEach(b => b.addEventListener("click", () => {
+    selected.set(entry.id, Number(b.dataset.v));
+    renderCard(questions.get(entry.id));
+  }));
+}
+
+function describeEvent(e) {
+  if (e.kind === "question") return `${e.question_id} answered (importance ${Number(e.importance).toFixed(2)})`;
+  if (e.kind === "idle") {
+    const counts = Object.entries(e.status_counts || {}).filter(([, n]) => n).map(([s, n]) => `${n} ${s}`).join(", ");
+    let text = `${e.cycle_id}: re-examined ${counts || "nothing"}`;
+    if ((e.reopened || []).length) text += `; reopened ${e.reopened.join(", ")}`;
+    if ((e.amendments_adopted || []).length) text += `; standard amended (${e.amendments_adopted.join(", ")})`;
+    if ((e.calibration_drifting || []).length) text += `; calibration drifting: ${e.calibration_drifting.join(", ")}`;
+    return text;
+  }
+  if (e.kind === "error") return `error: ${e.error}`;
+  return JSON.stringify(e);
+}
+
+async function refreshMaintenance() {
+  try {
+    const m = (await getJSON("/api/maintenance")).body;
+    document.getElementById("maint-summary").textContent =
+      `${m.idle_cycles} idle cycle(s), ${m.queued_units} unit(s) queued` +
+      (m.pending_amendments.length ? `, ${m.pending_amendments.length} amendment(s) awaiting review` : "");
+    const events = m.recent_events.slice().reverse();
+    document.getElementById("maint-events").innerHTML = events.length
+      ? events.map(e => `<li>${esc(describeEvent(e))}</li>`).join("")
+      : `<li>No activity yet.</li>`;
+  } catch (e) { /* the health line already says the API is unreachable */ }
+}
+
+async function refreshQuestions() {
+  try {
+    const list = (await getJSON("/api/questions")).body;
+    list.sort((a, b) => idNumber(a.id) - idNumber(b.id));
+    for (const entry of list) { questions.set(entry.id, entry); renderCard(entry); }
+  } catch (e) { /* retried on the next poll */ }
+}
+
+function anyPending() {
+  return [...questions.values()].some(q => q.status === "queued" || q.status === "active");
+}
+
+async function poll() {
+  await refreshQuestions();
+  await refreshMaintenance();
+  // quick while something is deliberating; slow otherwise, to catch
+  // versions that idle evolution's reopens add later
+  setTimeout(poll, anyPending() ? 2000 : 15000);
+}
+
+function showError(question, message) {
+  const card = document.createElement("div");
+  card.className = "card";
+  card.innerHTML = `<div class="q">${esc(question)}</div><div class="claim"><span class="tag dissent">error</span>${esc(message)}</div>`;
   if (results.querySelector(".empty")) results.innerHTML = "";
   results.prepend(card);
 }
@@ -108,26 +257,29 @@ function renderAnswer(question, answer) {
 async function ask() {
   const question = input.value.trim();
   if (!question) return;
-  go.disabled = true; go.textContent = "thinking...";
+  const wait = waitBox.checked;
+  go.disabled = true; go.textContent = wait ? "thinking..." : "sending...";
   try {
-    const r = await fetch(API + "/api/questions", {
+    const { status, body } = await getJSON("/api/questions", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ question })
+      body: JSON.stringify(wait ? { question } : { question, async: true })
     });
-    const data = await r.json();
-    if (data.answer) renderAnswer(question, data.answer);
-    else renderAnswer(question, { committed: [], dissent: [{claim: {statement: "error: " + (data.error || "unknown")}}] });
+    if (status >= 400) showError(question, body.error || `HTTP ${status}`);
+    else {
+      input.value = "";
+      await refreshQuestions();
+      await refreshMaintenance();
+    }
   } catch (e) {
-    renderAnswer(question, { committed: [], dissent: [{claim: {statement: "request failed: " + e}}] });
+    showError(question, "request failed: " + e);
   }
-  input.value = "";
   go.disabled = false; go.textContent = "Ask";
 }
 
 go.addEventListener("click", ask);
 input.addEventListener("keydown", e => { if (e.key === "Enter") ask(); });
-checkHealth();
+checkHealth().then(poll);
 </script>
 </body>
 </html>
