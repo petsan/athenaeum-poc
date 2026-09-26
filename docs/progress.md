@@ -401,7 +401,7 @@ Same rules and stop conditions.
 
 | Phase | Scope | Status |
 |---|---|---|
-| AF | **Reads don't wait behind deliberation** — measured on LXC 104 with a model call slowed to 2 s: a summary poll that takes 1 ms idle took 1.7 s during an async deliberation. The API's one lock is held for every worker round, model calls included, and for the whole of a synchronous deliberation. Real model calls take tens of seconds, so the client would freeze. Serve the read endpoints from a snapshot refreshed under the lock after each write, so a read never waits for a round. | open |
+| AF | **Reads don't wait behind deliberation** — measured on LXC 104 with a model call slowed to 2 s: a summary poll that takes 1 ms idle took 1.7 s during an async deliberation. The API's one lock is held for every worker round, model calls included, and for the whole of a synchronous deliberation. Real model calls take tens of seconds, so the client would freeze. Serve the read endpoints from a snapshot refreshed under the lock after each write, so a read never waits for a round. | **done** — §82 |
 | AG | **Health that says whether work is moving** — `/api/health` reports resources only. Add the worker's state (started, alive), the time of the last completed round, and the queue length, so a stuck or slow deployment is visible from the client. | open |
 | — | End-to-end test extended; README draft refreshed (local); plan batch 9. | open |
 
@@ -1102,6 +1102,23 @@ Tests: `tests/test_api_listing.py` (summary shape and size, default unchanged, u
 `README.draft.md` is refreshed for batch 7, still local. Batch 8 is planned above. Its first phase comes from a measured 1.7 s read stall behind a 2 s model call.
 
 **Full live suite: 585 passed, 1 skipped.** 586 collected (585 prior + 1 new end-to-end test).
+
+## 82. Reads never wait behind a deliberation — Phase AF
+
+The API's one lock was held for every worker round, model calls included, and for the whole of a synchronous deliberation, and every read took it too. Measured on LXC 104 with a model call slowed to 2 s, a summary poll that takes 1 ms idle took **1.7 s**. A live model call can take minutes, which would freeze the client.
+
+Now every read endpoint (the questions listing in both views, one question, one version, maintenance, checkpoints) goes through `_view()`:
+- It tries the lock **without blocking**. If the lock is free, it refreshes the snapshot and answers from it, so a read is always fresh when nothing is running.
+- If a round or a synchronous deliberation holds the lock, it answers from the snapshot left by the last completed write. The worker refreshes the snapshot after every round, and both submit paths refresh it after their writes, while still holding the lock.
+- The snapshot is replaced wholesale, never mutated, so readers serialize it without copying.
+
+The trade-off is explicit: during a round, a reader sees the state as of that round's start, which for a poller is exactly one poll stale at most.
+
+**After:** the same measurement gives **0.001 s**, while still showing the question `active`. Tests (`tests/test_api_read_latency.py`) hold a model call open on an event rather than a sleep:
+- all six read endpoints answer in under a second while an async round holds the lock (before, each would block until the call ended);
+- a read during a synchronous deliberation answers at once from the prior snapshot, and is fresh once it finishes.
+
+**Full live suite: 587 passed, 1 skipped.** 588 collected (586 prior + 2 new in `tests/test_api_read_latency.py`).
 
 ### Explicitly not on this list
 Any application-level work beyond what `deployment-playbook.md` promises to deliver (verified SSH access to a correctly-networked guest, not a deployed application).

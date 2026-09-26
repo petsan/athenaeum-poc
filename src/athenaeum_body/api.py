@@ -139,12 +139,14 @@ def build_app(data_dir: Path) -> App:
                 # never leave it 'queued' with nothing to run it (known-bugs #33)
                 ledger.set_status(qid, "suspended")
                 maintainer.record_failure(qid, {"kind": "question", "question": question}, e)
+                _refresh_locked()
                 raise DeliberationFailed(qid, maintainer.failed[qid]["last_error"]) from e
             answer = unit_log.read_latest()["shared_state"]["answer"]
             with ledger.log.batch():   # the answer and its rating: one ledger checkpoint
                 ledger.append_version(qid, answer)
                 # Section 7.1: replace the 0.5 placeholder with a computed rating.
                 importance = rate_and_store_importance(ledger, qid, graph=graph)["importance"]
+            _refresh_locked()
             return {"id": qid, "question": question, "answer": answer, "importance": importance}
 
     worker_thread: list[threading.Thread] = []
@@ -153,6 +155,7 @@ def build_app(data_dir: Path) -> App:
         with lock:
             qid = _new_id()
             maintainer.submit_question(qid, question)
+            _refresh_locked()
             # Started on first use, so a purely synchronous user never gets
             # background idle cycles running over their questions.
             if not worker_thread:
@@ -163,7 +166,8 @@ def build_app(data_dir: Path) -> App:
 
     def worker() -> None:
         """One thread drives the Maintainer, one round at a time, taking the
-        lock per round so synchronous requests and reads interleave."""
+        lock per round so synchronous requests interleave; reads never wait
+        for it (they use the snapshot refreshed here)."""
         while True:
             with lock:
                 try:
@@ -172,23 +176,55 @@ def build_app(data_dir: Path) -> App:
                     # anything else (e.g. a completed unit's follow-ups) so the worker never dies silently
                     maintainer.emit({"kind": "error", "error": repr(e)})
                 busy = bool(maintainer.scheduler._heap)
+                _refresh_locked()
             if not busy:
                 work_available.wait(timeout=1.0)
                 work_available.clear()
 
+    # --- reads (batch 8, Phase AF) ---------------------------------------------
+    # The lock is held for a whole worker round (model calls included) and a
+    # whole synchronous deliberation, so a read never waits for it: it takes
+    # the lock only if it is free (and refreshes the snapshot, so a read is
+    # fresh whenever nothing is running); otherwise it answers from the
+    # snapshot taken after the last completed write. Writers refresh it while
+    # they still hold the lock. The snapshot is replaced wholesale, never
+    # mutated, so a reader can serialize what it got without copying.
+    snapshot: dict = {}
+    snapshot_lock = threading.Lock()
+
+    def _refresh_locked() -> None:
+        """Caller holds `lock`."""
+        entries = [_with_question(q) for q in ledger._state()["questions"].values()]
+        fresh = {
+            "questions": entries,
+            "by_id": {e["id"]: e for e in entries},
+            "maintenance": {"idle_cycles": maintainer.cycles, "queued_units": len(maintainer.scheduler._heap),
+                            "pending_amendments": sorted(maintainer.pending_amendments),
+                            "failed_units": sorted(maintainer.failed),
+                            "recent_events": list(maintainer.events[-10:])},
+            "checkpoints": _checkpoints_locked(),
+        }
+        with snapshot_lock:
+            snapshot.clear()
+            snapshot.update(fresh)
+
+    def _view() -> dict:
+        if lock.acquire(blocking=False):
+            try:
+                _refresh_locked()
+            finally:
+                lock.release()
+        with snapshot_lock:
+            return dict(snapshot)
+
     def get_version(qid: str, n: int):
-        with lock:
-            entry = ledger.get(qid)
-            if entry is None or not 0 <= n < len(entry.versions):
-                return None
-            return entry.versions[n]
+        entry = _view()["by_id"].get(qid)
+        if entry is None or not 0 <= n < len(entry["versions"]):
+            return None
+        return entry["versions"][n]
 
     def maintenance_status() -> dict:
-        with lock:
-            return {"idle_cycles": maintainer.cycles, "queued_units": len(maintainer.scheduler._heap),
-                    "pending_amendments": sorted(maintainer.pending_amendments),
-                    "failed_units": sorted(maintainer.failed),
-                    "recent_events": maintainer.events[-10:]}
+        return _view()["maintenance"]
 
     def _with_question(entry: dict) -> dict:
         # A queued question has no version yet, so its text comes from the
@@ -207,38 +243,39 @@ def build_app(data_dir: Path) -> App:
         """view="full" (the default): every entry with every answer version.
         view="summary": what a poller needs to notice a change -- no answers,
         just `versions` as a count (batch 7, Phase AE)."""
-        with lock:
-            entries = [_with_question(q) for q in ledger._state()["questions"].values()]
+        entries = _view()["questions"]
         if view == "summary":
             return [{**{k: e[k] for k in SUMMARY_FIELDS if k in e}, "versions": len(e["versions"])}
                     for e in entries]
         return entries
 
     def get_question(qid: str):
-        with lock:
-            entry = ledger.get(qid)
-            return _with_question(entry.to_dict()) if entry else None
+        return _view()["by_id"].get(qid)
+
+    def _checkpoints_locked() -> list:
+        found = []
+        for key, cp in maintainer.idle.checkpoints.all().items() if maintainer.idle.checkpoints else []:
+            kind, _, ref = key.partition(":") if ":" in key else ("question", "", key)
+            item = {"key": key, "kind": kind, "ref": ref, **cp}
+            if kind == "standard-amendment" and ref in maintainer.pending_amendments:
+                item["proposal"] = maintainer.pending_amendments[ref]
+            found.append(item)
+        return sorted(found, key=lambda c: (c["status"] != "pending_human_checkpoint", c["key"]))
 
     def checkpoints() -> list:
         """Section 11.5's human checkpoints, read-only: what waits for a
         reviewer, and why. Pending first. A standard amendment carries the
         proposal itself so a reviewer can see what would change. Approving
         is deliberately not exposed here: this API has no authentication."""
-        with lock:
-            found = []
-            for key, cp in maintainer.idle.checkpoints.all().items() if maintainer.idle.checkpoints else []:
-                kind, _, ref = key.partition(":") if ":" in key else ("question", "", key)
-                item = {"key": key, "kind": kind, "ref": ref, **cp}
-                if kind == "standard-amendment" and ref in maintainer.pending_amendments:
-                    item["proposal"] = maintainer.pending_amendments[ref]
-                found.append(item)
-            return sorted(found, key=lambda c: (c["status"] != "pending_human_checkpoint", c["key"]))
+        return _view()["checkpoints"]
 
     def health() -> dict:
         s = monitor.get_state()
         return {"status": "ok", "cores_available": s.cores_available,
                 "dram_headroom_gb": s.dram_headroom_gb}
 
+    with lock:
+        _refresh_locked()
     app = App((submit_question, list_questions, get_question, health))
     app.submit_async, app.get_version, app.maintenance_status = submit_async, get_version, maintenance_status
     app.maintainer, app.worker_thread, app.checkpoints = maintainer, worker_thread, checkpoints
