@@ -22,7 +22,7 @@ from athenaeum_body.scheduler.runner import SingleUnitRunner
 from .consolidation import claim_key, expand
 from .loop import make_deliberation_unit
 from .output_types import FORECAST, RESEARCH, evidence_weight, resolve_forecast
-from .reevaluation import is_material, materiality_inputs, forecast_is_material
+from .reevaluation import is_material, materiality_inputs, forecast_is_material, frame_staleness
 
 # Section 7.1's inputs and how much each counts. Explicitly a placeholder
 # policy, like GRADE_WEIGHT: which inputs matter is the design's, the
@@ -191,7 +191,8 @@ def reopen_if_material(ledger: QuestionLedger, question_id: str, *, reputability
     prior = entry.versions[-1]
     current, under_prior = materiality_inputs(prior, reputability)
     materiality = is_material(prior, current, threshold=grade_threshold, prior_standard_grades=under_prior)
-    reasons = list(materiality["reasons"]) + list(additional_reasons)
+    reasons = (list(materiality["reasons"]) + frame_staleness(prior)["reasons"]  # 7.2 trigger 3
+               + list(additional_reasons))
     extra = {}
 
     forecast = prior.get("output_answer", {}).get("sections", {}).get(FORECAST)

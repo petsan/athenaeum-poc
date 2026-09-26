@@ -41,7 +41,10 @@ def test_adversarial_suite_all_pass():
 def test_adversarial_suite_covers_named_failure_modes():
     expected = {"false_consensus", "category_error_is_ought", "unverified_execution_claims",
                 "prompt_content_injection", "category_error_traditional_confidence",
-                "silent_model_substitution", "circular_corroboration"}
+                "silent_model_substitution", "circular_corroboration",
+                "overconfidence_drift", "silent_authority_creep", "retroactive_history_rewriting",
+                "stale_framing", "unfalsifiable_as_empirical", "silent_style_drift", "lossy_compaction",
+                "unjustified_human_input_skew", "uncommitted_canonical_writes"}
     assert set(ADVERSARIAL_CASES.keys()) == expected
 
 

@@ -43,12 +43,13 @@ def run_ground_truth_benchmark(cases: list[dict]) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# 9.2 Adversarial questions -- one per Section 8 failure mode this POC has
-# a real, checkable mechanism for. Not all 16 rows in Section 8's table are
-# covered (several need a real model backend, e.g. "silent style drift"
-# needs enough real reasoning volume for Domain Fidelity's fingerprint to
-# be meaningful) -- covered modes are named explicitly so this isn't
-# silently overclaimed as full Section 8 coverage.
+# 9.2 Adversarial questions -- at least one real, checkable case for every
+# one of Section 8's 15 failure modes (SECTION_8_COVERAGE below maps each
+# row of the design table to its case(s); tests/test_adversarial_coverage.py
+# parses the table from brain-design.md and fails if a row is uncovered).
+# What each case proves is the MECHANISM guarding that failure mode, on
+# constructed inputs -- not that the failure can never occur with a real
+# model backing the agents at scale; see brain-design.md 9.6.
 # ---------------------------------------------------------------------------
 
 def _check_false_consensus():
@@ -111,6 +112,164 @@ def _check_circular_corroboration_not_counted_as_independent():
             and independent["eligible"])
 
 
+# --- Section 8 rows added 2026-09-26 (Phase H) -------------------------------
+# Each check builds throwaway stores in a temp dir and exercises the real
+# mechanism -- the same "real, checkable" bar as the checks above.
+
+def _temp_log(tmp, name):
+    import pathlib
+    from athenaeum_body.storage.content_addressed import ContentAddressedStore
+    from athenaeum_body.storage.checkpoint import CheckpointLog
+    tmp = pathlib.Path(tmp)
+    return CheckpointLog(cas=ContentAddressedStore(tmp / f"cas-{name}"), index_path=tmp / f"{name}.txt")
+
+
+def _check_overconfidence_drift_is_detected():
+    """5.3/9.3: an agent claiming ~95% that is verified 30% of the time is
+    flagged; one verified every time is not."""
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmp:
+        store = CalibrationStore(_temp_log(tmp, "cal"))
+        for i in range(10):
+            store.record("Overconfident", 0.95, verified=i < 3)
+            store.record("Calibrated", 0.95, verified=True)
+        return (calibration_drift(store, "Overconfident")["drifting"]
+                and not calibration_drift(store, "Calibrated")["drifting"])
+
+
+def _check_logic_never_asserts_domain_content():
+    """4.2.3/6.4.3 silent authority creep: across questions from every
+    domain, Logic proposes no first-order claim, every Logic response is
+    procedural, and Logic is not among the category-error reviewers."""
+    from .agents import MasterOfLogic
+    from .dispute_resolution import CATEGORY_ERROR_REVIEWERS
+    logic = MasterOfLogic()
+    questions = ["is 17 prime?", "how should we round 2.5?", "if all men are mortal, then is Socrates mortal?",
+                 "how long does an object take to fall from 19.6m?", "did world war i cause world war ii?"]
+    for q in questions:
+        if logic.explore(q, "adv-logic"):
+            return False
+        frame = framing_round(q, "adv-logic")
+        for claim in exploration_round(frame, "adv-logic"):
+            resp = logic.cross_examine(claim, "adv-logic")
+            if resp is not None and resp.claim_type != "procedural":
+                return False
+    return "Logic" not in CATEGORY_ERROR_REVIEWERS
+
+
+def _check_history_is_never_rewritten():
+    """6.3/6.5/7.3: after an answer is recorded, later evidence and a
+    standard amendment regrade its source -- yet the recorded answer, its
+    time-of-use grade snapshot, and every earlier grade decision are
+    byte-for-byte unchanged."""
+    import copy, tempfile
+    from athenaeum_body.ledger import QuestionLedger
+    from athenaeum_body.schemas import QuestionLedgerEntry
+    from athenaeum_body.reputability_store import ReputabilityStore, SEED_STANDARD_PARAMS
+    from athenaeum_body.scheduler.runner import SingleUnitRunner
+    from .loop import make_deliberation_unit
+    with tempfile.TemporaryDirectory() as tmp:
+        rep, ledger = ReputabilityStore(_temp_log(tmp, "rep")), QuestionLedger(_temp_log(tmp, "ledger"))
+        ledger.submit(QuestionLedgerEntry(id="adv-hist"))
+        log = _temp_log(tmp, "unit")
+        runner, unit = SingleUnitRunner(log, shared_state={}), make_deliberation_unit("is 17 prime?", "adv-hist",
+                                                                                         reputability=rep)
+        while unit.status != "completed":
+            runner.run_round(unit)
+        ledger.append_version("adv-hist", log.read_latest()["shared_state"]["answer"])
+        recorded = copy.deepcopy(ledger.get("adv-hist").versions[0])
+        early_history = copy.deepcopy(rep.grade_history("computed:trial_division"))
+        for _ in range(4):
+            rep.record_outcome("computed:trial_division", "source", "corroborated")
+        rep.adopt_standard({**SEED_STANDARD_PARAMS, "foundational_min_corroborations": 9}, rationale="adversarial")
+        return (ledger.get("adv-hist").versions[0] == recorded
+                and rep.grade_history("computed:trial_division")[:len(early_history)] == early_history
+                and len(rep.grade_history("computed:trial_division")) > len(early_history))
+
+
+def _check_stale_frame_is_material():
+    """7.2 trigger 3: an answer whose frame no longer matches how the same
+    question is framed today is flagged stale; a current frame is not."""
+    from .reevaluation import frame_staleness
+    q = "how should we round 2.5?"
+    old = {"question": q, "frame": {"routed_agents": ["Mathematics"], "output_types": ["research"]}}
+    current = {"question": q, "frame": framing_round(q, "adv-frame")}
+    return frame_staleness(old)["stale"] and not frame_staleness(current)["stale"]
+
+
+def _check_unfalsifiable_empirical_claim_is_challenged():
+    """2.2 / Section 8: Physics challenges an empirical claim that names no
+    defeat condition, and leaves one with an observable defeat condition alone."""
+    from .agents import MasterOfPhysics
+    physics = MasterOfPhysics()
+    def claim(defeat):
+        return Claim(question_id="adv-9", round=1, issuing_agent="WorldNews", statement="the universe has a purpose",
+                     claim_type="empirical", confidence=0.7, defeat_condition=defeat, jurisdiction_check=True)
+    challenged = physics.cross_examine(claim("none"), "adv-9")
+    left_alone = physics.cross_examine(claim("a measurement of X exceeding Y"), "adv-9")
+    return challenged is not None and challenged.relation == "challenges" and left_alone is None
+
+
+def _check_style_drift_is_flagged_and_confirmed():
+    """2.4: an agent that stays 'correct' but stops reasoning in its domain's
+    style (Mathematics asserting from a model instead of computing) drops
+    in fidelity, is flagged, and is confirmed on style review."""
+    import tempfile
+    from athenaeum_body.domain_fidelity_store import DomainFidelityStore
+    from .domain_fidelity import compute_score, needs_review
+    from .fidelity_remediation import remediate
+    with tempfile.TemporaryDirectory() as tmp:
+        store = DomainFidelityStore(_temp_log(tmp, "fid"))
+        on_style = [{"issuing_agent": "Mathematics", "claim_id": "a", "supporting_provenance": ["computed:x"]}]
+        drifted = [{"issuing_agent": "Mathematics", "claim_id": "b", "supporting_provenance": ["llm:olmo3-7b"]}]
+        for _ in range(3):
+            store.record("Mathematics", compute_score("Mathematics", on_style, []))
+        store.record("Mathematics", compute_score("Mathematics", drifted, []))
+        return (needs_review(store, "Mathematics")["needs_review"]
+                and remediate(store, "Mathematics", recent_claims=drifted, cycle_id="adv")["stage"] == "regrounding")
+
+
+def _check_lossy_compaction_is_caught():
+    """10/9.5: a compacted node edited to say more than its archived trace
+    supports is caught by the consolidation audit."""
+    import tempfile, pathlib
+    from athenaeum_body.consolidation_store import ConsolidationStore
+    from athenaeum_body.storage.content_addressed import ContentAddressedStore
+    from .consolidation import record_survival, compact
+    from .audits import consolidation_audit
+    with tempfile.TemporaryDirectory() as tmp:
+        store = ConsolidationStore(_temp_log(tmp, "cons"), ContentAddressedStore(pathlib.Path(tmp) / "archive"))
+        for i in range(5):
+            record_survival(store, "k", {"statement": "X, under conditions C", "confidence": 0.9,
+                                         "supporting_provenance": [("src:a", "src:b")[i % 2]]})
+        node = compact(store, "k")
+        clean = consolidation_audit(store, audit_id="adv-1")["failed"] == []
+        store.upsert("k", {**node, "statement": "X"})  # the qualification quietly dropped
+        return clean and bool(consolidation_audit(store, audit_id="adv-2")["failed"])
+
+
+def _check_unjustified_human_input_stays_low_weight():
+    """11.1-11.2: human input asking for full confidence with no
+    justification is accepted only as low-weight testimony."""
+    from .human_input import submit_human_input
+    def submit(justification):
+        return submit_human_input(question_id="adv-h", round_no=1, submitter_id="u", submitter_role="member",
+                                  statement="trust me", justification=justification, declared_scope="x",
+                                  requested_confidence=1.0)["claim"].confidence
+    return submit("") <= 0.3 and submit("two independent archives agree") == 1.0
+
+
+def _check_nothing_is_committed_outside_synthesis():
+    """4.4: exploration output is proposal-only, and the integrity gate
+    rejects an answer that lists a proposed claim as committed."""
+    frame = framing_round("is 17 prime?", "adv-commit")
+    exp = exploration_round(frame, "adv-commit")
+    if not exp:
+        return False
+    smuggled = {"committed": [exp[0].to_dict()]}  # status is still 'proposed'
+    return all(c.status == "proposed" for c in exp) and not check_integrity_gates(smuggled)["passed"]
+
+
 ADVERSARIAL_CASES = {
     "false_consensus": _check_false_consensus,
     "category_error_is_ought": _check_category_error_is_ought,
@@ -119,6 +278,35 @@ ADVERSARIAL_CASES = {
     "category_error_traditional_confidence": _check_traditional_claims_never_empirical_confidence,
     "silent_model_substitution": _check_serving_model_recorded_for_silent_substitution_detection,
     "circular_corroboration": _check_circular_corroboration_not_counted_as_independent,
+    "overconfidence_drift": _check_overconfidence_drift_is_detected,
+    "silent_authority_creep": _check_logic_never_asserts_domain_content,
+    "retroactive_history_rewriting": _check_history_is_never_rewritten,
+    "stale_framing": _check_stale_frame_is_material,
+    "unfalsifiable_as_empirical": _check_unfalsifiable_empirical_claim_is_challenged,
+    "silent_style_drift": _check_style_drift_is_flagged_and_confirmed,
+    "lossy_compaction": _check_lossy_compaction_is_caught,
+    "unjustified_human_input_skew": _check_unjustified_human_input_stays_low_weight,
+    "uncommitted_canonical_writes": _check_nothing_is_committed_outside_synthesis,
+}
+
+# Section 8's table, row by row, mapped to the case(s) above that exercise
+# it. Every row now has at least one real check (category error has two).
+SECTION_8_COVERAGE = {
+    "False consensus": ["false_consensus"],
+    "Circular corroboration": ["circular_corroboration"],
+    "Category error": ["category_error_is_ought", "category_error_traditional_confidence"],
+    "Overconfidence drift": ["overconfidence_drift"],
+    "Silent authority creep": ["silent_authority_creep"],
+    "Retroactive history rewriting": ["retroactive_history_rewriting"],
+    "Stale framing": ["stale_framing"],
+    "Unfalsifiable claims presented as physical/empirical": ["unfalsifiable_as_empirical"],
+    "Silent style drift": ["silent_style_drift"],
+    "Lossy or unaccountable compaction": ["lossy_compaction"],
+    "Unjustified belief skew from human input": ["unjustified_human_input_skew"],
+    "Prompt/content injection via ingested corpus or human input": ["prompt_content_injection"],
+    "Uncommitted/unauthorized canonical writes": ["uncommitted_canonical_writes"],
+    "Silent model substitution": ["silent_model_substitution"],
+    "Unverified execution claims": ["unverified_execution_claims"],
 }
 
 
@@ -150,6 +338,33 @@ def calibration_report(store: CalibrationStore, agent_name: str) -> dict:
             "n": total,
         }
     return report
+
+
+def _bucket_midpoint(bucket: str) -> float:
+    if "-" not in bucket:
+        return float(bucket)
+    lo, hi = (float(x) for x in bucket.split("-"))
+    return (lo + hi) / 2
+
+
+def calibration_drift(store: CalibrationStore, agent_name: str, *, tolerance: float = 0.2,
+                      min_n: int = 5) -> dict:
+    """Section 8's 'overconfidence drift' row, made a yes/no signal: any
+    confidence bucket with at least `min_n` outcomes whose observed verified
+    fraction sits more than `tolerance` below the bucket's midpoint.
+    (Underconfidence is reported too, but only overconfidence is 'drift'
+    in Section 8's sense.) Thresholds are placeholders."""
+    over, under = [], []
+    for bucket, row in calibration_report(store, agent_name).items():
+        if row["n"] < min_n or row["observed_verified_fraction"] is None:
+            continue
+        gap = _bucket_midpoint(bucket) - row["observed_verified_fraction"]
+        entry = {"bucket": bucket, "n": row["n"], "observed": row["observed_verified_fraction"], "gap": gap}
+        if gap > tolerance:
+            over.append(entry)
+        elif gap < -tolerance:
+            under.append(entry)
+    return {"drifting": bool(over), "overconfident_buckets": over, "underconfident_buckets": under}
 
 
 # ---------------------------------------------------------------------------

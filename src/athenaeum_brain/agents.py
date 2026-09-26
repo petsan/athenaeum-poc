@@ -432,9 +432,29 @@ class MasterOfPhysics:
             },
         )
 
+    # Defeat conditions that name nothing that could ever happen.
+    _VACUOUS_DEFEAT = {"", "none", "n/a", "na", "-", "nothing", "no defeat condition",
+                       "cannot be falsified", "unfalsifiable", "not applicable"}
+
     def cross_examine(self, claim: Claim, question_id: str) -> Claim | None:
         if claim.issuing_agent == self.name or claim.claim_type != "empirical":
             return None
+        # Section 2.2 / Section 8 ("unfalsifiable claims presented as
+        # physical/empirical"): an empirical claim must say what observation
+        # would defeat it. One that can't be falsified isn't asserted as
+        # empirical; it's sent to Philosophy's jurisdiction instead.
+        if (claim.defeat_condition or "").strip().lower().rstrip(".") in self._VACUOUS_DEFEAT:
+            return Claim(
+                question_id=question_id, round=2, issuing_agent=self.name,
+                statement=(f"claim '{claim.statement}' is typed empirical but states no condition under which "
+                           "it would be false -- unfalsifiable as stated, so it belongs with Philosophy "
+                           "(metaphysical or normative), not with empirical claims"),
+                claim_type="procedural", confidence=0.9,
+                defeat_condition="the claim is given an observable defeat condition, or retyped non-empirical",
+                jurisdiction_check=True, relation="challenges",
+                target_claim_id=claim.claim_id,
+                supporting_provenance=["reasoning:falsifiability"],
+            )
         import re
         m = re.match(r"an object falling from ([\d.]+)m takes approximately ([\d.]+)s", claim.statement)
         if not m:

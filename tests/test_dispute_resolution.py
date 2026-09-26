@@ -157,4 +157,4 @@ def test_consolidation_does_not_promote_on_circular_corroboration():
 def test_adversarial_suite_covers_circular_corroboration():
     suite = run_adversarial_suite()
     assert suite["results"]["circular_corroboration"] is True
-    assert suite["total"] == 7
+    assert suite["total"] == 16

@@ -10,6 +10,32 @@ from athenaeum_body.reputability_store import GRADE_ORDER
 SEVERE_GRADES = {"contested", "rejected"}
 
 
+def frame_staleness(answer: dict) -> dict:
+    """Section 7.2's third trigger (and Section 8's "stale framing" row): the
+    question's own frame is outdated when framing the same question TODAY
+    would route it to a different set of agents or classify it as asking
+    for different output types -- e.g. a new Master Agent now claims
+    jurisdiction the original deliberation never consulted. Frames are
+    compared, not answers: a stale frame is material even if nothing the
+    answer cited has changed. Answers without a recorded question/frame
+    (written before 2026-09-26) can't be checked and report not stale."""
+    if "question" not in answer or "frame" not in answer:
+        return {"stale": False, "reasons": []}
+    from .rounds import framing_round
+    now = framing_round(answer["question"], "frame-check")
+    then = answer["frame"]
+    reasons = []
+    added = sorted(set(now["routed_agents"]) - set(then.get("routed_agents", [])))
+    dropped = sorted(set(then.get("routed_agents", [])) - set(now["routed_agents"]))
+    if added:
+        reasons.append(f"frame outdated: now also routed to {', '.join(added)}")
+    if dropped:
+        reasons.append(f"frame outdated: no longer routed to {', '.join(dropped)}")
+    if now["output_types"] != then.get("output_types", now["output_types"]):
+        reasons.append(f"frame outdated: output types now {now['output_types']} (were {then.get('output_types')})")
+    return {"stale": bool(reasons), "reasons": reasons}
+
+
 def materiality_inputs(answer: dict, store) -> tuple[dict, dict]:
     """Reads, from a ReputabilityStore, the two live inputs is_material
     needs for every source the answer cited: its current grade, and the

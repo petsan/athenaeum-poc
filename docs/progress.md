@@ -263,7 +263,7 @@ Earlier sections each ended with their own "suggested next step," repeatedly sup
 - [ ] **Owner action: OLMo 3 7B guest (VMID 116) is swap-thrashing** — `llama-server` at 98% of its 10 GB limit, ~45× slower, all live-OLMo tests timing out. Restart it / `--mlock` or `--no-mmap` / more RAM. Diagnosis and options in `known-bugs.md` #24. (Found 2026-09-26.)
 - [x] ~~Domain Fidelity re-grounding and escalation-to-checkpoint (§2.4.3, task 30).~~ Done 2026-09-26 (Phase F) — see Section 49.
 - [x] ~~Re-evaluation and consolidation audit sampling (§9.4–9.5, tasks 22–23).~~ Done 2026-09-26 (Phase G) — see Section 50.
-- [ ] Adversarial suite: 7 of §8's 15 failure modes covered (task 20; `circular_corroboration` added in Section 42); several remaining ones depend on the items above.
+- [x] ~~Adversarial suite: 7 of §8's 15 failure modes covered (task 20; `circular_corroboration` added in Section 42); several remaining ones depend on the items above.~~ **15 of 15** as of 2026-09-26 (Phase H) — see Section 51.
 
 ### Next-session plan (written 2026-09-25, end of session)
 
@@ -287,7 +287,7 @@ Earlier sections each ended with their own "suggested next step," repeatedly sup
 6. ~~**§6.7 model admission gate + fitness at synthesis.**~~ — **done 2026-09-26 as Phase E, Section 48.** Provisional status for a newly admitted model; apply `model_fitness.apply_fitness_to_confidence` alongside `reputability_factor` for claims with `serving_model` (keep raw `confidence` untouched, same as §41).
 7. ~~**§2.4.3 Domain Fidelity re-grounding/escalation**~~ — **done 2026-09-26 as Phase F, Section 49.** On `needs_review`, re-ground against the agent's baseline cases; escalate to a human checkpoint after repeated failure (reuse `human_checkpoint_store`).
 8. ~~**§9.4–9.5 audit sampling** for re-evaluation and consolidation fidelity.~~ — **done 2026-09-26 as Phase G, Section 50.**
-9. **Remaining adversarial cases**, added as their mechanisms land: retroactive history rewriting (after 1), stale framing (after 3/4), silent authority creep (Logic never issues a first-order claim; checkable now), unfalsifiable-claims-as-physics, overconfidence drift (calibration store), lossy compaction, silent style drift, unjustified human-input skew, uncommitted canonical writes (checkable now). Aim to add the two "checkable now" ones opportunistically in milestone 1's session if it's small.
+9. ~~**Remaining adversarial cases**~~ — **done 2026-09-26 as Phase H, Section 51 (15/15).** Added as their mechanisms land: retroactive history rewriting (after 1), stale framing (after 3/4), silent authority creep (Logic never issues a first-order claim; checkable now), unfalsifiable-claims-as-physics, overconfidence drift (calibration store), lossy compaction, silent style drift, unjustified human-input skew, uncommitted canonical writes (checkable now). Aim to add the two "checkable now" ones opportunistically in milestone 1's session if it's small.
 
 **Infra items above in this section are untouched this session** (backup timer `OnBootSec` decision, auto-update mechanism) — still the owner's call, not Brain work.
 
@@ -304,7 +304,7 @@ The owner approved this batch to run unattended, in whatever order works best, *
 | E | Model admission gate + fitness weighting at synthesis (§6.7) — plan item 6 | **done** — §48 (live-OLMo tests unverifiable this run, see §48) |
 | F | Domain Fidelity re-grounding/escalation (§2.4.3) — plan item 7 | **done** — §49 (offline-verified) |
 | G | Audit sampling (§9.4–9.5) — plan item 8 | **done** — §50 (offline-verified) |
-| H | Adversarial suite toward 15/15 (§8, §9.2) — plan item 9 | open |
+| H | Adversarial suite toward 15/15 (§8, §9.2) — plan item 9 | **done** — §51, 15/15 (offline-verified) |
 | I | *(optional)* README body refresh — **draft only; never pushed without the owner's review.** The top notice and LICENSE are never touched. | open |
 
 **Stop-and-wait conditions (from the approval):** a failing test whose root cause is unclear; the design is silent on a hard-to-reverse choice (e.g. persisted-state shape); an existing test's *meaning* (not just shape) would have to change; the Proxmox host goes down. **Never:** alter LICENSE/README notice, create/modify/destroy Proxmox guests, enable `execution_sandbox`, touch credentials or paid services, or write tests that require the GPU worker.
@@ -611,6 +611,30 @@ Every transition is appended to the agent's remediation history (new `DomainFide
 Neither audit is scheduled yet — they're callable functions; running them from an idle cycle every N cycles is a small follow-up once there's a cadence policy.
 
 **Verified offline** (OLMo 3 guest still degraded — ~69 s per 4-token call): **383 passed, 1 skipped, 3 failed**, the same three `olmo3-7b` timeouts. 402 collected (385 prior + 17 new in `tests/test_audits.py`).
+
+## 51. Adversarial suite: all 15 of §8's failure modes (§9.2) — Phase H
+
+`evaluation.ADVERSARIAL_CASES` grows from 7 to 16 cases, and a new `SECTION_8_COVERAGE` maps every row of brain-design.md's §8 table to the case(s) that exercise it. `tests/test_adversarial_coverage.py` **parses that table out of the design doc** and fails if any row lacks a real check — so adding a failure mode to the design without a check breaks the build (it already caught one naming mismatch while being written). Every case exercises the real mechanism on constructed input, in throwaway stores, same bar as the original seven:
+
+| §8 failure mode | Case | Mechanism exercised |
+|---|---|---|
+| Overconfidence drift | `overconfidence_drift` | new `calibration_drift()` — flags a confidence bucket whose observed verified rate sits > 0.2 below its midpoint (n ≥ 5); underconfidence reported separately, not called drift |
+| Silent authority creep | `silent_authority_creep` | Logic proposes nothing and responds only procedurally across questions from every domain; Logic isn't a category-error reviewer (§6.4.3) |
+| Retroactive history rewriting | `retroactive_history_rewriting` | after later evidence **and** a standard amendment regrade the cited source, the recorded ledger answer and every earlier grade decision are byte-identical |
+| Stale framing | `stale_framing` | **new mechanism** (below) |
+| Unfalsifiable claims presented as empirical | `unfalsifiable_as_empirical` | **new mechanism** (below) |
+| Silent style drift | `silent_style_drift` | Domain Fidelity drop → flagged → confirmed on style → re-grounding (§49) |
+| Lossy compaction | `lossy_compaction` | the §9.5 audit (§50) catches a compact node whose qualification was quietly dropped |
+| Unjustified human-input skew | `unjustified_human_input_skew` | an unjustified submission asking for 1.0 is capped at 0.3; a justified one isn't |
+| Uncommitted canonical writes | `uncommitted_canonical_writes` | exploration output is all `proposed`; the integrity gate rejects an answer listing a proposed claim as committed |
+
+**Two mechanisms the design names were missing and are now built:**
+- **Stale framing (§7.2's third trigger):** `reevaluation.frame_staleness(answer)` re-frames the answer's own question today and reports if it would now route to different agents (added or dropped) or classify different output types. `reopen_if_material` includes it as a material reason, and the §9.4 audit's stagnation scan counts it. Frames are compared, not answers — adding a Master Agent that claims jurisdiction over old questions makes those frames stale, as intended (still gated by importance).
+- **Falsifiability (§2.2, §8):** Physics now challenges any *empirical* claim from another agent whose defeat condition is vacuous (`""`, `none`, `n/a`, `cannot be falsified`, …): unfalsifiable as stated, belongs with Philosophy.
+
+What this does and doesn't prove is stated in `evaluation.py`'s section header: each case proves the mechanism that guards its failure mode, on constructed input — not that the failure can never occur with real models at scale (brain-design.md §9.6). Two pinned expectations updated accordingly (`test_evaluation.py`'s case set, `test_dispute_resolution.py`'s suite total 7 → 16).
+
+**Verified offline** (OLMo 3 guest still degraded): **398 passed, 1 skipped, 3 failed**, the same three `olmo3-7b` timeouts. 417 collected (402 prior + 15 new in `tests/test_adversarial_coverage.py`).
 
 ### Explicitly not on this list
 Any application-level work beyond what `deployment-playbook.md` promises to deliver (verified SSH access to a correctly-networked guest, not a deployed application).

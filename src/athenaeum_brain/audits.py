@@ -26,7 +26,7 @@ from athenaeum_body.consolidation_store import ConsolidationStore
 from athenaeum_body.audit_store import AuditStore
 from athenaeum_body.storage.content_addressed import IntegrityError, NotFoundError
 from .consolidation import should_promote_to_c
-from .reevaluation import is_material, materiality_inputs
+from .reevaluation import is_material, materiality_inputs, frame_staleness
 
 
 def _sample(items: list, size: int, seed: int) -> list:
@@ -65,13 +65,14 @@ def reevaluation_audit(ledger: QuestionLedger, reputability: ReputabilityStore, 
 
     stagnation = []
     for qid, q in sorted(questions.items()):
-        if not q["versions"] or "source_grades_at_use" not in q["versions"][-1]:
+        if not q["versions"]:
             continue
         latest = q["versions"][-1]
         current, under_prior = materiality_inputs(latest, reputability)
         m = is_material(latest, current, threshold=grade_threshold, prior_standard_grades=under_prior)
-        if m["material"]:
-            stagnation.append({"question_id": qid, "importance": q["importance"], "reasons": m["reasons"]})
+        reasons = m["reasons"] + frame_staleness(latest)["reasons"]
+        if reasons:
+            stagnation.append({"question_id": qid, "importance": q["importance"], "reasons": reasons})
 
     no_change = sum(1 for s in sampled if s["classification"] == "no_change")
     report = {

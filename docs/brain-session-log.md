@@ -1051,6 +1051,44 @@ later.
 
 ---
 
+## 2026-09-26 — Adversarial suite to 15/15 (§8, §9.2, Phase H): design choices
+
+**Q: Why parse the design doc in a test?**
+
+The suite's claim is "every Section 8 failure mode has a real check".
+A hand-maintained list can drift from the design silently — a row added
+to §8 would simply never get a check. Parsing the table makes the claim
+checkable: the test fails if the design and the suite disagree. It
+caught a real mismatch on its first run (the design's full row name for
+prompt injection).
+
+**Q: Two rows had no mechanism to check. Why build them instead of
+marking them uncovered?**
+
+Both were small, specified precisely in the design, and plainly part of
+the system's intended behaviour rather than new scope. Stale framing is
+§7.2's third materiality trigger, verbatim; falsifiability is §2.2's
+defeat-condition discipline for Physics, whose §8 guard is "a claim it
+can't falsify is rerouted to Philosophy". A check that passes because
+the mechanism is missing would be worse than no check.
+
+**Q: What counts as "stale" for a frame?**
+
+Routing and output-type classification are what the framing round
+decides, so a frame is stale when framing the same question today
+decides either differently. That deliberately makes every old answer to
+a question a new agent would claim stale — that's the case §7.2 is
+describing — while importance still gates whether it's worth reopening.
+
+**Q: Why does Physics police falsifiability for other agents' claims?**
+
+§2.2 makes the defeat condition Physics's own reasoning discipline, and
+§8 assigns the guard to it explicitly. It only fires on claims typed
+`empirical`; a claim honestly typed normative or traditional isn't
+asserting anything falsifiable and isn't challenged.
+
+---
+
 *See `docs/progress.md` §26 for the checklist this log's entries track
 against, and `docs/infra-topology.md` for the infrastructure-side design
 decisions made in the same planning conversation.*
