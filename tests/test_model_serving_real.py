@@ -49,7 +49,11 @@ def test_model_serving_layer_routes_real_request_through_cpu_fallback(tmp_path):
     result = layer.request("qwen2.5-1.5b", "Q: Name the largest planet in our solar system.\nA:")
     assert result["backend"] == "cpu"
     assert result["model"] == "qwen2.5-1.5b"
-    assert "jupiter" in result["response"].lower()
+    # Owner decision 2 (2026-09-26): this test proves the routing, not the
+    # model's knowledge. It used to assert "jupiter", which a 1.5B model got
+    # wrong ("Saturn") about one run in seven. Answer quality is reported by
+    # scripts/live_smoke.py instead.
+    assert result["response"].strip()
 
 
 def test_all_six_model_lab_candidates_respond_for_real(tmp_path):

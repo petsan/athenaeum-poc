@@ -125,3 +125,16 @@ def test_candidates_need_a_graph_and_a_real_difference(tmp_path):
     h.downgrade()
     assert grade_change_candidates(ctx) == {"q1": [SRC]}
     assert grade_change_candidates(IdleContext(ledger=h.ledger, reputability=h.rep)) == {}  # no graph
+
+
+def test_routine_use_upgrading_a_source_reopens_nothing(tmp_path):
+    """Owner decision 9: the §81 scenario. Each prime answer corroborates the
+    primality source, which reaches 'foundational' on its fifth use. That
+    upgrade used to reopen every earlier answer; now it reopens none."""
+    h = Host(tmp_path)
+    m = h.maintainer()
+    for i, n in enumerate((101, 103, 107, 109, 113, 127), start=1):
+        m.submit_question(f"q{i}", f"is {n} prime?")
+        m.run()
+    assert h.rep.current_grade(SRC)["grade"] == "foundational"
+    assert all(len(h.ledger.get(f"q{i}").versions) == 1 for i in range(1, 7))

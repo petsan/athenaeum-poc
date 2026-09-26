@@ -83,6 +83,16 @@ def is_material(answer: dict, current_grades: dict, threshold: int = 1,
         if prior_grade == now_grade:
             continue
 
+        # Owner decision 9 (2026-09-26): only a DOWNGRADE is material. An
+        # upgrade can strengthen a conclusion but can't make it wrong, and
+        # routine use corroborates common sources upward, which used to
+        # reopen every answer that ever used them (§81). The new weight is
+        # picked up whenever the answer reopens for another reason. This
+        # applies to evidence- and standard-driven changes alike.
+        if (prior_grade in GRADE_ORDER and now_grade in GRADE_ORDER
+                and GRADE_ORDER.index(now_grade) > GRADE_ORDER.index(prior_grade)):
+            continue
+
         # Rule 4 (Section 7.2): the standard changed version in a way that
         # altered this source's grade -- the old standard, applied to the
         # same evidence, would NOT give today's grade.
@@ -100,7 +110,7 @@ def is_material(answer: dict, current_grades: dict, threshold: int = 1,
             reasons.append(f"{source_id}: grade newly {now_grade} (was {prior_grade})")
             continue
 
-        # Rule 2: ordinal distance exceeds the configured threshold, either direction.
+        # Rule 2: a downgrade whose ordinal distance meets the configured threshold.
         try:
             delta = abs(GRADE_ORDER.index(now_grade) - GRADE_ORDER.index(prior_grade))
         except ValueError:

@@ -48,3 +48,25 @@ def test_multiple_sources_all_reasons_reported():
     assert result["material"] is True
     assert len(result["reasons"]) == 1
     assert "src1" in result["reasons"][0]
+
+
+# --- owner decision 9 (2026-09-26): only downgrades are material -------------
+
+def test_an_upgrade_is_never_material_however_large():
+    a = answer_with({"src1": {"grade": "contested", "version": 0}})
+    current = {"src1": {"grade": "foundational", "version": 3}}   # two bands up
+    assert is_material(a, current, threshold=1) == {"material": False, "reasons": []}
+
+
+def test_an_upgrade_driven_by_a_standard_amendment_is_not_material_either():
+    a = answer_with({"src1": {"grade": "provisionally_accepted", "version": 0, "standard_version": 0}})
+    current = {"src1": {"grade": "foundational", "version": 1, "standard_version": 1}}
+    prior = {"src1": "provisionally_accepted"}   # the old standard wouldn't give 'foundational'
+    assert not is_material(a, current, prior_standard_grades=prior)["material"]
+
+
+def test_a_one_band_downgrade_is_still_material():
+    a = answer_with({"src1": {"grade": "foundational", "version": 0}})
+    current = {"src1": {"grade": "provisionally_accepted", "version": 1}}
+    result = is_material(a, current, threshold=1)
+    assert result["material"] and "foundational -> provisionally_accepted" in result["reasons"][0]

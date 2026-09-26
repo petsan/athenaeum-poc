@@ -1214,13 +1214,31 @@ One earlier re-run, before the script recorded these timings, polled only once, 
 
 **Where to start next session:** [`docs/owner-decisions.md`](owner-decisions.md). Nearly all remaining substantive work waits on decisions 2–10, each briefed with evidence, options, costs and a recommendation. Settling 3 (Engineering's style), 4 (admitting OLMo 3 and wiring fitness), 8 (ledger storage) and 9 (upgrade churn) would unblock the most. `README.draft.md` (decision 6) is current as of batch 8 and still local only.
 
+## 88. A routing test that tests routing; upgrades don't reopen — Phase AK (decisions 2, 9)
+
+**Decision 2.** `test_model_serving_layer_routes_real_request_through_cpu_fallback` now asserts that the right model on the CPU backend returned a non-empty answer. It no longer checks that a 1.5B model knows the largest planet, which it got wrong about one run in seven. This changes the test's meaning, as the owner approved. Answer quality is what `scripts/live_smoke.py` reports.
+
+**Decision 9.** `reevaluation.is_material` now skips any source whose grade went *up*, before its other rules run, so evidence-driven and standard-driven upgrades alike are no longer material. Downgrades are unchanged: newly contested or rejected is always material, and a one-band drop meets the default threshold. Rule 2's comment now says "a downgrade", not "either direction".
+
+Tests:
+- an upgrade of two bands is immaterial at threshold 1;
+- a standard-amendment upgrade is immaterial;
+- a one-band downgrade is still material;
+- **the §81 scenario itself**: six prime answers take the primality source to `foundational`, and none is reopened (`tests/test_grade_change_reach.py`).
+
+No existing test asserted that an upgrade reopens. The batch 7 end-to-end test's comment described that behaviour and is updated.
+
+`grade_change_candidates` (Phase X) still lists a question whose source was upgraded. `reopen_if_material` then declines it as immaterial, which costs a cheap check per cycle and nothing else.
+
+**Full live suite: 602 passed, 1 skipped.** 603 collected (599 prior + 4 new). The qwen routing test now passes deterministically. The known-bugs open-limitation entry for it is marked resolved.
+
 ### Batch 10 (planned 2026-09-26, implementing the owner's decisions)
 
 The owner decided 2–5 and 7–10 on 2026-09-26, each as recommended in `docs/owner-decisions.md`; 6 waits on reading `README.draft.md`. Each phase implements one or two decisions. Where a decision changes an existing test's meaning, that change is now owner-approved and is called out in the phase's write-up.
 
 | Phase | Decision(s) | Scope | Status |
 |---|---|---|---|
-| AK | 2, 9 | The qwen routing test asserts a non-empty answer from the right backend and model only. Grade upgrades stop being material under §7.2: only downgrades reopen, and upgrades are picked up at the next reopen for any other reason. | open |
+| AK | 2, 9 | The qwen routing test asserts a non-empty answer from the right backend and model only. Grade upgrades stop being material under §7.2: only downgrades reopen, and upgrades are picked up at the next reopen for any other reason. | **done** — §88 |
 | AL | 3 | Engineering's rounding claims become `formal`. Its fidelity fingerprint becomes "names an implementation standard" (IEEE-754, formats, protocols), without depending on the sandbox. The Mathematics-vs-Engineering plural answer is kept. | open |
 | AM | 4 | Admit OLMo 3 7B with a written rationale, and wire a `ModelFitnessStore` into the API. Model claims start at 0.5 per agent and move with outcomes. | open |
 | AN | 5 | Human input triggers a checkpoint only at importance ≥ the re-evaluation threshold, configured alongside it. | open |

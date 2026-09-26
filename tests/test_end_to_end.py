@@ -492,8 +492,9 @@ def test_long_running_shape_through_the_summary_view(tmp_path, monkeypatch):
     m = app.maintainer
     m.policy.event_history, m.policy.idle_sample_size, m.policy.importance_threshold = 4, 1, 0.0
 
-    # Four answers: a fifth use of the primality source would corroborate it up
-    # to 'foundational', and that upgrade alone would (correctly) reopen them.
+    # Four answers, so the primality source stays 'provisionally_accepted'
+    # (a fifth use would upgrade it -- which, since owner decision 9, no
+    # longer reopens anything; tests/test_grade_change_reach.py covers that).
     produced = []
     for i, n in enumerate((101, 103, 107, 109), start=1):
         m.submit_question(f"q-{i}", f"is {n} prime?")
