@@ -324,7 +324,7 @@ Same rules and stop conditions as batch 1. Ordered so each phase builds on the l
 | N | **Async API** — submit → poll over the ledger's `queued/active/completed` lifecycle (api.py's own stated limitation), plus read endpoints for versions and diffs. | **done** — §57 |
 | — | End-to-end test extended over J–N, then plan batch 3. | **done** — `test_full_lifecycle_through_the_maintainer` (§58) |
 
-**Owner decisions accumulated so far (not in any batch — each needs a call from the owner):** ~~(1) the OLMo 3 guest's memory problem, known-bugs.md #24~~ (resolved §59 once guest changes were permitted); (2) the flaky `qwen2.5-1.5b` factual assertion; (3) what Engineering's reasoning style is while the sandbox is off (its `executable` rounding claims vs. the fidelity fingerprint); (4) which models to admit before the API passes a fitness store (§48); (5) whether §11.5's importance threshold should narrow when human input triggers a checkpoint (§45); (6) adopting `README.draft.md`; (7) how a reviewer approves a checkpoint in the deployed system. The API has no authentication, so approval stays a Python call until the owner picks an auth approach (batch 5, Phase Z). The same decision covers an ingestion endpoint (Phase Y). (8) How the ledger and graph should be stored long-term. Every write snapshots the whole store, which is still quadratic after Phase AB's 70% cut: roughly 6–7 GB of ledger by 1,000 questions (§76). The options are per-question logs, delta checkpoints, or pruning superseded snapshots, and the last conflicts with append-only as written. (9) Whether a grade *upgrade* driven by routine use should reopen answers. Each deliberation citing a source records a corroboration, so the primality source becomes `foundational` on its fifth use. §7.2's grade trigger, now at full reach (Phase X), then reopens every earlier answer that used it. This is correct under the current threshold, which counts any one-step change as material, but it is churn with no new information (§81). (10) Whether models may challenge claims during idle re-examination. Without that, a committed model-backed claim of an unfamiliar shape survives re-examination by default. **Each decision has a brief, with evidence, options, costs and a recommendation, in [`docs/owner-decisions.md`](owner-decisions.md).**
+**Owner decisions accumulated so far (not in any batch — each needs a call from the owner):** ~~(1) the OLMo 3 guest's memory problem, known-bugs.md #24~~ (resolved §59 once guest changes were permitted); (2) the flaky `qwen2.5-1.5b` factual assertion; (3) what Engineering's reasoning style is while the sandbox is off (its `executable` rounding claims vs. the fidelity fingerprint); (4) which models to admit before the API passes a fitness store (§48); (5) whether §11.5's importance threshold should narrow when human input triggers a checkpoint (§45); (6) adopting `README.draft.md`; (7) how a reviewer approves a checkpoint in the deployed system. The API has no authentication, so approval stays a Python call until the owner picks an auth approach (batch 5, Phase Z). The same decision covers an ingestion endpoint (Phase Y). (8) How the ledger and graph should be stored long-term. Every write snapshots the whole store, which is still quadratic after Phase AB's 70% cut: roughly 6–7 GB of ledger by 1,000 questions (§76). The options are per-question logs, delta checkpoints, or pruning superseded snapshots, and the last conflicts with append-only as written. (9) Whether a grade *upgrade* driven by routine use should reopen answers. Each deliberation citing a source records a corroboration, so the primality source becomes `foundational` on its fifth use. §7.2's grade trigger, now at full reach (Phase X), then reopens every earlier answer that used it. This is correct under the current threshold, which counts any one-step change as material, but it is churn with no new information (§81). (10) Whether models may challenge claims during idle re-examination. Without that, a committed model-backed claim of an unfamiliar shape survives re-examination by default. **Each decision has a brief, with evidence, options, costs and a recommendation, in [`docs/owner-decisions.md`](owner-decisions.md).** Decisions 2–5 and 7–10 were made on 2026-09-26 and implemented in batch 10 (§88–§94). Still open: 6 (README draft) and the new **11**, what should make a challenger model's challenges count, raised by the live measurements in §95.
 
 **Batch 2 (J–N) complete 2026-09-26**, end-to-end extended (Section 58).
 
@@ -1380,6 +1380,36 @@ Tests (`tests/test_ledger_layout.py`, 8):
 
 **Full live suite: 653 passed, 1 skipped.** 654 collected (646 prior + 8 new).
 
+## 95. End-to-end over batch 10, and what the live models said
+
+**`test_the_owner_decisions_together`** runs over real HTTP with the background worker, and was stable across 5 repeat runs:
+- a model-only answer carries `fitness_at_use` 0.5 (decision 4);
+- the dry-spell idle cycle puts it to the admitted, still-provisional model, which says "no", so the claim is `disputed`, and nothing reopens (decision 10);
+- reviewer `rita` ingests from an allow-listed local server, then approves a pending standard amendment over HTTP, and the next idle cycle adopts it with `reviewer=rita` in its rationale (decision 7);
+- on disk there is one log per question beside an index `{"layout": 2, "ids": ["q-1", "q-2"]}` (decision 8).
+
+**Live smoke** (real API process, real OLMo 3 7B), run four times while closing the batch:
+- submits took 1–11 ms, and 54–81 polls during real model calls peaked at 3–8 ms;
+- every question completed, with no problems reported;
+- `scripts/live_smoke.py` now also prints each idle cycle's status counts.
+
+**Found by it — known-bugs.md #36.** The admitted model, re-examining, disputed **both** model claims. They were bare answers ("Gravity"), which are not propositions, and the same bare answer to two unrelated questions was the same claim. Statements now include their question (`Gravity (in answer to: …)`). The challenge prompt was then chosen by **measuring** phrasings live on 8 labelled question-answer pairs, twice each:
+
+| Phrasing | Correct |
+|---|---|
+| `Statement: A (in answer to: Q)` | rejected every true answer |
+| `Question: Q Proposed answer: A. Is the proposed answer correct?` | rejected "Paris" ×3 |
+| `True or false: "A" is a correct answer to "Q"` | 11/16 |
+| **`Statement: The answer to "Q" is "A".`** (adopted) | **13/16** |
+
+Every miss was a "no" to a true answer. After the fix, the live smoke disputed one model claim instead of two.
+
+**New owner decision 11.** "Established" standing measures a model's own claims, not its judging, and these numbers show a real "no" bias. A brief in `docs/owner-decisions.md` recommends promoting challengers on a judging benchmark instead. Until decided, OLMo 3 stays provisional, so its challenges remain dissent only.
+
+**One more live finding, and its fix.** The first full run at the end of this batch failed one live test: a Physics model fallback produced no claim. Measured on that prompt, OLMo 3 skips the answer and goes straight to invented new `Q:` turns in **3 of 12** completions. Since #35, such a completion rightly counts as empty and is retried, so 3 attempts left about 1.6% of calls with no claim. That showed up as an occasional red live test, introduced by #35's fix. `ask_model` now makes 5 attempts (about 0.1%), and a follow-up is noted under #35.
+
+**Full live suite: 656 passed, 1 skipped** (after that fix; the run before it had 1 live failure, as above). 657 collected (654 prior + 3 new: the batch 10 end-to-end test, the same-answer-two-questions test, and the prompt-selection test).
+
 ### Batch 10 (planned 2026-09-26, implementing the owner's decisions)
 
 The owner decided 2–5 and 7–10 on 2026-09-26, each as recommended in `docs/owner-decisions.md`; 6 waits on reading `README.draft.md`. Each phase implements one or two decisions. Where a decision changes an existing test's meaning, that change is now owner-approved and is called out in the phase's write-up.
@@ -1393,7 +1423,7 @@ The owner decided 2–5 and 7–10 on 2026-09-26, each as recommended in `docs/o
 | AO | 10 | During idle re-examination a model may challenge a model-backed claim. The challenge is dissent, and counts toward reputability, fitness and calibration only once the challenging model is admitted and `established`. | **done** — §92 |
 | AP | 7 | Per-reviewer tokens from a local config file (never in the repo) on new write endpoints: approve, reject or request more deliberation on a checkpoint, and submit ingestion. The reviewer id comes from the token, so §11's role and conflict-of-interest checks apply, and ingestion URLs are checked against a curator allow-list. | **done** — §93 |
 | AQ | 8 | One checkpoint log per question for the ledger, plus an index log, with a one-time migration of existing data. Re-measure with `scripts/measure_storage.py`. | **done** — §94 |
-| — | — | End-to-end test extended; live smoke; README draft refreshed. | open |
+| — | — | End-to-end test extended; live smoke; README draft refreshed. | **done** — §95, known-bugs #36, new decision 11 |
 
 **Standing constraints, unchanged:** the LICENSE and the README notice are never altered without the owner's approval; `execution_sandbox` stays off; no paid services; every staged diff is scanned for secrets; commits use the repo-local identity; the 80% resource cap applies; Proxmox guests may be changed as needed during development.
 

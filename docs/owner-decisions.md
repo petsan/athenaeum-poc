@@ -130,3 +130,16 @@ Each brief covers one call that is the owner's to make. **Decisions 2â€“5 and 7â
 **Recommendation: (a).** It closes the gap without letting an unproven model move the system's judgment of sources.
 
 **Decided (owner, 2026-09-26): (a).** Models may challenge; a model-only challenge is dissent and counts toward reputability and fitness only once the challenging model is admitted and established.
+
+---
+
+## 11. What should make a challenger model's challenges count? (new, 2026-09-26)
+
+**Evidence (batch 10, known-bugs.md #36).** Under decision 10, a challenger's "no" counts once the model is `established`. `model_standing` means the model's *own* claims have gathered `ESTABLISHED_AFTER` (10) outcomes. That measures how its answers fare, not how well it *judges* other claims. Measured live, OLMo 3 7B judged 13/16 labelled question-answer pairs correctly with the best phrasing found. Every miss was a "no" to a true answer, e.g. "Paris" for France's capital, and "2 + 2 = 4" once. So a model can become established while still rejecting roughly one true answer in five. Today it is provisional, so its challenges are dissent only.
+
+**Options.**
+- **(a)** Promote a challenger on a **judging benchmark** instead: a curated set of labelled claim/verdict pairs, where its challenges count only above a stated accuracy (e.g. 95%), re-checked when the model or prompt changes. Cost: curating the set, and a benchmark run per model change.
+- **(b)** Keep `established` (today), accepting that its challenges will then count despite the measured "no" bias.
+- **(c)** Require **two** independent challengers to agree before a model challenge counts. Cost: only one model is admitted today, so nothing would count until a second is.
+
+**Recommendation: (a).** It measures the thing being trusted. The live probes in #36 are the seed of that benchmark.

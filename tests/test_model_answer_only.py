@@ -49,4 +49,18 @@ def test_a_completion_with_no_answer_is_retried(monkeypatch):
 def test_the_claim_statement_is_one_line(monkeypatch):
     _backend(monkeypatch, iter([OBSERVED]))
     claim = model_backed_claim(agent_name="Physics", question="why do objects fall when dropped?", question_id="q1")
-    assert claim.statement == "Gravity" and "\n" not in claim.statement
+    # the answer, and (known-bugs #36) the question it answers
+    assert claim.statement == "Gravity (in answer to: why do objects fall when dropped?)"
+    assert "\n" not in claim.statement
+
+
+def test_the_same_answer_to_different_questions_is_not_the_same_claim(monkeypatch):
+    """known-bugs #36: a bare "Gravity" answering two unrelated questions was
+    one claim (claims are keyed by agent and statement), linking the
+    questions and pooling their consolidation credit."""
+    from athenaeum_brain.consolidation import claim_key
+    _backend(monkeypatch, iter(["Gravity", "Gravity"]))
+    a = model_backed_claim(agent_name="Physics", question="what force holds the moon in orbit?", question_id="q1")
+    b = model_backed_claim(agent_name="Physics", question="why do objects fall\nwhen dropped?", question_id="q2")
+    assert claim_key(a.to_dict()) != claim_key(b.to_dict())
+    assert b.statement == "Gravity (in answer to: why do objects fall when dropped?)"

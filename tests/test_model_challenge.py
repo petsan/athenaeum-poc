@@ -127,3 +127,18 @@ def test_the_api_turns_it_on_with_its_admitted_model(tmp_path, monkeypatch):
     monkeypatch.setattr(model_backed_reasoning, "ask_model", lambda *a, **k: None)
     idle = build_app(tmp_path).maintainer.idle
     assert idle.model_challenger == DEFAULT_MODEL and idle.model_fitness is not None
+
+
+def test_an_answer_is_judged_as_an_answer_to_its_question(monkeypatch):
+    """known-bugs #36 follow-up: 'Gravity (in answer to: Q)' is put to the
+    challenger as 'The answer to "Q" is "Gravity".' -- the phrasing that
+    judged best live -- while any other statement is asked about as is."""
+    asked = []
+    monkeypatch.setattr(model_backed_reasoning, "ask_model", lambda prompt, *a, **k: asked.append(prompt) or "yes")
+    model_challenge(claim("Gravity (in answer to: what force holds the moon in orbit?)"), "idle-1")
+    model_challenge(claim("17 is prime"), "idle-1")
+    assert asked == [
+        'Is the following statement true? Answer yes or no. Statement: '
+        'The answer to "what force holds the moon in orbit?" is "Gravity".',
+        "Is the following statement true? Answer yes or no. Statement: 17 is prime",
+    ]

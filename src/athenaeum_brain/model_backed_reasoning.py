@@ -25,6 +25,7 @@ human_input.py already uses for justified-but-unverified testimony.
 from __future__ import annotations
 import contextlib
 import contextvars
+import re
 from athenaeum_body.model_lab_registry import MODEL_LAB_ENDPOINTS
 from athenaeum_body.model_serving import LlamaCppBackend, ModelSpec, BackendUnavailable
 from athenaeum_body.elastic_workers import build_elastic_gpu_backend
@@ -62,10 +63,17 @@ def fallback_suppressed(agent_names):
 
 
 def ask_model(question: str, model_name: str = DEFAULT_MODEL, n_predict: int = 96,
-              timeout_seconds: float = 120.0, max_attempts: int = 3) -> str | None:
+              timeout_seconds: float = 120.0, max_attempts: int = 5) -> str | None:
     """Returns the model's answer -- its completion cut to the answer itself
     (answer_only) -- or None if the backend is unreachable or only ever
-    answered with nothing. None is treated by every caller as 'no claim produced'
+    answered with nothing.
+
+    Five attempts, not three (batch 10): measured live, OLMo 3 7B skips the
+    answer and goes straight to invented new "Q:" turns in about 1 of 4
+    completions for some prompts (3/12 for "what force acts on a stationary
+    object?"). Since known-bugs #35 those count as no answer and are retried,
+    so three attempts left roughly 1.6% of calls with no claim (0.25^3), and
+    five leave about 0.1%. None is treated by every caller as 'no claim produced'
     -- the same outcome as an agent's own deterministic check finding
     nothing -- never as an error that should break the deliberation loop
     (Section 4.2's stateless-lease-holder discipline: a remote call
@@ -150,15 +158,23 @@ def model_backed_claim(*, agent_name: str, question: str, question_id: str,
     deterministic claims list only when it's not None, exactly like any
     other 'nothing to add' outcome (Section 3.2). Also None, without any
     model call, for an agent currently being re-grounded (Section 2.4.3,
-    fallback_suppressed)."""
+    fallback_suppressed).
+
+    The statement is the answer AND the question it answers (known-bugs
+    #36). A bare answer like "Gravity" is not a proposition: it can't be
+    judged true or false on its own (the live model rightly said "no" when
+    asked), and it made the same claim out of answers to unrelated
+    questions, since claims are keyed by agent and statement (#22's
+    self-containment rule)."""
     if agent_name in _SUPPRESSED_AGENTS.get():
         return None
     response = ask_model(question, model_name)
     if not response or not response.strip():
         return None
+    asked = " ".join(question.split())   # one line, whatever the question's own whitespace
     return Claim(
         question_id=question_id, round=1, issuing_agent=agent_name,
-        statement=response.strip(),
+        statement=f"{response.strip()} (in answer to: {asked})",
         claim_type=claim_type, confidence=confidence,
         defeat_condition=GENERIC_DEFEAT_CONDITION,
         jurisdiction_check=True,
@@ -168,6 +184,15 @@ def model_backed_claim(*, agent_name: str, question: str, question_id: str,
 
 
 CHALLENGE_PROMPT = "Is the following statement true? Answer yes or no. Statement: {statement}"
+# For a model claim, which is an answer to a question (known-bugs #36):
+# measured live on OLMo 3 7B (batch 10), this phrasing judged 13/16 labelled
+# question-answer pairs correctly. Every miss was a "no" to a TRUE answer;
+# every false answer was rejected. Asking about "A (in answer to: Q)" got
+# "no" every time, and a "Question: / Proposed answer:" phrasing rejected
+# even "Paris" for France's capital. Hence, among other reasons, an unproven
+# model's challenges are dissent only.
+ANSWER_CHALLENGE_PROMPT = CHALLENGE_PROMPT.format(statement='The answer to "{question}" is "{answer}".')
+_ANSWERING = re.compile(r"^(?P<answer>.*) \(in answer to: (?P<question>.*)\)$")
 
 
 def model_challenge(claim: Claim, question_id: str, model_name: str = DEFAULT_MODEL) -> Claim | None:
@@ -178,7 +203,10 @@ def model_challenge(claim: Claim, question_id: str, model_name: str = DEFAULT_MO
     silence or rambling is never read as disagreement. Whether the
     challenge COUNTS is the caller's call (idle_evolution.reexamine):
     only an established model's does."""
-    verdict = ask_model(CHALLENGE_PROMPT.format(statement=claim.statement), model_name, n_predict=8)
+    answering = _ANSWERING.match(claim.statement)
+    prompt = (ANSWER_CHALLENGE_PROMPT.format(**answering.groupdict()) if answering
+              else CHALLENGE_PROMPT.format(statement=claim.statement))
+    verdict = ask_model(prompt, model_name, n_predict=8)
     words = (verdict or "").strip().lower().split()
     if not words or words[0].strip(".,!:;\"'") != "no":
         return None

@@ -581,3 +581,118 @@ def test_the_api_stays_responsive_behind_a_slow_model(tmp_path, monkeypatch):
     finally:
         release.set()
         server.shutdown()
+
+
+# ---------------------------------------------------------------------------
+# Batch 10 (AK-AQ, the owner's decisions), over real HTTP with the background
+# worker: a model answer weighted by fitness (4) and put to the admitted
+# model on re-examination, which can only dissent while provisional (10);
+# a reviewer ingests from an allow-listed host and approves an amendment,
+# which the next cycle adopts (7); and the ledger is one log per question (8).
+# ---------------------------------------------------------------------------
+
+def test_the_owner_decisions_together(tmp_path, monkeypatch):
+    import http.server
+    import json
+    import threading
+    import time
+    import urllib.request
+    from http.server import ThreadingHTTPServer
+    from athenaeum_body import api
+    from athenaeum_body.api import build_app
+    from athenaeum_body.reviewers import add_reviewer
+    from athenaeum_brain.model_backed_reasoning import CHALLENGE_PROMPT
+    from athenaeum_brain.idle_evolution import amendment_checkpoint_key
+
+    def model(question, *a, **k):
+        return "No." if question.startswith(CHALLENGE_PROMPT.split("{")[0]) else "gravity holds the moon in orbit"
+    monkeypatch.setattr(model_backed_reasoning, "ask_model", model)
+
+    class Page(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            body = b"a survey of orbital mechanics"
+            self.send_response(200 if self.path == "/survey.txt" else 404)
+            self.send_header("Content-Length", str(len(body) if self.path == "/survey.txt" else 0))
+            self.end_headers()
+            if self.path == "/survey.txt":
+                self.wfile.write(body)
+
+        def log_message(self, *a):
+            pass
+    site = ThreadingHTTPServer(("127.0.0.1", 0), Page)
+    threading.Thread(target=site.serve_forever, daemon=True).start()
+
+    token = add_reviewer(tmp_path / "reviewers.json", "rita", "reviewer", ["127.0.0.1"])
+    app = build_app(tmp_path)
+
+    class Handler(api.Handler):   # make_handler builds its own app; this binds ours
+        pass
+    submit, listq, getq, health = app
+    for name, fn in [("submit_question", submit), ("list_questions", listq), ("get_question", getq),
+                     ("health", health), ("submit_async", app.submit_async), ("get_version", app.get_version),
+                     ("maintenance_status", app.maintenance_status), ("checkpoints", app.checkpoints),
+                     ("decide_checkpoint", app.decide_checkpoint), ("submit_ingestion", app.submit_ingestion)]:
+        setattr(Handler, name, staticmethod(fn))
+    Handler.reviewers = app.reviewers
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    base = f"http://127.0.0.1:{server.server_address[1]}"
+
+    def call(path, payload=None, auth=False):
+        headers = {"Content-Type": "application/json", **({"Authorization": f"Bearer {token}"} if auth else {})}
+        data = json.dumps(payload).encode() if payload is not None else None
+        req = urllib.request.Request(base + path, data=data, method="POST" if data else "GET", headers=headers)
+        with urllib.request.urlopen(req, timeout=30) as r:
+            return json.loads(r.read())
+
+    def wait(predicate, timeout=30):
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            value = predicate()
+            if value:
+                return value
+            time.sleep(0.05)
+        raise AssertionError(app.maintenance_status())
+
+    def idle_events():
+        return [e for e in app.maintainer.events if e["kind"] == "idle"]
+
+    try:
+        # decision 4: a model-only answer, weighted by fitness
+        qid = call("/api/questions", {"question": "what force holds the moon in orbit?", "async": True})["id"]
+        q = wait(lambda: (lambda e: e if e["status"] == "completed" else None)(call(f"/api/questions/{qid}")))
+        assert q["versions"][0]["fitness_at_use"] == {"Physics::olmo3-7b": 0.5}
+
+        # decision 10: the dry-spell idle cycle puts it to the admitted (provisional) model: dissent only
+        cycle = wait(lambda: idle_events() and idle_events()[-1])
+        assert cycle["status_counts"]["disputed"] >= 1 and cycle["reopened"] == []
+        assert len(call(f"/api/questions/{qid}")["versions"]) == 1
+
+        # decision 7: a reviewer ingests from an allow-listed host...
+        batch = call("/api/ingestion", {"sources": [{"url": f"http://127.0.0.1:{site.server_address[1]}/survey.txt",
+                                                      "license": "cc-by"}]}, auth=True)
+        ingested = wait(lambda: [e for e in app.maintainer.events
+                                 if e["kind"] == "ingestion" and e["batch_id"] == batch["batch_id"]])
+        assert len(ingested[0]["accepted"]) == 1
+        # ...and approves a pending standard amendment, which the next cycle adopts
+        with app.lock:
+            m = app.maintainer
+            params = dict(m.idle.reputability.current_standard()["params"])
+            params["foundational_min_corroborations"] += 1
+            m.pending_amendments["idle-99"] = {"params": params, "rationale": "bar too low", "evidence": ["x"]}
+            m.idle.checkpoints.set_pending(amendment_checkpoint_key("idle-99"), reason="bar too low",
+                                           triggering_claim_id="x", submitter_id="idle-evolution")
+        decided = call("/api/checkpoints/standard-amendment%3Aidle-99/decision", {"decision": "approve"}, auth=True)
+        assert decided["status"] == "current" and decided["reviewer_id"] == "rita"
+        call("/api/questions", {"question": "is 17 prime?", "async": True})
+        wait(lambda: any(e.get("amendments_adopted") == ["idle-99"] for e in idle_events()))
+        assert "reviewer=rita" in app.maintainer.idle.reputability.current_standard()["rationale"]
+    finally:
+        server.shutdown()
+        site.shutdown()
+
+    # decision 8: on disk, one log per question beside a small index
+    question_logs = sorted(p.name for p in (tmp_path / "index.questions").iterdir())
+    assert len(question_logs) == 2 and all(n.endswith(".txt") for n in question_logs)
+    index = CheckpointLog(cas=ContentAddressedStore(tmp_path / "cas"), index_path=tmp_path / "index.txt").read_latest()
+    assert index == {"layout": 2, "ids": ["q-1", "q-2"]}

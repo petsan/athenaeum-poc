@@ -105,5 +105,8 @@ if __name__ == "__main__":
           [(round(p["at"], 1), round(p["seconds"], 3), round(p["health_s"], 3), p["queued"]) for p in r["polls"][:5]])
     print("health at end:", r["health_at_end"]["worker"], "queued", r["health_at_end"]["queued_units"])
     print("events:", [e.get("question_id") or e.get("cycle_id") or e.get("kind") for e in r["events"]])
+    for e in r["events"]:
+        if e["kind"] == "idle":   # includes the admitted model's re-examination (owner decision 10)
+            print(f"  {e['cycle_id']}: {e['status_counts']}, reopened {e['reopened']}")
     print("problems:", r["problems"] or "none")
     sys.exit(1 if r["problems"] else 0)
