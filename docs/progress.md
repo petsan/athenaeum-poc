@@ -416,7 +416,7 @@ Same rules and stop conditions. Most remaining substantive work now waits on own
 | AH | **Live deployment smoke** — every end-to-end test stubs the model. Start the real API process (`python -m athenaeum_body.api`) on LXC 104 against the live model-lab guests, drive it over HTTP with a script (`scripts/live_smoke.py`): async questions including a model-only one, sync alongside, polls, health. Record real latencies, including how long polls take while a real model call runs (Phase AF under real conditions). Report, don't gate: live-model output isn't deterministic. | **done** — §85, known-bugs #35 |
 | AI | **Decision briefs** — one document (`docs/owner-decisions.md`) laying out each open owner decision with the evidence gathered, the options, their costs, and a recommendation, so each can be settled in minutes. Documentation only; nothing is decided. | **done** — `docs/owner-decisions.md` (decisions 2–10; 10 is new) |
 | AJ | **Submitting never waits behind a deliberation** (found by AH) — `POST /api/questions` with `async` takes the same lock as a worker round, so each submission waits up to a whole model call (live: about 40 s before four async submits and one sync question were all in). Record a submission durably in its own small inbox, return 202 at once, have the worker register it before its next round, and have a restart drain what's left. | **done** — §86 |
-| — | Final full live run; handoff notes. | open |
+| — | Final full live run; handoff notes. | **done** — §87 |
 
 - [ ] `execution_sandbox.enabled` stays `false` — not actionable right now (the CPU-time gap is a confirmed environment limitation on this specific kernel, not a bug to fix), but re-run `scripts/preflight_check.py` if this project is ever deployed to a *different* host, per `security-review-sandbox.md` Section 7.3/7.4.
 
@@ -1198,6 +1198,23 @@ Also fixed: `tests/test_model_answer_only.py`, from §85, failed under `ATHENAEU
 One earlier re-run, before the script recorded these timings, polled only once, at 31.8 s. Instrumented, it didn't recur, and it isn't explained, so it is noted here rather than explained away. If it recurs, the recorded `first polls` line will show which call stalled.
 
 **Full live suite: 598 passed, 1 skipped.** 599 collected (595 prior + 4 new in `tests/test_api_inbox.py`).
+
+## 87. Handoff after batches 4–9
+
+**Batch 9 (AH–AJ) complete 2026-09-26.** The final full live run is the one recorded in §86: 598 passed, 1 skipped, against the live model-lab guests.
+
+**What batches 4–9 added (§65–§86), in one line each:**
+- **Brain:** calibration fed by idle cycles; grade weights inside the versioned standard; ingested citations in the Belief Graph; grade changes reaching every dependent answer through the graph; scheduled, kill-safe ingestion.
+- **Robustness:** failing rounds retried, then set aside visibly; input validation and JSON errors everywhere; a path traversal and a stored XSS closed; model answers cut to the answer itself.
+- **Long-running shape:** storage cut 70% and measured (`scripts/measure_storage.py`); a bounded event history; a summary listing for polling.
+- **Responsiveness:** reads and submits never wait behind a deliberation; health reports whether work is moving.
+- **Client:** async by default, with history, versions and diffs, and panels for maintenance, human review and worker state.
+- **Checks:** a live deployment smoke (`scripts/live_smoke.py`) and an end-to-end test per batch. `demo_brain.py` covers everything through batch 5.
+- **Known bugs:** #30–#35 found and fixed, each written up.
+
+**Where to start next session:** [`docs/owner-decisions.md`](owner-decisions.md). Nearly all remaining substantive work waits on decisions 2–10, each briefed with evidence, options, costs and a recommendation. Settling 3 (Engineering's style), 4 (admitting OLMo 3 and wiring fitness), 8 (ledger storage) and 9 (upgrade churn) would unblock the most. `README.draft.md` (decision 6) is current as of batch 8 and still local only.
+
+**Standing constraints, unchanged:** the LICENSE and the README notice are never altered without the owner's approval; `execution_sandbox` stays off; no paid services; every staged diff is scanned for secrets; commits use the repo-local identity; the 80% resource cap applies; Proxmox guests may be changed as needed during development.
 
 ### Explicitly not on this list
 Any application-level work beyond what `deployment-playbook.md` promises to deliver (verified SSH access to a correctly-networked guest, not a deployed application).
