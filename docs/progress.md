@@ -1416,11 +1416,43 @@ Same rules and stop conditions.
 
 | Phase | Scope | Status |
 |---|---|---|
-| AR | **Decision 11: a judging benchmark for challenger models.** A curated, balanced set of labelled answers and statements. A challenger's "no" counts only once its latest recorded score, for the *current* benchmark and challenge-prompt versions, meets a stated accuracy. Includes a script to run it live and record the result, plus what OLMo 3 7B actually scores. | open |
+| AR | **Decision 11: a judging benchmark for challenger models.** A curated, balanced set of labelled answers and statements. A challenger's "no" counts only once its latest recorded score, for the *current* benchmark and challenge-prompt versions, meets a stated accuracy. Includes a script to run it live and record the result, plus what OLMo 3 7B actually scores. | **done** — §97 |
 | AS | **Decision 12: the Belief Graph as an append-only journal.** Each checkpoint holds only the nodes and edges it adds; reads apply new entries incrementally from a cache. Existing full-snapshot logs keep working without a rewrite. Re-measure storage. | open |
 | AT | **Reopens deliberate like first answers.** They still skip verification routing and domain-fidelity re-grounding (noted in §90). Thread `verification` and `fidelity` through the reopen path. | open |
 | AU | **Human input over HTTP.** The importance-gated checkpoint rule (decision 5) exists, but nothing reaches it from the app. Add a token-authenticated endpoint: input enters as a cross-examined claim, is checkpointed or reopens the answer by the existing rules, and is recorded against the submitter's track record. | open |
 | — | End-to-end test extended; live smoke; README refreshed if anything user-visible changed. | open |
+
+## 97. Challenger models qualify on a judging benchmark — Phase AR (decision 11)
+
+"Established" standing counts outcomes of a model's *own* claims, which says nothing about how well it *judges* others. Decision 11 replaces it, for challengers, with a benchmark.
+
+**`athenaeum_brain/judging_benchmark.py`:**
+- **The cases.** 12 unambiguous questions, each asked with a correct and an incorrect answer, for 24 cases balanced 12/12. They are judged exactly as idle evolution judges a model claim: `model_challenge` on `A (in answer to: Q)`.
+- **What counts as right.** A judgment is right when a correct answer is not challenged, or an incorrect one is. An unreachable model challenges nothing, so it scores 50% and can't pass by accident.
+- **Versioning.** `BENCHMARK_VERSION` and `PROMPT_VERSION` are hashes of the items and of both challenge prompts. A recorded score counts only if both still match. So changing the items, the prompts or the model means qualifying again.
+- **The bar.** `challenger_qualified(store, model)` needs the latest recorded result for the current versions to reach `QUALIFYING_ACCURACY` (0.95, a placeholder, i.e. at most 1 miss in 24). It always says why not.
+- **Storage.** `ModelFitnessStore` keeps every run: `record_judging`, `judging`, `judging_history`.
+- **Wiring.** Idle evolution's round 1 now asks `challenger_qualified` instead of `model_standing == "established"`. The reexamine flag is renamed `challenger_counts`. `/api/maintenance` reports `challengers: {model: {counts, why}}`.
+- **The script.** `scripts/run_judging_benchmark.py [--model] [--repeats] [--record DATA_DIR]` runs it live, prints every miss, and optionally records the result where the API reads it.
+
+**What OLMo 3 7B scores, live** (2 repeats, 48 judgments): **37/48, 77%. It does not qualify**, so its challenges stay dissent-only.
+- It **rejected correct short numeric answers** every time: "4" for 2 + 2, "100" for water's boiling point, "0" for its freezing point, and "Seven" continents. That is 8 of the 11 misses.
+- It **accepted wrong answers**: "Venus" as the planet closest to the Sun (twice), and "Five" continents once.
+
+It confirms, from measurement rather than assumption, that this model's yes/no judging shouldn't move grades yet. The result was not recorded into any deployment's store; run the script with `--record` to do that.
+
+Tests:
+- `tests/test_judging_benchmark.py`:
+  - balanced and versioned;
+  - a perfect judge qualifies;
+  - the measured "no" bias does not;
+  - an unreachable model can't pass;
+  - qualification reasons: never run, low score, stale prompt, stale benchmark, and every run kept;
+  - the API reports status;
+  - the script records a result.
+- `tests/test_model_challenge.py` now asserts that a challenge counts only with a current passing benchmark. It covers established-only, stale benchmark, stale prompt and low score, which all stay dissent. This changes what those tests mean, as the decision approved.
+
+**Full live suite: 667 passed, 1 skipped.** 668 collected (657 prior + 11 new).
 
 ## 96. The README describes the system as it is (decision 6)
 

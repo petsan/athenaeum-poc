@@ -50,7 +50,8 @@ from .fidelity_remediation import remediate
 from .belief_graph import citations, questions_relying_on_source
 from .reevaluation import IMPORTANCE_THRESHOLD
 from .model_backed_reasoning import model_challenge
-from .model_fitness import is_model_backed, model_standing
+from .model_fitness import is_model_backed
+from .judging_benchmark import challenger_qualified
 from athenaeum_body.model_fitness_store import ModelFitnessStore
 
 SUBMITTER = "idle-evolution"  # recorded as the proposer of standard amendments
@@ -106,7 +107,7 @@ def sample_claims(ledger: QuestionLedger, sample_size: int, seed: int) -> list[d
 # --- round 1 ---------------------------------------------------------------
 
 def reexamine(sample: list[dict], reputability: ReputabilityStore, cycle_id: str, *,
-              challenger: str | None = None, challenger_established: bool = False) -> dict:
+              challenger: str | None = None, challenger_counts: bool = False) -> dict:
     """Cross-examines every sampled claim afresh and re-weighs it under
     current grades. Claims get fresh ids for this pass: claims from
     different past deliberations are examined together and must not share
@@ -114,15 +115,15 @@ def reexamine(sample: list[dict], reputability: ReputabilityStore, cycle_id: str
       challenged  -- a current agent now challenges it
       unsupported -- its weakest source is now rejected (factor 0)
       disputed    -- only a model disputes it, and that model hasn't yet
-                     earned the standing for its challenge to count
+                     qualified on the judging benchmark (decision 11)
       weakened    -- survived, but its evidence weight fell since commit
       survived    -- survived with undiminished support
 
     Owner decision 10: the deterministic cross-examiners only recognise
     claim shapes they were written for, so a model-backed claim of any
     other shape used to survive by default. With a `challenger` model, each
-    model-backed claim nobody else challenged is put to it as well. An
-    established challenger's "no" is a full challenge; a provisional one's
+    model-backed claim nobody else challenged is put to it as well. A
+    benchmark-qualified challenger's "no" is a full challenge (decision 11); any other's
     is recorded as dissent ('disputed'), which reopens nothing and counts
     toward no grade, fitness or calibration."""
     lookup = lambda src: reputability.current_grade(src)["grade"]
@@ -141,7 +142,7 @@ def reexamine(sample: list[dict], reputability: ReputabilityStore, cycle_id: str
         dissent = None
         if not against and challenger and is_model_backed(c.serving_model):
             dissent = model_challenge(c, cycle_id, challenger)
-            if dissent is not None and challenger_established:
+            if dissent is not None and challenger_counts:
                 against, dissent = [dissent], None
         if against:
             status = "challenged"
@@ -349,11 +350,13 @@ def make_idle_evolution_unit(ctx: IdleContext, cycle_id: str, *, sample_size: in
         if round_index == 0:
             return RoundResult(proposed_writes=writes(state, {"sample": sample_claims(ctx.ledger, sample_size, seed)}))
         if round_index == 1:
-            established = (ctx.model_challenger is not None and ctx.model_fitness is not None
-                           and model_standing(ctx.model_fitness, ctx.model_challenger) == "established")
+            # owner decision 11: a challenger's "no" counts only once it has
+            # qualified on the judging benchmark (current items and prompts)
+            qualified = (ctx.model_challenger is not None
+                         and challenger_qualified(ctx.model_fitness, ctx.model_challenger)[0])
             return RoundResult(proposed_writes=writes(state, reexamine(
                 mine["sample"], ctx.reputability, cycle_id,
-                challenger=ctx.model_challenger, challenger_established=established)))
+                challenger=ctx.model_challenger, challenger_counts=qualified)))
         if round_index == 2:
             plan = {**review(mine["findings"], mine["exam"], ctx.reputability),
                     "grade_change_candidates": grade_change_candidates(ctx)}

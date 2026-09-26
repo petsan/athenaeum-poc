@@ -52,6 +52,7 @@ from .ingestion import host_allowed
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from athenaeum_brain.loop import make_deliberation_unit  # noqa: E402
 from athenaeum_brain.model_fitness import admit_model, model_standing  # noqa: E402
+from athenaeum_brain.judging_benchmark import challenger_qualified  # noqa: E402
 from athenaeum_brain.model_backed_reasoning import DEFAULT_MODEL  # noqa: E402
 from athenaeum_brain.reopening import rate_and_store_importance  # noqa: E402
 from athenaeum_brain.verification_routing import sandbox_enabled  # noqa: E402
@@ -148,7 +149,7 @@ def build_app(data_dir: Path) -> App:
                          checkpoints=HumanCheckpointStore(log_for("checkpoints")),
                          calibration=CalibrationStore(log_for("calibration")),
                          # owner decision 10: the admitted model re-examines model-backed
-                         # claims; its challenges count once it is 'established'
+                         # claims; its challenges count once it qualifies on the judging benchmark (decision 11)
                          model_challenger=DEFAULT_MODEL, model_fitness=model_fitness),
         log_for=log_for, belief_graph=graph, audits=AuditStore(log_for("audits")),
         verification=verification, ingestion_cas=cas, model_fitness=model_fitness)
@@ -287,6 +288,9 @@ def build_app(data_dir: Path) -> App:
                             "pending_amendments": sorted(maintainer.pending_amendments),
                             "failed_units": sorted(maintainer.failed),
                             "models": {m: model_standing(model_fitness, m) for m in ADMITTED_MODELS},
+                            # decision 11: whether each model's re-examination challenges count, and why
+                            "challengers": {m: dict(zip(("counts", "why"), challenger_qualified(model_fitness, m)))
+                                            for m in ADMITTED_MODELS},
                             "recent_events": list(maintainer.events[-10:])},
             "checkpoints": _checkpoints_locked(),
         }

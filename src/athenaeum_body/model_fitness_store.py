@@ -64,3 +64,20 @@ class ModelFitnessStore:
     def tally(self, agent_name: str, model_id: str) -> dict:
         state = self._state()
         return state["tallies"].get(_key(agent_name, model_id), {"corroborated": 0, "challenged": 0})
+
+    # --- the judging benchmark (owner decision 11; policy in
+    # athenaeum_brain/judging_benchmark.py) ----------------------------------
+
+    def record_judging(self, model_id: str, result: dict) -> None:
+        """Appends a benchmark result; earlier results stay in the history."""
+        state = self._state()
+        state.setdefault("judging", {}).setdefault(model_id, []).append(result)
+        self.log.write_checkpoint(state, label="model_fitness")
+
+    def judging(self, model_id: str) -> dict | None:
+        """The model's most recent judging-benchmark result, if any."""
+        history = self._state().get("judging", {}).get(model_id, [])
+        return history[-1] if history else None
+
+    def judging_history(self, model_id: str) -> list[dict]:
+        return list(self._state().get("judging", {}).get(model_id, []))

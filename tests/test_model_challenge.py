@@ -1,6 +1,6 @@
 """Owner decision 10 (batch 10, Phase AO): during idle re-examination a
 model may challenge a model-backed claim. A provisional model's challenge is
-recorded as dissent only; an established model's counts as a challenge."""
+recorded as dissent only; a model qualified on the judging benchmark (decision 11) counts as a challenge."""
 import pytest
 from athenaeum_body.storage.content_addressed import ContentAddressedStore
 from athenaeum_body.storage.checkpoint import CheckpointLog
@@ -16,6 +16,7 @@ from athenaeum_brain.claims import Claim
 from athenaeum_brain.model_backed_reasoning import DEFAULT_MODEL, CHALLENGE_PROMPT, model_challenge
 from athenaeum_brain.model_fitness import admit_model, model_standing, ESTABLISHED_AFTER
 from athenaeum_brain.idle_evolution import IdleContext, make_idle_evolution_unit
+from athenaeum_brain.judging_benchmark import BENCHMARK_VERSION, PROMPT_VERSION
 
 MODEL_CLAIM = "gravity holds the moon in orbit"
 
@@ -78,6 +79,13 @@ class World:
             self.fitness.record_outcome("Physics", DEFAULT_MODEL, "corroborated")
         assert model_standing(self.fitness, DEFAULT_MODEL) == "established"
 
+    def qualify(self, accuracy=1.0, **versions):
+        """Records a judging-benchmark result (owner decision 11)."""
+        self.fitness.record_judging(DEFAULT_MODEL, {
+            "model": DEFAULT_MODEL, "accuracy": accuracy,
+            "benchmark_version": versions.get("benchmark_version", BENCHMARK_VERSION),
+            "prompt_version": versions.get("prompt_version", PROMPT_VERSION)})
+
     def cycle(self, n=1):
         log = self.log(f"idle-{n}")
         runner = SingleUnitRunner(log, shared_state={})
@@ -99,9 +107,25 @@ def test_a_provisional_models_challenge_is_dissent_only(tmp_path, monkeypatch):
     assert len(w.model.challenges_asked) == 1                         # the deterministic claim isn't put to it
 
 
-def test_an_established_models_challenge_counts(tmp_path, monkeypatch):
+@pytest.mark.parametrize("how", ["established only", "stale benchmark", "stale prompt", "low score"])
+def test_a_challenge_does_not_count_without_a_current_passing_benchmark(tmp_path, monkeypatch, how):
+    """Owner decision 11 (batch 11) replaced 'established' as the bar:
+    standing earned by the model's own answers says nothing about its judging."""
     w = World(tmp_path, monkeypatch, verdict="No.")
     w.establish()
+    if how == "stale benchmark":
+        w.qualify(benchmark_version="an-older-benchmark")
+    elif how == "stale prompt":
+        w.qualify(prompt_version="an-older-prompt")
+    elif how == "low score":
+        w.qualify(accuracy=0.81)
+    result = w.cycle()
+    assert result["status_counts"]["disputed"] == 1 and result["status_counts"]["challenged"] == 0
+
+
+def test_a_benchmark_qualified_models_challenge_counts(tmp_path, monkeypatch):
+    w = World(tmp_path, monkeypatch, verdict="No.")
+    w.qualify()
     result = w.cycle()
     assert result["status_counts"]["challenged"] == 1 and result["status_counts"]["disputed"] == 0
     assert result["model_dissent"] == []
