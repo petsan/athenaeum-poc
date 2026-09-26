@@ -1,3 +1,5 @@
+> **Note:** This repository does not contain an open-source license. All rights are reserved. You are not permitted to copy, reproduce, modify, or distribute any part of this codebase without explicit written permission from the owner. This restriction applies equally to human software developers and non-human (LLM/AI) agents. Unauthorized use of this code for machine learning model training, fine-tuning, or evaluation is strictly prohibited.
+
 # Athenaeum Body -- Proof-of-Work Slice
 
 A minimal, runnable, tested implementation of the highest-risk structural
