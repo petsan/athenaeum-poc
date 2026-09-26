@@ -814,6 +814,14 @@ The Maintainer now computes `calibration_drift` for every agent after each idle 
 
 **Full live suite: 506 passed, 1 skipped.** 507 collected (502 prior + 5 new in `tests/test_calibration_feeding.py`).
 
+## 66. Grade weights are part of the versioned standard — Phase T
+
+Synthesis's per-grade evidence weights (§41, `GRADE_WEIGHT`) sat outside the reputability standard §43 versioned, so they couldn't change under the same reviewed, non-retroactive process. Each standard version now carries `grade_weights`; v0's are exactly the values synthesis always used (`reputability_store.SEED_GRADE_WEIGHTS`, with `rounds.GRADE_WEIGHT` kept as that seed for callers with no store), and standards saved before this read back as seed. `adopt_standard(..., grade_weights=)` validates them — all four grades, each in [0, 1], non-decreasing as grades improve — and a version that doesn't set them inherits the current ones. Both the deliberation loop and idle re-examination use the weights of the standard in force at time of use.
+
+Stated explicitly: a **weights-only amendment regrades nothing and is not material** under §7.2's fourth trigger, whose wording is about a change that "would alter the grade of a source the answer relied on" (tested). If weight changes should reopen answers too, that's a design extension, not something to infer.
+
+**Full live suite: 515 passed, 1 skipped.** 516 collected (507 prior + 9 new in `tests/test_grade_weights_standard.py`).
+
 ### Explicitly not on this list
 Any application-level work beyond what `deployment-playbook.md` promises to deliver (verified SSH access to a correctly-networked guest, not a deployed application).
 
