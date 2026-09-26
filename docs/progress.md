@@ -364,7 +364,7 @@ Same rules and stop conditions. Each item is a gap confirmed in the code while b
 |---|---|---|
 | W | **A failing unit is lost silently** — `MultiUnitScheduler.process_one_round` pops a unit before running its round and requeues it only on success, so a round that raises drops the unit. The API worker logs an `error` event, but the question stays `active` forever; after a restart the Maintainer resubmits it and loses it again. Catch per-unit failures in the Maintainer, retry a bounded number of times from the last completed round, then mark the question `suspended` with the error and drop it from the registry. Surface this in the API and the client. | **done** — §70, known-bugs #31 |
 | X | **Grade changes reach every dependent answer (§7.2, first trigger)** — re-evaluation candidates come only from the ~20 claims an idle cycle samples, so a source that turns `rejected` leaves unsampled answers relying on it unreopened indefinitely. Each cycle, use the Belief Graph (source ← claim ← answer) to find every question whose latest answer relies on a source whose grade changed since the previous cycle, and hand those questions to re-evaluation as well. | **done** — §71 |
-| Y | **Scheduled ingestion (§9)** — `ingestion.py`'s docstring promises "a scheduled work-unit type", and none exists. Make ingestion a checkpointed WorkUnit the Maintainer runs at low priority: per source, fetch, check, normalize, then record in the CAS and graph, with no re-fetch or double record after a kill. Tests use fixtures plus a real localhost HTTP fetch. | open |
+| Y | **Scheduled ingestion (§9)** — `ingestion.py`'s docstring promises "a scheduled work-unit type", and none exists. Make ingestion a checkpointed WorkUnit the Maintainer runs at low priority: per source, fetch, check, normalize, then record in the CAS and graph, with no re-fetch or double record after a kill. Tests use fixtures plus a real localhost HTTP fetch. | **done** — §72 |
 | Z | **Human checkpoints visible** — standard-amendment proposals and human-input checkpoints wait for a reviewer, but nothing outside Python can see them. Add a read-only `GET /api/checkpoints` and a client panel. *Approving* over the unauthenticated API is deliberately not built (owner decision 7). | open |
 | — | End-to-end test extended; README draft refreshed (local); plan batch 6. | open |
 
@@ -920,6 +920,31 @@ Tested:
 One behaviour surfaced while writing the test is correct but worth knowing: every deliberation citing a source records a corroboration, so a borderline downgrade can be undone by the next question's use. The answers then correctly match again, and the new answer, whose snapshot was taken under the brief downgrade, is the one reopened.
 
 **Full live suite: 537 passed, 1 skipped.** 538 collected (534 prior + 4 new in `tests/test_grade_change_reach.py`).
+
+## 72. Scheduled ingestion — Phase Y
+
+`ingestion.py` promised "a scheduled work-unit type" from the start; now there is one. `make_ingestion_unit(batch_id, specs, cas, graph)` processes one source per round: fetch, the license/ToS/paid-access check, normalize into the CAS, then record in the Belief Graph (§67). Each source's outcome, with a reason for every rejection, lands under the unit's own `ingestion:<batch_id>` namespace.
+
+Specs are JSON-safe dicts (`ingestion.source_from_spec`), so a batch can live in the Maintainer's persisted registry:
+- `url` and a curator-asserted `license`, optionally `cites`, `is_paid_or_metered`, and `content` for a hand-authored fixture;
+- anything without `content` is fetched for real with `fetch_url`;
+- a paid or metered source is never requested at all;
+- a failed fetch is an outcome, not an exception, so one dead URL doesn't stop, or with Phase W's retries suspend, the batch.
+
+**Kill-safety:** every write in a round (the CAS put, graph nodes and edges) is idempotent, and a round is checkpointed once done. A kill between rounds re-fetches nothing. A kill inside a round re-fetches that one source and records nothing twice. Both are tested, the latter by running a round's side effects without its checkpoint.
+
+**Maintainer:** `submit_ingestion(batch_id, specs)` runs a batch at priority −1, behind questions. It is persisted in the registry, resumed after a restart and retried like any unit (Phase W). It reports an `ingestion` event with what was accepted and rejected, and the harvested namespace is dropped. The Maintainer takes `ingestion_cas`, which the API sets to its store, and `fetch`, a test seam. The client's maintenance panel describes ingestion events. **Deliberately not built:** an HTTP endpoint to submit URLs. An unauthenticated API that fetches caller-chosen URLs from inside the network is a server-side request forgery risk, so it waits on the same auth decision as owner decision 7.
+
+Tested:
+- a batch mixing accepted, cited, closed-license, paid, unreachable and fixture sources;
+- both kill points;
+- an empty batch;
+- a **real HTTP fetch over localhost** (a served file is accepted and stored byte-for-byte, and a 404 is rejected with its reason);
+- questions served before ingestion;
+- a restart mid-batch;
+- the configuration errors.
+
+**Full live suite: 545 passed, 1 skipped.** 546 collected (538 prior + 8 new in `tests/test_scheduled_ingestion.py`).
 
 ### Explicitly not on this list
 Any application-level work beyond what `deployment-playbook.md` promises to deliver (verified SSH access to a correctly-networked guest, not a deployed application).

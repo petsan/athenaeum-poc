@@ -80,7 +80,10 @@ def build_app(data_dir: Path) -> App:
                          checkpoints=HumanCheckpointStore(log_for("checkpoints")),
                          calibration=CalibrationStore(log_for("calibration"))),
         log_for=log_for, belief_graph=graph, audits=AuditStore(log_for("audits")),
-        verification=verification)
+        verification=verification, ingestion_cas=cas)
+    # Ingestion runs through maintainer.submit_ingestion from Python only: an
+    # HTTP endpoint that fetches caller-chosen URLs from inside the network,
+    # on an unauthenticated API, is not something to add without auth.
     work_available = threading.Event()
 
     def _new_id() -> str:

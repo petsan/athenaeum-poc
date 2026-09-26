@@ -7,7 +7,9 @@ work unit:
 - questions (priority 0), each a full deliberation with every store wired
   in (reputability, model fitness, domain fidelity, Belief Graph); and
 - idle-evolution cycles (priority -1), so real questions are always served
-  first (brain-design.md 3.6: "between and alongside active questions").
+  first (brain-design.md 3.6: "between and alongside active questions");
+- and, when submitted, ingestion batches (priority -1, batch 5 Phase Y):
+  one source per round into the CAS and the Belief Graph (Section 9).
 
 Cadence (all configurable, all placeholders):
 - an idle cycle is queued after every `idle_every_questions` answered
@@ -47,6 +49,8 @@ from athenaeum_body.storage.checkpoint import CheckpointLog
 from athenaeum_body.model_fitness_store import ModelFitnessStore
 from athenaeum_body.belief_graph_store import BeliefGraphStore
 from athenaeum_body.audit_store import AuditStore
+from athenaeum_body.storage.content_addressed import ContentAddressedStore
+from athenaeum_body.ingestion import make_ingestion_unit
 from .loop import make_deliberation_unit
 from .idle_evolution import (
     IdleContext, make_idle_evolution_unit, apply_amendment_if_approved, feed_reevaluation,
@@ -74,6 +78,8 @@ class Maintainer:
     audits: AuditStore | None = None
     verification: dict | None = None
     policy: MaintenancePolicy = field(default_factory=MaintenancePolicy)
+    ingestion_cas: ContentAddressedStore | None = None  # where ingested source content goes (Section 9)
+    fetch: Callable | None = None                      # ingestion's fetch seam; None means a real fetch_url
 
     def __post_init__(self):
         log = self.log_for("maintainer")
@@ -119,6 +125,31 @@ class Maintainer:
     def _idle_unit(self, cycle_id: str, info: dict):
         return make_idle_evolution_unit(self.idle, cycle_id, sample_size=info["sample_size"], seed=info["seed"])
 
+    def _ingestion_unit(self, batch_id: str, info: dict):
+        return make_ingestion_unit(batch_id, info["sources"], self.ingestion_cas, self.belief_graph,
+                                   fetch=self.fetch)
+
+    def _unit_for(self, unit_id: str, info: dict):
+        """A fresh unit for a registered one (after a restart or a failed round)."""
+        if info["kind"] == "question":
+            return self._question_unit(unit_id, info["question"])
+        if info["kind"] == "ingestion":
+            return self._ingestion_unit(unit_id, info)
+        return self._idle_unit(unit_id, info)
+
+    def submit_ingestion(self, batch_id: str, sources: list[dict]) -> None:
+        """Section 9: ingest a batch of sources (ingestion.source_from_spec
+        specs) as a low-priority unit, one source per round, recorded in the
+        CAS and the Belief Graph. Questions are served first."""
+        if self.ingestion_cas is None:
+            raise ValueError("this Maintainer has no ingestion_cas to store source content in")
+        if batch_id in self._m["units"]:
+            raise ValueError(f"unit {batch_id!r} is already registered")
+        info = {"kind": "ingestion", "sources": [dict(s) for s in sources]}
+        self._m["units"][batch_id] = info
+        self._save()
+        self.scheduler.submit(self._ingestion_unit(batch_id, info))
+
     def submit_question(self, question_id: str, question: str) -> None:
         self.ledger.submit(QuestionLedgerEntry(id=question_id, status="queued"))
         self._m["units"][question_id] = {"kind": "question", "question": question}
@@ -152,8 +183,7 @@ class Maintainer:
             if done:
                 event = self._complete(unit_id)
             else:
-                unit = (self._question_unit(unit_id, info["question"]) if info["kind"] == "question"
-                        else self._idle_unit(unit_id, info))
+                unit = self._unit_for(unit_id, info)
                 unit.round_index = self.scheduler.runner.resume_round_index(unit_id)
                 self.scheduler.submit(unit)
                 event = None
@@ -194,7 +224,9 @@ class Maintainer:
         skips a question the ledger already has as completed. Idle cycles'
         follow-ups (reopens, amendments, audits) are at-most-once: the unit
         leaves the registry first, because a replayed reopen would append a
-        duplicate version, while a lost one is found again by the next cycle."""
+        duplicate version, while a lost one is found again by the next cycle.
+        An ingestion batch has no follow-ups; its records were written by its
+        own rounds."""
         info = self._m["units"][unit_id]
         if info["kind"] == "question":
             event = self._on_question_done(unit_id)
@@ -203,10 +235,13 @@ class Maintainer:
             return event
         del self._m["units"][unit_id]
         self._save()
+        if info["kind"] == "ingestion":
+            result = self._harvest(f"ingestion:{unit_id}", "ingestion_result")
+            return {"kind": "ingestion", **result} if result is not None else None
         return self._on_idle_done(unit_id)
 
-    def _namespaces(self, unit_id: str) -> tuple[str, str]:
-        return f"deliberation:{unit_id}", f"idle:{unit_id}"
+    def _namespaces(self, unit_id: str) -> tuple[str, ...]:
+        return f"deliberation:{unit_id}", f"idle:{unit_id}", f"ingestion:{unit_id}"
 
     def _on_round_failed(self, unit, error: Exception) -> dict:
         """A round raised. Its unit's scratch state goes back to the last
@@ -229,8 +264,7 @@ class Maintainer:
         event = {"kind": "unit_error", "unit_id": unit.id, "unit_kind": info["kind"],
                  "error": info["last_error"], "failures": info["failures"]}
         if info["failures"] < self.policy.max_round_failures:
-            retry = (self._question_unit(unit.id, info["question"]) if info["kind"] == "question"
-                     else self._idle_unit(unit.id, info))
+            retry = self._unit_for(unit.id, info)
             retry.round_index = self.scheduler.runner.resume_round_index(unit.id)
             self._save()
             self.scheduler.submit(retry)

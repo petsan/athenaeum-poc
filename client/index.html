@@ -211,6 +211,10 @@ function describeEvent(e) {
     if ((e.calibration_drifting || []).length) text += `; calibration drifting: ${e.calibration_drifting.join(", ")}`;
     return text;
   }
+  if (e.kind === "ingestion") {
+    const rejected = Object.keys(e.rejected || {}).length;
+    return `${e.batch_id}: ingested ${(e.accepted || []).length} source(s)` + (rejected ? `, rejected ${rejected}` : "");
+  }
   if (e.kind === "unit_error") return `${e.unit_id}: round failed (attempt ${e.failures}), retrying -- ${e.error}`;
   if (e.kind === "unit_failed") return `${e.unit_id}: gave up after ${e.failures} failed attempts -- ${e.error}`;
   if (e.kind === "error") return `error: ${e.error}`;

@@ -26,6 +26,7 @@ from dataclasses import dataclass, field
 from .schemas import ProvenanceEntry
 from .storage.content_addressed import ContentAddressedStore
 from .belief_graph_store import BeliefGraphStore
+from .scheduler.work_unit import WorkUnit, RoundResult
 
 
 @dataclass
@@ -147,6 +148,68 @@ def record_source(graph: BeliefGraphStore, entry: ProvenanceEntry) -> None:
     for cited in entry.metadata.get("cites", []):
         graph.add_node(f"source:{cited}", "source", {})
         graph.add_edge(node_id, f"source:{cited}", "cites")
+
+
+def source_from_spec(spec: dict, fetch=None) -> FixtureSource:
+    """A JSON-safe source spec -> FixtureSource. With `content` (text) it is
+    a hand-authored fixture; otherwise the URL is fetched for real.
+    `license`, `is_paid_or_metered` and `cites` are curator-asserted either
+    way. `fetch` defaults to fetch_url (a seam for tests)."""
+    if "content" in spec:
+        return FixtureSource(url=spec["url"], content=spec["content"].encode("utf-8"), license=spec["license"],
+                             is_paid_or_metered=spec.get("is_paid_or_metered", False),
+                             robots_disallowed=spec.get("robots_disallowed", False),
+                             cites=list(spec.get("cites", [])))
+    if spec.get("is_paid_or_metered"):
+        # never even requested (6.6's hard floor): the check below rejects it
+        return FixtureSource(url=spec["url"], content=b"", license=spec["license"], is_paid_or_metered=True)
+    source = (fetch or fetch_url)(spec["url"], license=spec["license"])
+    source.cites = list(spec.get("cites", []))
+    return source
+
+
+def make_ingestion_unit(batch_id: str, sources: list[dict], cas: ContentAddressedStore,
+                        graph: BeliefGraphStore | None = None, *, priority: int = -1, fetch=None):
+    """Section 9's scheduled ingestion, as an ordinary checkpointed WorkUnit:
+    round i fetches, checks, normalizes and records source i. Its outcome
+    lands under `ingestion:<batch_id>`, and the last round also writes
+    `ingestion_result`.
+
+    Kill-safety: a round's writes (CAS put, graph nodes and edges) are all
+    idempotent, and a round is checkpointed once done. So a resume re-runs
+    only the round in flight: that one source may be fetched again, but
+    nothing is ever recorded twice, and a completed source is never
+    re-fetched. A fetch that fails is an outcome (`fetch failed: ...`), not
+    an exception, so one unreachable URL doesn't stop the batch."""
+    ns = f"ingestion:{batch_id}"
+
+    def handler(state: dict, round_index: int) -> RoundResult:
+        mine = state.get(ns, {"outcomes": []})
+        if round_index < len(sources):
+            spec = sources[round_index]
+            try:
+                source = source_from_spec(spec, fetch)
+            except FetchError as e:
+                outcome = {"url": spec["url"], "accepted": False, "reason": f"fetch failed: {e}"}
+            else:
+                check = fetch_and_check(source)
+                outcome = {"url": spec["url"], "accepted": check["accepted"], "reason": check["reason"]}
+                if check["accepted"]:
+                    entry = parse_and_normalize(source, cas)
+                    if graph is not None:
+                        record_source(graph, entry)
+                    outcome["content_hash"] = entry.content_hash
+            mine = {"outcomes": mine["outcomes"] + [outcome]}
+        done = round_index + 1 >= len(sources)
+        writes = {ns: mine}
+        if done:
+            writes[ns] = {**mine, "ingestion_result": {
+                "batch_id": batch_id,
+                "accepted": [o["url"] for o in mine["outcomes"] if o["accepted"]],
+                "rejected": {o["url"]: o["reason"] for o in mine["outcomes"] if not o["accepted"]}}}
+        return RoundResult(proposed_writes=writes, done=done)
+
+    return WorkUnit(id=batch_id, priority=priority, round_handler=handler)
 
 
 def seed_load(sources: list[FixtureSource], cas: ContentAddressedStore,
