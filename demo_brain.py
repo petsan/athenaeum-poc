@@ -246,7 +246,70 @@ for event in m.run():
 print("each answer is its own:", [ledger5.get(q).versions[0]["question"] for q in ("m1", "m2", "m3")])
 print("the Belief Graph links questions that rest on the same claim: m1 ->", dependents(graph5, "m1"))
 
-step("12. Adversarial suite: a real check for every failure mode in the design (Section 8)")
+# --- Added 2026-09-26: batches 4-5 (docs/progress.md §65-§73) ----------------
+from athenaeum_body.calibration_store import CalibrationStore
+from athenaeum_brain import maintenance as maintenance_module
+from athenaeum_brain.evaluation import calibration_report
+
+DATA6 = DATA / "batches-4-5"
+log6 = lambda name: CheckpointLog(cas=ContentAddressedStore(DATA6 / "cas"), index_path=DATA6 / f"{name}.txt")
+rep6, cal6, ledger6 = ReputabilityStore(log6("rep")), CalibrationStore(log6("cal")), QuestionLedger(log6("ledger"))
+m6 = Maintainer(idle=IdleContext(ledger=ledger6, reputability=rep6, calibration=cal6), log_for=log6,
+                belief_graph=BeliefGraphStore(log6("graph")), ingestion_cas=ContentAddressedStore(DATA6 / "sources"),
+                policy=MaintenancePolicy(idle_every_questions=100, idle_sample_size=1, importance_threshold=0.0))
+
+step("12. Scheduled ingestion: sources and their citations go into the Belief Graph (Section 9)")
+m6.submit_ingestion("seed", [
+    {"url": "fixture:survey", "license": "cc-by", "content": "a survey of prime tests"},
+    {"url": "fixture:textbook", "license": "cc-by", "content": "a textbook chapter", "cites": ["fixture:survey"]},
+    {"url": "https://paywalled.example/article", "license": "cc-by", "is_paid_or_metered": True},
+])
+(ingested,) = [e for e in m6.run() if e["kind"] == "ingestion"]
+print("accepted:", ingested["accepted"])
+print("rejected:", ingested["rejected"])
+print("citations idle evolution now reads from the graph:", m6.idle.citation_map())
+
+step("13. Calibration: re-examination is when a claim's fate becomes known (Section 5.3)")
+for qid, q in {"c1": "is 17 prime?", "c2": "is 19 prime?", "c3": "is 23 prime?"}.items():
+    m6.submit_question(qid, q)
+cycle = [e for e in m6.run() if e["kind"] == "idle"][-1]
+print("idle cycle re-examined:", {k: v for k, v in cycle["status_counts"].items() if v})
+print("Mathematics's calibration so far:", calibration_report(cal6, "Mathematics"))
+print("drifting agents:", cycle["calibration_drifting"] or "none")
+
+step("14. A grade change reaches every answer resting on that source (Section 7.2)")
+source = "computed:trial_division"
+before = rep6.current_grade(source)["grade"]
+while rep6.current_grade(source)["grade"] == before:
+    rep6.record_outcome(source, "source", "challenged")
+for _ in range(5):
+    rep6.record_outcome(source, "source", "challenged")
+print(f"'{source}' is now graded {rep6.current_grade(source)['grade']!r} (was {before!r})")
+m6.submit_question("c4", "is 29 prime?")
+cycle = [e for e in m6.run() if e["kind"] == "idle"][-1]
+print("the next idle cycle sampled ONE claim, yet reopened:", cycle["reopened"])
+print("why c1 was reopened:", ledger6.get("c1").versions[-1]["diff"]["cause"][0])
+
+step("15. A step that keeps failing is set aside, visibly -- never silently lost")
+real_factory = maintenance_module.make_deliberation_unit
+def crashing_backend(question, qid, **kw):   # a fault injected for this one question
+    unit = real_factory(question, qid, **kw)
+    if qid == "c5":
+        def handler(state, round_index):
+            raise RuntimeError("model backend crashed")
+        unit.round_handler = handler
+    return unit
+maintenance_module.make_deliberation_unit = crashing_backend
+try:
+    m6.submit_question("c5", "is 31 prime?")
+    for event in m6.run():
+        if event["kind"].startswith("unit_"):
+            print(f"  {event['kind']}: attempt {event['failures']} -- {event['error']}")
+finally:
+    maintenance_module.make_deliberation_unit = real_factory
+print("c5 is now:", ledger6.get("c5").status, "| recorded error:", m6.failed["c5"]["last_error"])
+
+step("16. Adversarial suite: a real check for every failure mode in the design (Section 8)")
 suite = run_adversarial_suite()
 print(f"{suite['passed']}/{suite['total']} passed")
 

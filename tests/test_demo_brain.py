@@ -14,3 +14,9 @@ def test_demo_brain_runs_and_ends_exactly_once(tmp_path):
     assert result.stdout.count("brain demo complete") == 1
     assert result.stdout.rstrip().endswith("=== brain demo complete ===")
     assert "16/16 passed" in result.stdout
+    # batches 4-5 (steps 12-15)
+    assert "citations idle evolution now reads from the graph: {'fixture:textbook': ['fixture:survey']}" in result.stdout
+    assert "paid or metered access -- hard invariant, never fetched" in result.stdout
+    assert "sampled ONE claim, yet reopened: ['c1', 'c2', 'c3']" in result.stdout
+    assert result.stdout.count("unit_error: attempt") == 2 and "unit_failed: attempt 3" in result.stdout
+    assert "c5 is now: suspended" in result.stdout

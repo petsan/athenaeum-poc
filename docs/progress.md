@@ -378,7 +378,7 @@ Same rules and stop conditions. Each item was confirmed against the running code
 |---|---|---|
 | AA | **API input validation and error handling** — reproduced on LXC 104: `POST /api/questions` with a non-string `question` crashes the handler, so the client gets no response. It also leaves a `queued` ledger entry nothing will ever run. An empty question is deliberated, a 200 KB question is accepted, and the request body is read with no size limit. Validate (a non-empty string within a length limit; a bounded body), and answer every failure with a JSON error. If a synchronous deliberation fails, suspend the question with its error instead of leaving it `queued`. | **done** — §75, known-bugs #33 |
 | AB | **Measure storage growth** — every store write appends a full-state checkpoint (append-only by design, §5.3), so storage grows with writes × state size. Measure bytes per answered question and per idle cycle on the API wiring, find the dominant writers, and remove only *redundant* writes (a checkpoint of unchanged state). Whether old snapshots may ever be pruned is owner decision 8, not a mechanical fix. | **done** — §76, known-bugs #34 |
-| AC | **Refresh the narrated demo** (`demo_brain.py`) for batches 4–5: calibration, ingestion into the graph, a grade change reaching every dependent answer, a failing step set aside visibly. Mind known-bugs #16. | open |
+| AC | **Refresh the narrated demo** (`demo_brain.py`) for batches 4–5: calibration, ingestion into the graph, a grade change reaching every dependent answer, a failing step set aside visibly. Mind known-bugs #16. | **done** — §77 |
 | — | End-to-end test extended; README draft refreshed (local); plan batch 7. | open |
 
 - [ ] `execution_sandbox.enabled` stays `false` — not actionable right now (the CPU-time gap is a confirmed environment limitation on this specific kernel, not a bug to fix), but re-run `scripts/preflight_check.py` if this project is ever deployed to a *different* host, per `security-review-sandbox.md` Section 7.3/7.4.
@@ -1025,6 +1025,18 @@ Tests (`tests/test_checkpoint_batching.py`):
 - the measurement script runs.
 
 **Full live suite: 578 passed, 1 skipped.** 579 collected (570 prior + 9 new in `tests/test_checkpoint_batching.py`).
+
+## 77. The narrated demo covers batches 4–5 — Phase AC
+
+`demo_brain.py` gains four steps, run on one Maintainer with calibration, a graph and ingestion; the adversarial suite moves to step 16 as the finale:
+- **12:** scheduled ingestion accepts two fixture sources and refuses a paid one without requesting it, and idle evolution now reads the textbook→survey citation from the graph;
+- **13:** an idle cycle feeds calibration and reports no drift;
+- **14:** the primality source is downgraded; the next cycle samples one claim yet reopens all three prime answers, each saying why;
+- **15:** a fault injected into one question's deliberation (restored afterwards) produces two `unit_error` retries and a `unit_failed`, and the question is `suspended` with its error recorded.
+
+The final banner was moved, not duplicated (known-bugs #16). `tests/test_demo_brain.py` still asserts it prints exactly once, at the very end, and now also pins each new step's key outcome.
+
+**Full live suite: 578 passed, 1 skipped** with the new demo, and the demo test re-run on its own after gaining the new assertions: 1 passed. 579 collected, no new tests.
 
 ### Explicitly not on this list
 Any application-level work beyond what `deployment-playbook.md` promises to deliver (verified SSH access to a correctly-networked guest, not a deployed application).
