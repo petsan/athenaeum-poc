@@ -80,14 +80,14 @@ These aren't aspirational — every one of them is here because violating it (or
   invariant enforced in `config.py` itself (`disallow_paid_apis`), not
   just a policy.
 - Before marking any task "done," run the actual test suite
-  (`pytest -q`, currently 273 passed + 1 skipped when no GPU worker is online) and update `docs/progress.md` — don't
+  (`pytest -q`, currently 286 passed + 1 skipped when no GPU worker is online) and update `docs/progress.md` — don't
   let the checkpoint file go stale.
 
 ## Current status (see `docs/progress.md` for full detail)
 
 - **Start here next session:** `docs/progress.md` §26 → "Next-session plan
-  (written 2026-09-25)" — ordered milestones (next: §6.5 reputability
-  standard versioning), the owner's requested working method (small
+  (written 2026-09-25)" — ordered milestones (§6.5 standard versioning done 2026-09-26 as §43; next: Forecast/Recommendation producers,
+  item 2), the owner's requested working method (small
   milestone → tests → full suite on LXC 104 → docs → check in → commit only
   when approved), and the exact sync/test mechanics. 2026-09-25 added
   evidence-weighted synthesis (§41) and dispute resolution (§42). The repo

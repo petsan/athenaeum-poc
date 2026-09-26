@@ -254,7 +254,7 @@ Earlier sections each ended with their own "suggested next step," repeatedly sup
 
 **Remaining Brain gaps (audited 2026-09-25 against `brain-design.md` §13's work breakdown — none are literal stubs, all are specified-but-unbuilt):**
 - [x] ~~Dispute resolution procedure (§6.4, task 9) — including Logic's circular-corroboration/independence check. Only `ReputabilityStore.log_dispute()` storage exists.~~ Done 2026-09-25, `dispute_resolution.py` — see Section 42.
-- [ ] Reputability standard versioning (§6.5, task 10).
+- [x] ~~Reputability standard versioning (§6.5, task 10).~~ Done 2026-09-26 — see Section 43.
 - [ ] Forecast and Recommendation builders wired into `loop.py` (§5.4, tasks 13–14) — builders exist, no producer.
 - [ ] Importance rating (§7.1, task 16) and reopen-with-diff (§7.3, task 18).
 - [ ] Idle-evolution rounds (§3.6).
@@ -278,7 +278,7 @@ Earlier sections each ended with their own "suggested next step," repeatedly sup
 - Host is routinely powered off: `ping 192.168.0.100` first; if down, ask the owner to power it on.
 
 **Ordered milestones (each is one check-in):**
-1. **§6.5 Reputability standard versioning** (next up). Move `_grade_from_tally` into a versioned policy registry (v0 = today's rule, labelled as the seed standard of §6.1). Every `grade_versions` entry records the `standard_version` that produced it. `ReputabilityStore.adopt_standard(policy, rationale)` makes version N+1 govern new decisions only — never rewrites old grade entries. Extend `reevaluation.is_material` with §7.2's fourth trigger (a change of standard version that would alter the grade of a source the answer relied on). Tests: old grades keep their version tag, new outcomes use the new version, and materiality fires only when the re-grade actually differs.
+1. ~~**§6.5 Reputability standard versioning**~~ — **done 2026-09-26, Section 43** (next up is item 2). Move `_grade_from_tally` into a versioned policy registry (v0 = today's rule, labelled as the seed standard of §6.1). Every `grade_versions` entry records the `standard_version` that produced it. `ReputabilityStore.adopt_standard(policy, rationale)` makes version N+1 govern new decisions only — never rewrites old grade entries. Extend `reevaluation.is_material` with §7.2's fourth trigger (a change of standard version that would alter the grade of a source the answer relied on). Tests: old grades keep their version tag, new outcomes use the new version, and materiality fires only when the re-grade actually differs.
 2. **Forecast/Recommendation producers (§5.4, tasks 13–14).** The builders exist in `output_types.py`; nothing produces their inputs. Add an optional structured payload on `Claim` (e.g. `forecast: {statement, probability, resolution_criterion, resolution_date}`) and have `loop.py` build the section when the frame asks for it *and* a committed claim carries one — otherwise the section explicitly says no agent produced one (honest, not silently omitted). Find one agent that can produce a genuine forecast deterministically before reaching for the model fallback.
 3. **§7.1 importance rating + §7.3 reopen-with-diff.** Importance from framing (domains routed, output types) plus dependency count. Reopen = re-run the loop with the prior answer as context, `QuestionLedger.append_version`, and an explicit diff (committed claims added/removed, leading-conclusion change, weighted-confidence deltas, cause). Uses `consolidation.expand` first if the prior answer was compacted.
 4. **§3.6 Idle-evolution round.** A work-unit type that samples existing committed claims and re-runs cross-examination against current grades; is the natural caller for `resolve_dispute` (§42), consolidation `record_survival`, and `domain_fidelity.needs_review`. Feeds materiality from item 3.
@@ -480,6 +480,20 @@ Citation data: `FixtureSource` gains an optional curator-supplied `cites` list (
 **Real instance of the failure mode fixed:** `consolidation.should_promote_to_c` counted "independent sources" as `len(entry["sources"])`, so two sources that just cite each other satisfied a 2-source Tier C promotion threshold. It now takes `cites` and counts independent groups, naming circularity in its reasons. With no citation data the count is unchanged, so existing callers behave identically. New adversarial case `circular_corroboration` (suite now 7 of §8's 15 modes).
 
 **273 passed, 1 skipped** on LXC 104 (257 prior + 16 new in `tests/test_dispute_resolution.py`; `test_evaluation.py`'s pinned case list updated to include the new case). Design reasoning in `docs/brain-session-log.md`.
+
+## 43. Reputability standard versioning (§6.5), and §7.2's standard-change materiality trigger
+
+The placeholder grading rule is now a **parameterized, versioned standard** in `ReputabilityStore` (`reputability_store.py`). Version 0 is the seed standard (§6.1) with exactly the thresholds the rule always had (`rejected_min_challenges=3`, `foundational_min_corroborations=5`), so every grade decided before this change is correctly a v0 decision. `adopt_standard(params, rationale)` requires a non-empty rationale and exactly the known parameter keys (positive ints), appends version N+1, and regrades non-retroactively: each source whose grade differs under the new standard gets a **new appended** grade entry (`decided_under: N+1, cause: "standard_amendment"`) while all earlier entries stay untouched; it returns which sources moved. `standards()` is the full, never-shrinking history; `grade_history(source)` shows every decision with its standard and cause (`evidence` or `standard_amendment`); `grade_under(source, v)` is a pure read of what a source's grade would be today under any past standard.
+
+`current_grade()` now returns `{grade, version, standard_version}` (the standard in force), a clean projection rather than the raw entry — so `loop.py`'s time-of-use snapshot automatically records the standard in force too. Checkpoints written before this change (no `standards` key, no `decided_under`/`cause` on entries) read back as v0, tested directly.
+
+**§7.2's fourth trigger:** `reevaluation.is_material` takes an optional `prior_standard_grades` — the grade each cited source would have *now* under the standard in force *at time of use*, computed by the new `materiality_inputs(answer, store)`. If that differs from the current grade, the standard change moved it: material regardless of the evidence threshold, with a reason naming the amendment (`standard amended (v0 -> v1)`). If the old standard would still give today's grade, the change is evidence-driven and the existing threshold/severity rules apply unchanged. Without the new argument, `is_material` behaves exactly as before.
+
+One existing expectation changed: `test_content_integrity.py` pinned `current_grade()`'s exact return for an ungraded source and now includes `standard_version: 0`.
+
+**Not done here:** nothing yet *proposes* amendments — §6.5's "idle-evolution review re-examines the standard for internal consistency" needs the idle-evolution round (next-session plan item 4). `GRADE_WEIGHT` (synthesis, §41) is not part of the versioned standard; if it should be, that's a small follow-up.
+
+**286 passed, 1 skipped** on LXC 104 (273 prior + 13 new in `tests/test_standard_versioning.py`). Design reasoning in `docs/brain-session-log.md`.
 
 ### Explicitly not on this list
 Any application-level work beyond what `deployment-playbook.md` promises to deliver (verified SSH access to a correctly-networked guest, not a deployed application).

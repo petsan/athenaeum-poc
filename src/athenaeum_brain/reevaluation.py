@@ -10,7 +10,20 @@ from athenaeum_body.reputability_store import GRADE_ORDER
 SEVERE_GRADES = {"contested", "rejected"}
 
 
-def is_material(answer: dict, current_grades: dict, threshold: int = 1) -> dict:
+def materiality_inputs(answer: dict, store) -> tuple[dict, dict]:
+    """Reads, from a ReputabilityStore, the two live inputs is_material
+    needs for every source the answer cited: its current grade, and the
+    grade it would have today under the standard that was in force when
+    the answer was produced (snapshots predating 6.5 were all v0)."""
+    current, under_prior_standard = {}, {}
+    for source_id, snapshot in answer.get("source_grades_at_use", {}).items():
+        current[source_id] = store.current_grade(source_id)
+        under_prior_standard[source_id] = store.grade_under(source_id, snapshot.get("standard_version", 0))
+    return current, under_prior_standard
+
+
+def is_material(answer: dict, current_grades: dict, threshold: int = 1,
+                prior_standard_grades: dict | None = None) -> dict:
     """
     answer: a completed deliberation's answer dict, with 'source_grades_at_use'
         (the non-retroactively-attached snapshot from loop.py) -- i.e. what
@@ -21,6 +34,12 @@ def is_material(answer: dict, current_grades: dict, threshold: int = 1) -> dict:
         ReputabilityStore.current_grade() called per cited source.
     threshold: minimum ordinal grade-band distance (GRADE_ORDER) that
         counts as material on its own, even without hitting SEVERE_GRADES.
+    prior_standard_grades: optional {source_id: grade the source would
+        have NOW under the standard in force at time of use} (see
+        materiality_inputs). When that differs from the current grade, the
+        reputability standard itself (6.5) changed that source's grade --
+        7.2's fourth trigger, material regardless of threshold, and named
+        as such so a reopened answer's diff shows the real cause.
 
     Returns {'material': bool, 'reasons': [...]} -- reasons are always
     populated when material, so a reopened question's diff (Section 7.3)
@@ -36,6 +55,17 @@ def is_material(answer: dict, current_grades: dict, threshold: int = 1) -> dict:
 
         prior_grade, now_grade = snapshot["grade"], current["grade"]
         if prior_grade == now_grade:
+            continue
+
+        # Rule 4 (Section 7.2): the standard changed version in a way that
+        # altered this source's grade -- the old standard, applied to the
+        # same evidence, would NOT give today's grade.
+        old_standard_grade = (prior_standard_grades or {}).get(source_id)
+        if old_standard_grade is not None and old_standard_grade != now_grade:
+            reasons.append(
+                f"{source_id}: reputability standard amended "
+                f"(v{snapshot.get('standard_version', 0)} -> v{current.get('standard_version', 0)}) "
+                f"moved grade {prior_grade} -> {now_grade}")
             continue
 
         # Rule 1 (Section 7.2): newly contested/overturned is ALWAYS material,

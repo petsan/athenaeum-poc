@@ -97,7 +97,8 @@ def test_instruction_like_signal_does_nothing_when_not_suspicious(tmp_path):
                                               "Cross-referenced two independent chronologies.")
     assert result["suspicious"] is False
     # no outcome recorded -- current_grade returns the ungraded default
-    assert reputability.current_grade("alice") == {"grade": "provisionally_accepted", "version": 0}
+    assert reputability.current_grade("alice") == {"grade": "provisionally_accepted", "version": 0,
+                                                   "standard_version": 0}
 
 
 def test_repeated_instruction_like_pattern_accumulates_toward_rejection(tmp_path):

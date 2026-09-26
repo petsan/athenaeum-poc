@@ -700,6 +700,57 @@ caller.
 
 ---
 
+## 2026-09-26 — Reputability standard versioning (§6.5): design choices
+
+**Q: What is a "version of the standard", concretely?**
+
+A named set of parameters for the grading rule plus a written rationale.
+The rule's shape (rejected / contested / foundational / provisional)
+stays fixed; its thresholds are what an amendment changes. That's the
+smallest real thing §6.5 describes — "has a criterion produced a pattern
+of disputes that suggests it's miscalibrated?" is a question about
+thresholds — without inventing a pluggable-policy framework nobody needs
+yet. Version 0 uses exactly the old hardcoded thresholds, so all prior
+grades are genuinely v0 decisions, not relabelled ones.
+
+**Q: When a standard changes, why regrade immediately instead of
+waiting for each source's next outcome?**
+
+Waiting would leave `current_grade()` reporting grades the standard in
+force no longer supports, possibly indefinitely for a source that's
+rarely cited. Regrading on adoption keeps "current grade" meaningful. It
+stays non-retroactive because the regrade is a *new appended decision*
+(`cause: "standard_amendment"`), never an edit — the history shows both
+what was decided under v0 and what v1 changed.
+
+**Q: Why does materiality need `grade_under()` rather than just comparing
+standard version numbers?**
+
+A version bump alone doesn't mean a cited source was affected, and a
+grade change after an amendment might still be evidence-driven. §7.2's
+wording is "changed version *in a way that would alter the grade*." The
+precise test is counterfactual: apply the old standard to today's
+evidence. If that still yields today's grade, the standard didn't cause
+the change and the ordinary evidence threshold applies; if it doesn't,
+the amendment did, and that's material at any size. Tested both ways,
+including a one-band move that is material when standard-driven and
+immaterial when evidence-driven at the same threshold.
+
+**Q: Why make `current_grade()` return a projection instead of the raw
+entry?**
+
+It used to return the stored entry itself. With `decided_under`/`cause`
+on entries, callers would have received storage details they never
+asked for, and the snapshot attached to answers would have recorded the
+standard a grade was *first* decided under rather than the one *in force*
+at time of use — the wrong thing for materiality. The projection adds
+exactly one field, `standard_version`.
+
+**Not done here:** nothing proposes amendments yet; that belongs to the
+idle-evolution review (§3.6), next-session plan item 4.
+
+---
+
 *See `docs/progress.md` §26 for the checklist this log's entries track
 against, and `docs/infra-topology.md` for the infrastructure-side design
 decisions made in the same planning conversation.*
