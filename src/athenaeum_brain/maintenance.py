@@ -236,7 +236,7 @@ class Maintainer:
         if not self.scheduler._heap:
             # One idle cycle per dry spell -- and a cadence cycle that already
             # ran since the last question counts as that one.
-            if self.idle_since_last_question or not self.ledger._state()["questions"]:
+            if self.idle_since_last_question or not self.ledger.count():
                 return None
             self._submit_idle()
         upcoming = self.scheduler._heap[0][2]
@@ -367,7 +367,7 @@ class Maintainer:
 
     def _on_question_done(self, question_id: str) -> dict:
         answer = self._harvest(f"deliberation:{question_id}", "answer")
-        with self.ledger.log.batch():   # the answer and its rating: one ledger checkpoint
+        with self.ledger.batch(question_id):   # the answer and its rating: one checkpoint
             if answer is not None and self.ledger.get(question_id).status != "completed":
                 self.ledger.append_version(question_id, answer)
             rating = rate_and_store_importance(self.ledger, question_id, graph=self.belief_graph)

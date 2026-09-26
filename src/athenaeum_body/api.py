@@ -152,9 +152,9 @@ def build_app(data_dir: Path) -> App:
                          model_challenger=DEFAULT_MODEL, model_fitness=model_fitness),
         log_for=log_for, belief_graph=graph, audits=AuditStore(log_for("audits")),
         verification=verification, ingestion_cas=cas, model_fitness=model_fitness)
-    # Ingestion runs through maintainer.submit_ingestion from Python only: an
-    # HTTP endpoint that fetches caller-chosen URLs from inside the network,
-    # on an unauthenticated API, is not something to add without auth.
+    # Ingestion over HTTP needs a reviewer token and allow-listed hosts
+    # (owner decision 7, POST /api/ingestion below); Python callers may still
+    # call maintainer.submit_ingestion directly.
     work_available = threading.Event()
 
     # --- the inbox (batch 9, Phase AJ) -------------------------------------------
@@ -169,7 +169,7 @@ def build_app(data_dir: Path) -> App:
     inbox_lock = threading.Lock()
     saved_inbox = inbox_log.read_latest() or {"items": [], "issued": 0}
     inbox = {"items": list(saved_inbox["items"]),
-             "issued": max(saved_inbox["issued"], len(ledger._state()["questions"]))}
+             "issued": max(saved_inbox["issued"], ledger.count())}
 
     def _new_id() -> str:
         """Caller holds inbox_lock."""
@@ -202,7 +202,7 @@ def build_app(data_dir: Path) -> App:
             with inbox_lock:
                 # questions registered with the Maintainer directly (not via
                 # this API) also take ids; the ledger is safe to read here
-                inbox["issued"] = max(inbox["issued"], len(ledger._state()["questions"]))
+                inbox["issued"] = max(inbox["issued"], ledger.count())
                 qid = _new_id()
                 _save_inbox()      # the id is issued durably, so it is never reused
             ledger.submit(QuestionLedgerEntry(id=qid, importance=0.5))
@@ -221,7 +221,7 @@ def build_app(data_dir: Path) -> App:
                 _refresh_locked()
                 raise DeliberationFailed(qid, maintainer.failed[qid]["last_error"]) from e
             answer = unit_log.read_latest()["shared_state"]["answer"]
-            with ledger.log.batch():   # the answer and its rating: one ledger checkpoint
+            with ledger.batch(qid):   # the answer and its rating: one checkpoint
                 ledger.append_version(qid, answer)
                 # Section 7.1: replace the 0.5 placeholder with a computed rating.
                 importance = rate_and_store_importance(ledger, qid, graph=graph)["importance"]

@@ -125,8 +125,11 @@ def test_an_answered_question_costs_three_ledger_checkpoints(maintainer):
     m.tick()
     while m.scheduler._heap:
         m.tick()
-    # submitted (queued), started (active), answered-and-rated (one batch)
-    assert entries(m.ledger.log) - start == 3
+    # Since owner decision 8 (batch 10, Phase AQ) each question has its own log:
+    # submitted (queued), started (active), answered-and-rated (one batch) --
+    # and the index gains one entry, when the question is first submitted.
+    assert entries(m.ledger._log_for("q1")) == 3
+    assert entries(m.ledger.log) - start == 1
     assert m.ledger.get("q1").status == "completed" and m.ledger.get("q1").importance != 0.5
 
 

@@ -1340,6 +1340,46 @@ The known-bugs open limitation is annotated: model-backed claims are now examine
 
 **Full live suite: 645 passed, 1 skipped.** 646 collected (629 prior + 17 new).
 
+## 94. One log per question — Phase AQ (decision 8)
+
+The ledger was 55% of all storage after Phase AB, because every write snapshotted every question.
+
+**New layout.** `QuestionLedger` keeps its interface:
+- The log it is given is now a small **index**, `{"layout": 2, "ids": [...]}` in submission order.
+- Each question lives in its **own** checkpoint log under `<index stem>.questions/`. File names are sanitized plus a hash of the id, so awkward ids never collide.
+- A write appends to that question's log alone. The index changes only when a question is first submitted.
+- `_state()` still returns the old `{"questions": {...}}` shape, so its callers are unchanged. Unchanged entries come from a cache keyed on each log's latest snapshot id, so two ledger objects over the same files stay consistent (tested).
+- `ledger.batch(question_id)` replaces `ledger.log.batch()`, and a cheap `count()` replaces full reads on hot paths: the Maintainer's `tick` and the API's id issuing.
+
+**Migration.** A layout-1 ledger is migrated when first opened. Each question is written to its own log, then the index. The old full snapshots all stay in the index log's history, which still verifies as a chain. Migration is idempotent: an interrupted one resumes without writing any question twice, and reopening changes nothing.
+
+**Found on the way:** layout 1 never really kept submission order. Its questions sat in a dict, and the CAS's canonical JSON sorts keys, so readers saw them alphabetically. Migration recovers the real order from each entry's `created_at`. The new index keeps it natively, in a list.
+
+**Measured** (`scripts/measure_storage.py`, which now sums a subdirectory's logs into one row), 60 questions with idle cycles:
+
+| | Phase AB (§76) | now |
+|---|---|---|
+| Ledger payloads | 27.28 MB (one log) | **0.22 MB** (60 logs, 180 entries) + a 0.01 MB index |
+| Total | 49.2 MB | **20.4 MB** |
+
+The per-question cost still rises, from 205 KB to 454 KB, because the **Belief Graph** (5.4 MB, a 177 KB state) still snapshots the whole graph per answer. As decided, it was re-measured rather than changed. The same per-entity layout is the natural next step for it; that is a new owner call, not assumed here. The Maintainer's log (10.6 MB) is per-round resume state for in-flight units, which grows linearly and isn't retained state.
+
+**Also found:** the guest sync script never copied `scripts/`, so an earlier measurement in this phase ran the old script (its total was right, its table wasn't). Fixed, and the numbers above are from the corrected run.
+
+Tests (`tests/test_ledger_layout.py`, 8):
+- each question has its own log, the index keeps order, and a write touches only its own log;
+- a write's size doesn't depend on how many other questions exist;
+- migration keeps everything and the history;
+- migration is idempotent and resumes;
+- two objects over the same files stay consistent;
+- a batch reads its own writes and writes once;
+- awkward ids get distinct files, and unknown ids create no files;
+- the API opens a layout-1 data dir and continues its numbering.
+
+`test_an_answered_question_costs_three_ledger_checkpoints` changed meaning as approved: the three checkpoints are now in the question's own log, plus one index entry.
+
+**Full live suite: 653 passed, 1 skipped.** 654 collected (646 prior + 8 new).
+
 ### Batch 10 (planned 2026-09-26, implementing the owner's decisions)
 
 The owner decided 2–5 and 7–10 on 2026-09-26, each as recommended in `docs/owner-decisions.md`; 6 waits on reading `README.draft.md`. Each phase implements one or two decisions. Where a decision changes an existing test's meaning, that change is now owner-approved and is called out in the phase's write-up.
@@ -1352,7 +1392,7 @@ The owner decided 2–5 and 7–10 on 2026-09-26, each as recommended in `docs/o
 | AN | 5 | Human input triggers a checkpoint only at importance ≥ the re-evaluation threshold, configured alongside it. | **done** — §91 |
 | AO | 10 | During idle re-examination a model may challenge a model-backed claim. The challenge is dissent, and counts toward reputability, fitness and calibration only once the challenging model is admitted and `established`. | **done** — §92 |
 | AP | 7 | Per-reviewer tokens from a local config file (never in the repo) on new write endpoints: approve, reject or request more deliberation on a checkpoint, and submit ingestion. The reviewer id comes from the token, so §11's role and conflict-of-interest checks apply, and ingestion URLs are checked against a curator allow-list. | **done** — §93 |
-| AQ | 8 | One checkpoint log per question for the ledger, plus an index log, with a one-time migration of existing data. Re-measure with `scripts/measure_storage.py`. | open |
+| AQ | 8 | One checkpoint log per question for the ledger, plus an index log, with a one-time migration of existing data. Re-measure with `scripts/measure_storage.py`. | **done** — §94 |
 | — | — | End-to-end test extended; live smoke; README draft refreshed. | open |
 
 **Standing constraints, unchanged:** the LICENSE and the README notice are never altered without the owner's approval; `execution_sandbox` stays off; no paid services; every staged diff is scanned for secrets; commits use the repo-local identity; the 80% resource cap applies; Proxmox guests may be changed as needed during development.

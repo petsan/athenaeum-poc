@@ -32,18 +32,24 @@ def disk_bytes(root: Path) -> int:
 
 
 def per_log(data_dir: Path, cas) -> dict:
+    """One row per log. Logs in a subdirectory (the ledger's per-question
+    logs since batch 10, Phase AQ) are summed into one row for their
+    directory, with `logs` saying how many there are."""
     report = {}
-    for index in sorted(data_dir.glob("*.txt")):
+    for index in sorted(data_dir.rglob("*.txt")):
+        if index.parent != data_dir and index.parent.parent != data_dir:
+            continue
         log = CheckpointLog(cas=cas, index_path=index)
         entries = log.all_entries()
         refs = [e.payload_ref for e in entries]
-        distinct = set(refs)
-        report[index.stem] = {
-            "entries": len(entries),
-            "redundant": sum(1 for a, b in zip(refs, refs[1:]) if a == b),
-            "payload_bytes": sum(cas._path_for(r).stat().st_size for r in distinct),
-            "latest_state_bytes": cas._path_for(refs[-1]).stat().st_size if refs else 0,
-        }
+        name = index.stem if index.parent == data_dir else index.parent.name
+        row = report.setdefault(name, {"logs": 0, "entries": 0, "redundant": 0, "payload_bytes": 0,
+                                       "latest_state_bytes": 0})
+        row["logs"] += 1
+        row["entries"] += len(entries)
+        row["redundant"] += sum(1 for a, b in zip(refs, refs[1:]) if a == b)
+        row["payload_bytes"] += sum(cas._path_for(r).stat().st_size for r in set(refs))
+        row["latest_state_bytes"] += cas._path_for(refs[-1]).stat().st_size if refs else 0
     return report
 
 
