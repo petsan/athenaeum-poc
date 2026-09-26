@@ -65,6 +65,8 @@ class World:
       "leading_conclusion": {"change": "none_before_or_after"}}, "weights_only"),
     ({"added": [], "removed": [], "weight_changes": [],
       "leading_conclusion": {"change": "changed", "from": "a", "to": "b"}}, "leading_changed"),
+    ({"added": [], "removed": [], "weight_changes": [], "cause": ["forecast resolved: outcome=True"],
+      "leading_conclusion": {"change": "unchanged", "confidence": "same"}}, "forecast_resolution"),
 ])
 def test_reopen_classification(diff, expected):
     assert classify_reopen(diff) == expected

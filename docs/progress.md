@@ -309,6 +309,23 @@ The owner approved this batch to run unattended, in whatever order works best, *
 
 **Stop-and-wait conditions (from the approval):** a failing test whose root cause is unclear; the design is silent on a hard-to-reverse choice (e.g. persisted-state shape); an existing test's *meaning* (not just shape) would have to change; the Proxmox host goes down. **Never:** alter LICENSE/README notice, create/modify/destroy Proxmox guests, enable `execution_sandbox`, touch credentials or paid services, or write tests that require the GPU worker.
 
+**Batch 1 (A–I) complete 2026-09-26**, end-to-end test passing (Section 52).
+
+### Batch 2 (self-planned 2026-09-26, per the owner's "plan the next batch and continue")
+
+Same rules and stop conditions as batch 1. Ordered so each phase builds on the last.
+
+| Phase | Scope | Status |
+|---|---|---|
+| J | **Fingerprints for Physics, Philosophy, Theology** (§2.4.1 names them: Physics — explicit defeat condition present; Philosophy — assumption/premise surfacing; Theology — `traditional` typing attached). Closes the §49 gap where those agents' drift could be flagged but never confirmed. | open |
+| K | **Mathematics bare-integer parsing** — primality only for integers the question actually asks about (same bug class as known-bugs #21); moves the open limitation into a fixed bug. | open |
+| L | **Belief Graph store** (schemas.md already specifies node/edge shapes): answers → claims → sources as real edges, written by the loop. `count_dependents` switches from its shared-claim proxy to real edges, and §7.2's second trigger ("a newly corroborated/challenged claim the framing round would route to the same question") becomes implementable. | open |
+| M | **Maintenance cadence** — a driver that runs idle cycles as low-priority units on the existing `MultiUnitScheduler` alongside questions, audits every N cycles, feeds re-evaluation, and applies approved amendments; the system then evolves without a human calling each function. | open |
+| N | **Async API** — submit → poll over the ledger's `queued/active/completed` lifecycle (api.py's own stated limitation), plus read endpoints for versions and diffs. | open |
+| — | End-to-end test extended over J–N, then plan batch 3. | open |
+
+**Owner decisions accumulated so far (not in any batch — each needs a call from the owner):** (1) the OLMo 3 guest's memory problem, known-bugs.md #24; (2) the flaky `qwen2.5-1.5b` factual assertion; (3) what Engineering's reasoning style is while the sandbox is off (its `executable` rounding claims vs. the fidelity fingerprint); (4) which models to admit before the API passes a fitness store (§48); (5) whether §11.5's importance threshold should narrow when human input triggers a checkpoint (§45); (6) adopting `README.draft.md`.
+
 - [ ] `execution_sandbox.enabled` stays `false` — not actionable right now (the CPU-time gap is a confirmed environment limitation on this specific kernel, not a bug to fix), but re-run `scripts/preflight_check.py` if this project is ever deployed to a *different* host, per `security-review-sandbox.md` Section 7.3/7.4.
 
 ## 27. Brain backlog resumed: Physics, Philosophy, Theology agents; infra topology plan
@@ -635,6 +652,14 @@ Neither audit is scheduled yet — they're callable functions; running them from
 What this does and doesn't prove is stated in `evaluation.py`'s section header: each case proves the mechanism that guards its failure mode, on constructed input — not that the failure can never occur with real models at scale (brain-design.md §9.6). Two pinned expectations updated accordingly (`test_evaluation.py`'s case set, `test_dispute_resolution.py`'s suite total 7 → 16).
 
 **Verified offline** (OLMo 3 guest still degraded): **398 passed, 1 skipped, 3 failed**, the same three `olmo3-7b` timeouts. 417 collected (402 prior + 15 new in `tests/test_adversarial_coverage.py`).
+
+## 52. End-to-end test over batch 1
+
+`tests/test_end_to_end.py` runs one realistic lifecycle through every mechanism together, on real stores and the real scheduler (only the model fallback is stubbed, so it never depends on the model-lab guests): five questions deliberated with reputability, model fitness (one admitted model), fidelity and verification routing all on — one of them killed after two rounds and resumed from its checkpoint files; importance rated; five idle cycles until "17 is prime" earns Tier C and is compacted; the trial-division source contested, triggering a grade-driven reopen that expands the compacted trace first and records a decreasing weight in its diff while leaving version 0 byte-identical; a forecast resolved and reopened regardless of importance; then both audits, the integrity gates on every latest answer, and the adversarial suite (16/16).
+
+**One real gap found by it and fixed:** the §9.4 audit classified a forecast-resolution reopen whose answer didn't change as `no_change` — a thrash suspect — although §7.2 makes that reopen mandatory whether or not anything changes. `classify_reopen` now returns `forecast_resolution` for those.
+
+**Verified offline** (OLMo 3 guest still degraded — ~61 s per 4-token call): **400 passed, 1 skipped, 3 failed**, the same three `olmo3-7b` timeouts. 419 collected.
 
 ### Explicitly not on this list
 Any application-level work beyond what `deployment-playbook.md` promises to deliver (verified SSH access to a correctly-networked guest, not a deployed application).

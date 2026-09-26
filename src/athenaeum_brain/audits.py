@@ -41,13 +41,21 @@ def classify_reopen(diff: dict) -> str:
     """'leading_changed' -- needs a human: better reasoning, or just different?
     'no_change'       -- nothing moved at all: a thrash suspect.
     'weights_only'    -- support shifted, conclusions didn't: consistent with
-                         a grade-driven materiality trigger."""
+                         a grade-driven materiality trigger.
+    'forecast_resolution' -- reopened because its forecast resolved. 7.2
+                         makes that reopen mandatory whether or not the
+                         answer then changes, so an unchanged diff here is
+                         expected, never a thrash suspect. (Found by the
+                         end-to-end test: without this case, every resolved
+                         forecast counted against the materiality test.)"""
     leading = diff.get("leading_conclusion", {}).get("change")
     if leading in ("changed", "appeared", "disappeared"):
         return "leading_changed"
     confidence_moved = diff.get("leading_conclusion", {}).get("confidence") not in (None, "same")
     if diff.get("added") or diff.get("removed") or diff.get("weight_changes") or confidence_moved:
         return "weights_only"
+    if any(c.startswith("forecast resolved") for c in diff.get("cause", [])):
+        return "forecast_resolution"
     return "no_change"
 
 
