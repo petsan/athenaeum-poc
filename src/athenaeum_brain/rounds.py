@@ -8,6 +8,7 @@ from .claims import Claim
 from .agents import all_agents
 from .output_types import classify_output_type
 from .model_fitness import apply_fitness_to_confidence
+from athenaeum_body.reputability_store import SEED_GRADE_WEIGHTS
 
 # Built from agents.py's @master_agent registry, not a hardcoded class
 # list -- adding a new domain (agents.py) requires no change here. See
@@ -61,31 +62,27 @@ def _normalize_subject(subject: str):
 
 
 # Section 4.1: how much of a claim's own confidence survives, given the
-# reputability grade of what it rests on. Explicitly a placeholder policy,
-# same status as reputability_store._grade_from_tally -- the ordering is
-# the design's (foundational > provisional > contested > rejected), the
-# exact numbers are not.
-GRADE_WEIGHT = {
-    "foundational": 1.0,
-    "provisionally_accepted": 0.8,
-    "contested": 0.4,
-    "rejected": 0.0,
-}
+# reputability grade of what it rests on. Since 2026-09-26 these weights
+# are part of the versioned reputability standard (6.5) -- the seed values
+# live in reputability_store.SEED_GRADE_WEIGHTS and an amendment can change
+# them; GRADE_WEIGHT is the seed, used when no standard is supplied.
+GRADE_WEIGHT = SEED_GRADE_WEIGHTS
 
 
-def reputability_factor(provenance: list[str], grade_lookup) -> float:
+def reputability_factor(provenance: list[str], grade_lookup, weights: dict | None = None) -> float:
     """Weakest link, not an average: every provenance list the agents emit
     today is conjunctive (a causal-precedence claim needs BOTH dates right),
     so one rejected source should sink the claim rather than be diluted by
     a good one. A claim citing nothing has nothing to trace its confidence
-    to (Section 5.1) and gets 0.0."""
+    to (Section 5.1) and gets 0.0. `weights` defaults to the seed standard's."""
     if not provenance:
         return 0.0
-    return min(GRADE_WEIGHT[grade_lookup(src)] for src in provenance)
+    weights = weights or GRADE_WEIGHT
+    return min(weights[grade_lookup(src)] for src in provenance)
 
 
 def synthesis_round(exploration_claims: list[Claim], exam_claims: list[Claim],
-                    grade_lookup=None, fitness_lookup=None) -> dict:
+                    grade_lookup=None, fitness_lookup=None, grade_weights: dict | None = None) -> dict:
     """
     Section 4: the ONLY step allowed to move a claim's status from
     'proposed' to 'committed' (Section 4.4 -- single commit boundary).
@@ -165,7 +162,7 @@ def synthesis_round(exploration_claims: list[Claim], exam_claims: list[Claim],
         for c in committed:
             weight = c.confidence
             if grade_lookup is not None:
-                c.reputability_factor = reputability_factor(c.supporting_provenance, grade_lookup)
+                c.reputability_factor = reputability_factor(c.supporting_provenance, grade_lookup, grade_weights)
                 weight *= c.reputability_factor
             if fitness_lookup is not None:
                 c.fitness_factor = fitness_lookup(c.issuing_agent, c.serving_model)

@@ -59,6 +59,7 @@ As implemented in `reputability_store.py` (Section 6.5, 2026-09-26): each stored
 | `version` | int | yes | 0 is the seed standard (Section 6.1); strictly increasing; the list never shrinks |
 | `params` | dict | yes | exactly `rejected_min_challenges`, `foundational_min_corroborations` (positive ints) |
 | `rationale` | str | yes | non-empty; why this version was adopted |
+| `grade_weights` | dict | yes | synthesis's per-grade evidence weights (§4.1) — exactly the four grades, each in [0, 1], non-decreasing as grades improve; v0 = `SEED_GRADE_WEIGHTS`; an amendment inherits the current weights unless it sets them; standards saved before 2026-09-26 read as seed. A weights-only amendment regrades nothing and is not a §7.2 materiality trigger. |
 
 ## Question Ledger Entry
 | Field | Type | Required | Notes |

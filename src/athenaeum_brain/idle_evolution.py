@@ -103,7 +103,7 @@ def reexamine(sample: list[dict], reputability: ReputabilityStore, cycle_id: str
 
     findings = []
     for s, c in zip(sample, claims):
-        factor_now = reputability_factor(c.supporting_provenance, lookup)
+        factor_now = reputability_factor(c.supporting_provenance, lookup, reputability.current_standard()["grade_weights"])
         factor_then = s["claim"].get("reputability_factor")
         against = challenges.get(c.claim_id, [])
         if against:

@@ -155,7 +155,9 @@ def make_deliberation_handler(question: str, question_id: str, reputability: Rep
             grade_lookup = (lambda src: reputability.current_grade(src)["grade"]) if reputability else None
             fitness_lookup = ((lambda agent, model: fitness_factor(model_fitness, agent, model))
                               if model_fitness is not None else None)
-            result = synthesis_round(claims, exam, grade_lookup=grade_lookup, fitness_lookup=fitness_lookup)
+            grade_weights = reputability.current_standard()["grade_weights"] if reputability else None
+            result = synthesis_round(claims, exam, grade_lookup=grade_lookup, fitness_lookup=fitness_lookup,
+                                     grade_weights=grade_weights)
             answer = {
                 # The question and its frame ride on the answer so a later
                 # reopen (reopening.py, Section 7.3) and importance rating

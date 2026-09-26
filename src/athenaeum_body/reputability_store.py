@@ -43,6 +43,32 @@ def _grade_from_tally(corroborated: int, challenged: int, params: dict = SEED_ST
     return "provisionally_accepted"
 
 
+# Version 0's grade weights -- how much of a claim's confidence survives
+# synthesis given the grade of what it rests on (brain-design.md 4.1). These
+# are exactly the values synthesis used before they were part of the
+# standard (athenaeum_brain/rounds.py GRADE_WEIGHT, 2026-09-25), so they
+# are a placeholder policy exactly as the thresholds above are.
+SEED_GRADE_WEIGHTS = {
+    "foundational": 1.0,
+    "provisionally_accepted": 0.8,
+    "contested": 0.4,
+    "rejected": 0.0,
+}
+
+
+def _validate_grade_weights(weights: dict) -> dict:
+    if set(weights) != set(GRADE_ORDER):
+        raise ValueError(f"grade weights must cover exactly {GRADE_ORDER}, got {sorted(weights)}")
+    for grade, w in weights.items():
+        if not isinstance(w, (int, float)) or not 0.0 <= w <= 1.0:
+            raise ValueError(f"grade weight for {grade!r} must be within [0, 1], got {w!r}")
+    ordered = [weights[g] for g in GRADE_ORDER]  # rejected .. foundational
+    if ordered != sorted(ordered):
+        raise ValueError("grade weights must not decrease as grades improve "
+                         "(rejected <= contested <= provisionally_accepted <= foundational)")
+    return {g: float(weights[g]) for g in GRADE_ORDER}
+
+
 def _validate_params(params: dict) -> dict:
     if set(params) != set(SEED_STANDARD_PARAMS):
         raise ValueError(f"standard params must be exactly {sorted(SEED_STANDARD_PARAMS)}, got {sorted(params)}")
@@ -64,6 +90,10 @@ class ReputabilityStore:
             "version": 0, "params": dict(SEED_STANDARD_PARAMS),
             "rationale": "seed standard (Section 6.1) -- bootstrap heuristics, not permanent doctrine",
         }])
+        # Standards written before grade weights joined the standard carry
+        # none; they used the seed weights.
+        for s in state["standards"]:
+            s.setdefault("grade_weights", dict(SEED_GRADE_WEIGHTS))
         return state
 
     @staticmethod
@@ -127,18 +157,25 @@ class ReputabilityStore:
             return UNGRADED_DEFAULT
         return _grade_from_tally(tally["corroborated"], tally["challenged"], params)
 
-    def adopt_standard(self, params: dict, rationale: str) -> dict:
+    def adopt_standard(self, params: dict, rationale: str, grade_weights: dict | None = None) -> dict:
         """Section 6.5: version N+1 supersedes N for new decisions. Every
         source whose grade differs under the new standard gets a new,
         appended grade entry (cause 'standard_amendment'); its earlier
         entries are untouched. Returns {'version', 'regraded': [...]} so a
-        caller can see exactly which sources the amendment moved."""
+        caller can see exactly which sources the amendment moved.
+
+        grade_weights (synthesis's per-grade evidence weights, 4.1) are part
+        of the standard too; omitted, the new version inherits the current
+        ones. A weights-only change regrades nothing."""
         if not rationale or not rationale.strip():
             raise ValueError("a standard amendment requires a written rationale (Section 6.5)")
         state = self._state()
-        version = self._in_force(state)["version"] + 1
+        current = self._in_force(state)
+        version = current["version"] + 1
         params = _validate_params(params)
-        state["standards"].append({"version": version, "params": params, "rationale": rationale})
+        weights = _validate_grade_weights(grade_weights) if grade_weights is not None else dict(current["grade_weights"])
+        state["standards"].append({"version": version, "params": params, "rationale": rationale,
+                                   "grade_weights": weights})
 
         regraded = []
         for subject_id, tally in state["tallies"].items():

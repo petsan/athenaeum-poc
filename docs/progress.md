@@ -349,7 +349,7 @@ Same rules and stop conditions. Again, each item is a gap found while building, 
 | Phase | Scope | Status |
 |---|---|---|
 | S | **Feed calibration (§5.3, §9.3)** — the per-agent calibration store — "the accountability mechanism" — is never written outside tests. Idle re-examination is exactly when a claim's fate becomes known: record survived claims as verified and challenged/unsupported ones as overturned, per agent at the confidence it claimed; the Maintainer's audits then report `calibration_drift` per agent. | **done** — §65 |
-| T | **Grade weights into the versioned standard** — synthesis's `GRADE_WEIGHT` (§41) sits outside the reputability standard §43 versioned, so it can't evolve under the same review; move it into the standard's params with v0 = today's values. | open |
+| T | **Grade weights into the versioned standard** — synthesis's `GRADE_WEIGHT` (§41) sits outside the reputability standard §43 versioned, so it can't evolve under the same review; move it into the standard's params with v0 = today's values. | **done** — §66 |
 | U | **Ingestion feeds the Belief Graph** — ingested sources and their `cites` become `source` nodes and `cites` edges, so dispute resolution and consolidation can read citation data from the graph instead of a hand-passed map. | open |
 | V | **Mobile client: async mode and history** — the client only knows the synchronous call; let it submit async, poll status, and show versions/diffs and maintenance activity. | open |
 | — | End-to-end test extended; README draft refreshed (local, still unpushed); plan batch 5. | open |
