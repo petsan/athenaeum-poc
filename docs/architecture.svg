@@ -1,0 +1,197 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="872" viewBox="0 0 1200 872" role="img" aria-labelledby="t d">
+  <title id="t">Athenaeum proof-of-concept architecture</title>
+  <desc id="d">Clients call an HTTP API; a Maintainer schedules questions, idle-evolution cycles and ingestion; the Brain deliberates with seven Master Agents and revisits its conclusions; the Body keeps every store as an append-only, hash-chained log over content-addressed storage; model serving runs local llama.cpp models.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#495057"/>
+    </marker>
+    <style>
+      text { font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #212529; }
+      .title { font-size: 22px; font-weight: 700; }
+      .subtitle { font-size: 13px; fill: #495057; }
+      .band { font-size: 15px; font-weight: 700; }
+      .path { font-size: 11.5px; fill: #495057; font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; }
+      .head { font-size: 13px; font-weight: 700; }
+      .body { font-size: 11.5px; fill: #343a40; }
+      .chip { font-size: 12px; font-weight: 600; }
+      .note { font-size: 11.5px; fill: #495057; font-style: italic; }
+      .box { fill: #ffffff; stroke-width: 1.2; }
+      .link { stroke: #495057; stroke-width: 1.6; fill: none; }
+    </style>
+  </defs>
+
+  <rect width="1200" height="872" fill="#ffffff"/>
+
+  <text x="600" y="34" text-anchor="middle" class="title">Athenaeum — proof-of-concept architecture</text>
+  <text x="600" y="56" text-anchor="middle" class="subtitle">The Body executes and guarantees. The Brain decides what is true enough to commit — and when to revisit it.</text>
+
+  <!-- Clients -->
+  <rect x="20" y="80" width="170" height="150" rx="10" fill="#f1f3f5" stroke="#868e96"/>
+  <text x="105" y="102" text-anchor="middle" class="band">Clients</text>
+  <rect x="35" y="115" width="140" height="48" rx="7" class="box" stroke="#868e96"/>
+  <text x="105" y="135" text-anchor="middle" class="head">Mobile web client</text>
+  <text x="105" y="152" text-anchor="middle" class="body">client/index.html</text>
+  <rect x="35" y="172" width="140" height="48" rx="7" class="box" stroke="#868e96"/>
+  <text x="105" y="192" text-anchor="middle" class="head">Python callers</text>
+  <text x="105" y="209" text-anchor="middle" class="body">scripts · tests · demo</text>
+  <line x1="190" y1="137" x2="208" y2="137" class="link" marker-end="url(#arrow)"/>
+
+  <!-- HTTP API -->
+  <rect x="210" y="80" width="780" height="110" rx="10" fill="#f3f0ff" stroke="#7950f2"/>
+  <text x="226" y="102" class="band">HTTP API</text>
+  <text x="310" y="102" class="path">athenaeum_body/api.py</text>
+  <rect x="226" y="115" width="178" height="62" rx="7" class="box" stroke="#7950f2"/>
+  <text x="315" y="134" text-anchor="middle" class="head">Reads</text>
+  <text x="315" y="151" text-anchor="middle" class="body">served from a snapshot —</text>
+  <text x="315" y="166" text-anchor="middle" class="body">never wait on a deliberation</text>
+  <rect x="416" y="115" width="178" height="62" rx="7" class="box" stroke="#7950f2"/>
+  <text x="505" y="134" text-anchor="middle" class="head">Async submit</text>
+  <text x="505" y="151" text-anchor="middle" class="body">written to a durable inbox,</text>
+  <text x="505" y="166" text-anchor="middle" class="body">answered 202 at once</text>
+  <rect x="606" y="115" width="178" height="62" rx="7" class="box" stroke="#7950f2"/>
+  <text x="695" y="134" text-anchor="middle" class="head">Sync submit</text>
+  <text x="695" y="151" text-anchor="middle" class="body">validated, then deliberated</text>
+  <text x="695" y="166" text-anchor="middle" class="body">inside the request</text>
+  <rect x="796" y="115" width="178" height="62" rx="7" class="box" stroke="#7950f2"/>
+  <text x="885" y="134" text-anchor="middle" class="head">Reviewer-token writes</text>
+  <text x="885" y="151" text-anchor="middle" class="body">review decisions · ingestion</text>
+  <text x="885" y="166" text-anchor="middle" class="body">from allow-listed hosts</text>
+  <line x1="600" y1="190" x2="600" y2="208" class="link" marker-end="url(#arrow)"/>
+
+  <!-- Maintainer -->
+  <rect x="210" y="210" width="780" height="110" rx="10" fill="#fff4e6" stroke="#e8590c"/>
+  <text x="226" y="232" class="band">Maintainer</text>
+  <text x="322" y="232" class="path">athenaeum_brain/maintenance.py</text>
+  <rect x="226" y="245" width="140" height="62" rx="7" class="box" stroke="#e8590c"/>
+  <text x="296" y="264" text-anchor="middle" class="head">Scheduler</text>
+  <text x="296" y="281" text-anchor="middle" class="body">priority round-robin,</text>
+  <text x="296" y="296" text-anchor="middle" class="body">checkpoint every round</text>
+  <rect x="378" y="245" width="140" height="62" rx="7" class="box" stroke="#e8590c"/>
+  <text x="448" y="264" text-anchor="middle" class="head">Questions</text>
+  <text x="448" y="281" text-anchor="middle" class="body">priority 0 —</text>
+  <text x="448" y="296" text-anchor="middle" class="body">always served first</text>
+  <rect x="530" y="245" width="140" height="62" rx="7" class="box" stroke="#e8590c"/>
+  <text x="600" y="264" text-anchor="middle" class="head">Idle cycles</text>
+  <text x="600" y="281" text-anchor="middle" class="body">between and alongside</text>
+  <text x="600" y="296" text-anchor="middle" class="body">questions</text>
+  <rect x="682" y="245" width="140" height="62" rx="7" class="box" stroke="#e8590c"/>
+  <text x="752" y="264" text-anchor="middle" class="head">Ingestion</text>
+  <text x="752" y="281" text-anchor="middle" class="body">one source per round,</text>
+  <text x="752" y="296" text-anchor="middle" class="body">kill-safe</text>
+  <rect x="834" y="245" width="140" height="62" rx="7" class="box" stroke="#e8590c"/>
+  <text x="904" y="264" text-anchor="middle" class="head">Failing rounds</text>
+  <text x="904" y="281" text-anchor="middle" class="body">retried, then</text>
+  <text x="904" y="296" text-anchor="middle" class="body">suspended visibly</text>
+  <line x1="600" y1="320" x2="600" y2="338" class="link" marker-end="url(#arrow)"/>
+
+  <!-- Brain -->
+  <rect x="210" y="340" width="780" height="220" rx="10" fill="#e7f5ff" stroke="#1971c2"/>
+  <text x="226" y="362" class="band">Brain</text>
+  <text x="276" y="362" class="path">athenaeum_brain/ — judgment</text>
+  <rect x="226" y="375" width="250" height="80" rx="7" class="box" stroke="#1971c2"/>
+  <text x="351" y="395" text-anchor="middle" class="head">Deliberation rounds</text>
+  <text x="351" y="412" text-anchor="middle" class="body">framing → exploration →</text>
+  <text x="351" y="427" text-anchor="middle" class="body">cross-examination → synthesis</text>
+  <text x="351" y="445" text-anchor="middle" class="note">plural answers, never false consensus</text>
+  <line x1="476" y1="415" x2="486" y2="415" class="link"/>
+  <rect x="488" y="375" width="486" height="80" rx="7" class="box" stroke="#1971c2"/>
+  <text x="731" y="393" text-anchor="middle" class="head">Seven Master Agents</text>
+  <g>
+    <rect x="500" y="401" width="110" height="22" rx="11" fill="#d0ebff" stroke="#74c0fc"/>
+    <text x="555" y="416" text-anchor="middle" class="chip">Mathematics</text>
+    <rect x="618" y="401" width="110" height="22" rx="11" fill="#d0ebff" stroke="#74c0fc"/>
+    <text x="673" y="416" text-anchor="middle" class="chip">Logic</text>
+    <rect x="736" y="401" width="110" height="22" rx="11" fill="#d0ebff" stroke="#74c0fc"/>
+    <text x="791" y="416" text-anchor="middle" class="chip">Engineering</text>
+    <rect x="854" y="401" width="110" height="22" rx="11" fill="#d0ebff" stroke="#74c0fc"/>
+    <text x="909" y="416" text-anchor="middle" class="chip">Physics</text>
+    <rect x="559" y="428" width="110" height="22" rx="11" fill="#d0ebff" stroke="#74c0fc"/>
+    <text x="614" y="443" text-anchor="middle" class="chip">Philosophy</text>
+    <rect x="677" y="428" width="110" height="22" rx="11" fill="#d0ebff" stroke="#74c0fc"/>
+    <text x="732" y="443" text-anchor="middle" class="chip">Theology</text>
+    <rect x="795" y="428" width="110" height="22" rx="11" fill="#d0ebff" stroke="#74c0fc"/>
+    <text x="850" y="443" text-anchor="middle" class="chip">World News</text>
+  </g>
+  <rect x="226" y="467" width="178" height="80" rx="7" class="box" stroke="#1971c2"/>
+  <text x="315" y="487" text-anchor="middle" class="head">Idle evolution</text>
+  <text x="315" y="504" text-anchor="middle" class="body">re-examines committed claims,</text>
+  <text x="315" y="519" text-anchor="middle" class="body">consolidates, calibrates;</text>
+  <text x="315" y="534" text-anchor="middle" class="body">models may dissent</text>
+  <rect x="416" y="467" width="178" height="80" rx="7" class="box" stroke="#1971c2"/>
+  <text x="505" y="487" text-anchor="middle" class="head">Re-evaluation</text>
+  <text x="505" y="504" text-anchor="middle" class="body">importance × materiality;</text>
+  <text x="505" y="519" text-anchor="middle" class="body">reopens with an explicit</text>
+  <text x="505" y="534" text-anchor="middle" class="body">diff, never overwrites</text>
+  <rect x="606" y="467" width="178" height="80" rx="7" class="box" stroke="#1971c2"/>
+  <text x="695" y="487" text-anchor="middle" class="head">Reputability &amp; disputes</text>
+  <text x="695" y="504" text-anchor="middle" class="body">sources graded by track record</text>
+  <text x="695" y="519" text-anchor="middle" class="body">under a versioned standard;</text>
+  <text x="695" y="534" text-anchor="middle" class="body">Logic-chaired disputes</text>
+  <rect x="796" y="467" width="178" height="80" rx="7" class="box" stroke="#1971c2"/>
+  <text x="885" y="487" text-anchor="middle" class="head">Governance</text>
+  <text x="885" y="504" text-anchor="middle" class="body">human input as claims,</text>
+  <text x="885" y="519" text-anchor="middle" class="body">review checkpoints,</text>
+  <text x="885" y="534" text-anchor="middle" class="body">domain-fidelity remediation</text>
+  <line x1="600" y1="560" x2="600" y2="578" class="link" marker-end="url(#arrow)"/>
+
+  <!-- Body stores -->
+  <rect x="210" y="580" width="780" height="122" rx="10" fill="#e6fcf5" stroke="#0c8599"/>
+  <text x="226" y="602" class="band">Body — stores</text>
+  <text x="340" y="602" class="path">athenaeum_body/</text>
+  <rect x="226" y="613" width="178" height="38" rx="7" class="box" stroke="#0c8599"/>
+  <text x="315" y="629" text-anchor="middle" class="head">Question Ledger</text>
+  <text x="315" y="643" text-anchor="middle" class="body">one log per question</text>
+  <rect x="416" y="613" width="178" height="38" rx="7" class="box" stroke="#0c8599"/>
+  <text x="505" y="629" text-anchor="middle" class="head">Belief Graph</text>
+  <text x="505" y="643" text-anchor="middle" class="body">questions · claims · sources</text>
+  <rect x="606" y="613" width="178" height="38" rx="7" class="box" stroke="#0c8599"/>
+  <text x="695" y="629" text-anchor="middle" class="head">Reputability</text>
+  <text x="695" y="643" text-anchor="middle" class="body">grades + standards</text>
+  <rect x="796" y="613" width="178" height="38" rx="7" class="box" stroke="#0c8599"/>
+  <text x="885" y="629" text-anchor="middle" class="head">Consolidation</text>
+  <text x="885" y="643" text-anchor="middle" class="body">Tier B/C + cold archive</text>
+  <rect x="226" y="659" width="140" height="34" rx="7" class="box" stroke="#0c8599"/>
+  <text x="296" y="680" text-anchor="middle" class="head">Domain fidelity</text>
+  <rect x="378" y="659" width="140" height="34" rx="7" class="box" stroke="#0c8599"/>
+  <text x="448" y="680" text-anchor="middle" class="head">Calibration</text>
+  <rect x="530" y="659" width="140" height="34" rx="7" class="box" stroke="#0c8599"/>
+  <text x="600" y="680" text-anchor="middle" class="head">Model fitness</text>
+  <rect x="682" y="659" width="140" height="34" rx="7" class="box" stroke="#0c8599"/>
+  <text x="752" y="680" text-anchor="middle" class="head">Checkpoints · audits</text>
+  <rect x="834" y="659" width="140" height="34" rx="7" class="box" stroke="#0c8599"/>
+  <text x="904" y="680" text-anchor="middle" class="head">Inbox · reviewers</text>
+  <line x1="600" y1="702" x2="600" y2="720" class="link" marker-end="url(#arrow)"/>
+
+  <!-- Storage foundation -->
+  <rect x="210" y="722" width="780" height="100" rx="10" fill="#ebfbee" stroke="#2f9e44"/>
+  <text x="226" y="744" class="band">Storage foundation</text>
+  <rect x="226" y="755" width="241" height="56" rx="7" class="box" stroke="#2f9e44"/>
+  <text x="346" y="777" text-anchor="middle" class="head">Content-addressed store</text>
+  <text x="346" y="795" text-anchor="middle" class="body">tampering detected on every read</text>
+  <rect x="479" y="755" width="241" height="56" rx="7" class="box" stroke="#2f9e44"/>
+  <text x="599" y="777" text-anchor="middle" class="head">Hash-chained checkpoint logs</text>
+  <text x="599" y="795" text-anchor="middle" class="body">append-only — nothing overwritten</text>
+  <rect x="732" y="755" width="242" height="56" rx="7" class="box" stroke="#2f9e44"/>
+  <text x="853" y="777" text-anchor="middle" class="head">Tiered storage</text>
+  <text x="853" y="795" text-anchor="middle" class="body">Tier 2 → Tier 3 fallback, auto-recovery</text>
+
+  <!-- Model serving -->
+  <rect x="1010" y="210" width="170" height="350" rx="10" fill="#fff0f6" stroke="#c2255c"/>
+  <text x="1095" y="232" text-anchor="middle" class="band">Model serving</text>
+  <rect x="1025" y="248" width="140" height="70" rx="7" class="box" stroke="#c2255c"/>
+  <text x="1095" y="268" text-anchor="middle" class="head">Model-lab guests</text>
+  <text x="1095" y="285" text-anchor="middle" class="body">llama.cpp on CPU;</text>
+  <text x="1095" y="300" text-anchor="middle" class="body">OLMo 3 7B admitted</text>
+  <rect x="1025" y="332" width="140" height="58" rx="7" class="box" stroke="#c2255c"/>
+  <text x="1095" y="352" text-anchor="middle" class="head">Elastic GPU workers</text>
+  <text x="1095" y="370" text-anchor="middle" class="body">opt-in, health-checked</text>
+  <rect x="1025" y="404" width="140" height="58" rx="7" fill="#ffffff" stroke="#c2255c" stroke-dasharray="5 4"/>
+  <text x="1095" y="424" text-anchor="middle" class="head">Execution sandbox</text>
+  <text x="1095" y="442" text-anchor="middle" class="body">off by configuration</text>
+  <text x="1095" y="488" text-anchor="middle" class="note">model claims weigh only</text>
+  <text x="1095" y="504" text-anchor="middle" class="note">what the model has earned;</text>
+  <text x="1095" y="520" text-anchor="middle" class="note">no paid APIs, ever</text>
+  <line x1="974" y1="415" x2="1008" y2="415" class="link" marker-end="url(#arrow)"/>
+
+  <text x="600" y="852" text-anchor="middle" class="subtitle">Every store is an append-only, hash-chained log — anything the system concluded, and why, stays recoverable.</text>
+</svg>

@@ -2,11 +2,15 @@
 
 # Athenaeum Body -- Proof-of-Work Slice
 
+<p align="center">
+  <img src="docs/architecture.svg" alt="Athenaeum architecture: clients call an HTTP API; a Maintainer schedules questions, idle-evolution cycles and ingestion; the Brain deliberates with seven Master Agents and revisits its conclusions; the Body keeps every store as an append-only, hash-chained log over content-addressed storage; local llama.cpp models serve the agents." width="100%">
+</p>
+
 A minimal, runnable, tested implementation of the highest-risk structural
 guarantees from `body-design.md`: not a full build of the Body, but enough
 working code to validate the core ideas and poke at them directly.
 
-## Architecture
+## Architecture (detailed, text-based)
 
 ```mermaid
 flowchart TB
