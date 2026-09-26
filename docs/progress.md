@@ -324,7 +324,7 @@ Same rules and stop conditions as batch 1. Ordered so each phase builds on the l
 | N | **Async API** — submit → poll over the ledger's `queued/active/completed` lifecycle (api.py's own stated limitation), plus read endpoints for versions and diffs. | **done** — §57 |
 | — | End-to-end test extended over J–N, then plan batch 3. | **done** — `test_full_lifecycle_through_the_maintainer` (§58) |
 
-**Owner decisions accumulated so far (not in any batch — each needs a call from the owner):** ~~(1) the OLMo 3 guest's memory problem, known-bugs.md #24~~ (resolved §59 once guest changes were permitted); (2) the flaky `qwen2.5-1.5b` factual assertion; (3) what Engineering's reasoning style is while the sandbox is off (its `executable` rounding claims vs. the fidelity fingerprint); (4) which models to admit before the API passes a fitness store (§48); (5) whether §11.5's importance threshold should narrow when human input triggers a checkpoint (§45); (6) adopting `README.draft.md`; (7) how a reviewer approves a checkpoint in the deployed system. The API has no authentication, so approval stays a Python call until the owner picks an auth approach (batch 5, Phase Z).
+**Owner decisions accumulated so far (not in any batch — each needs a call from the owner):** ~~(1) the OLMo 3 guest's memory problem, known-bugs.md #24~~ (resolved §59 once guest changes were permitted); (2) the flaky `qwen2.5-1.5b` factual assertion; (3) what Engineering's reasoning style is while the sandbox is off (its `executable` rounding claims vs. the fidelity fingerprint); (4) which models to admit before the API passes a fitness store (§48); (5) whether §11.5's importance threshold should narrow when human input triggers a checkpoint (§45); (6) adopting `README.draft.md`; (7) how a reviewer approves a checkpoint in the deployed system. The API has no authentication, so approval stays a Python call until the owner picks an auth approach (batch 5, Phase Z). The same decision covers an ingestion endpoint (Phase Y). (8) Whether old checkpoint snapshots may ever be pruned or compacted. The log is append-only by design, so storage grows without bound (measured in batch 6, Phase AB).
 
 **Batch 2 (J–N) complete 2026-09-26**, end-to-end extended (Section 58).
 
@@ -366,7 +366,20 @@ Same rules and stop conditions. Each item is a gap confirmed in the code while b
 | X | **Grade changes reach every dependent answer (§7.2, first trigger)** — re-evaluation candidates come only from the ~20 claims an idle cycle samples, so a source that turns `rejected` leaves unsampled answers relying on it unreopened indefinitely. Each cycle, use the Belief Graph (source ← claim ← answer) to find every question whose latest answer relies on a source whose grade changed since the previous cycle, and hand those questions to re-evaluation as well. | **done** — §71 |
 | Y | **Scheduled ingestion (§9)** — `ingestion.py`'s docstring promises "a scheduled work-unit type", and none exists. Make ingestion a checkpointed WorkUnit the Maintainer runs at low priority: per source, fetch, check, normalize, then record in the CAS and graph, with no re-fetch or double record after a kill. Tests use fixtures plus a real localhost HTTP fetch. | **done** — §72 |
 | Z | **Human checkpoints visible** — standard-amendment proposals and human-input checkpoints wait for a reviewer, but nothing outside Python can see them. Add a read-only `GET /api/checkpoints` and a client panel. *Approving* over the unauthenticated API is deliberately not built (owner decision 7). | **done** — §73, known-bugs #32 |
-| — | End-to-end test extended; README draft refreshed (local); plan batch 6. | open |
+| — | End-to-end test extended; README draft refreshed (local); plan batch 6. | **done** — §74 |
+
+**Batch 5 (W–Z) complete 2026-09-26.**
+
+### Batch 6 (self-planned 2026-09-26)
+
+Same rules and stop conditions. Each item was confirmed against the running code while closing batch 5.
+
+| Phase | Scope | Status |
+|---|---|---|
+| AA | **API input validation and error handling** — reproduced on LXC 104: `POST /api/questions` with a non-string `question` crashes the handler, so the client gets no response. It also leaves a `queued` ledger entry nothing will ever run. An empty question is deliberated, a 200 KB question is accepted, and the request body is read with no size limit. Validate (a non-empty string within a length limit; a bounded body), and answer every failure with a JSON error. If a synchronous deliberation fails, suspend the question with its error instead of leaving it `queued`. | open |
+| AB | **Measure storage growth** — every store write appends a full-state checkpoint (append-only by design, §5.3), so storage grows with writes × state size. Measure bytes per answered question and per idle cycle on the API wiring, find the dominant writers, and remove only *redundant* writes (a checkpoint of unchanged state). Whether old snapshots may ever be pruned is owner decision 8, not a mechanical fix. | open |
+| AC | **Refresh the narrated demo** (`demo_brain.py`) for batches 4–5: calibration, ingestion into the graph, a grade change reaching every dependent answer, a failing step set aside visibly. Mind known-bugs #16. | open |
+| — | End-to-end test extended; README draft refreshed (local); plan batch 7. | open |
 
 - [ ] `execution_sandbox.enabled` stays `false` — not actionable right now (the CPU-time gap is a confirmed environment limitation on this specific kernel, not a bug to fix), but re-run `scripts/preflight_check.py` if this project is ever deployed to a *different* host, per `security-review-sandbox.md` Section 7.3/7.4.
 
@@ -958,6 +971,19 @@ Tested:
 **Security fix — known-bugs.md #32:** while adding the route, the static file handler turned out to serve `CLIENT_DIR / <request path>` unchecked. A raw `GET /../pyproject.toml` returned the file, reproduced against a real server. Paths are now resolved and must stay under `client/`. The tests send raw request lines covering plain, percent-encoded and mixed traversals, including `/etc/hostname`.
 
 **Full live suite: 554 passed, 1 skipped.** 555 collected (546 prior + 9 new in `tests/test_api_review.py`).
+
+## 74. End-to-end test over batch 5
+
+`test_lifecycle_on_the_api_wiring` runs W–Z on `build_app`'s own stores and Maintainer, reading results back through the same functions the HTTP handlers call:
+- **Y:** a scheduled ingestion batch stores two fixture sources, rejects a paid one unrequested, and its citation reaches idle evolution;
+- **W:** a question whose deliberation always raises is suspended with its error and listed under `failed_units`, while the others are answered;
+- **X:** once the primality source is downgraded, the next cycle reopens all three prime answers with a one-claim sample, each with a diff;
+- **Z:** a pending human-input checkpoint shows up in the review listing;
+- and the synchronous path still answers alongside, on the same stores.
+
+`README.draft.md` is refreshed for batch 5, still local and unpushed. Batch 6 is planned above. Its first phase comes from a reproduced API crash on a non-string question.
+
+**Full live suite: 554 passed, 1 skipped, 1 failed.** The failure is the known-flaky `qwen2.5-1.5b` factual assertion (known-bugs.md open limitations, owner decision 2): the model answered "Saturn". It passed 3 of 3 immediate re-runs, and nothing else failed. 556 collected (555 prior + 1 new end-to-end test).
 
 ### Explicitly not on this list
 Any application-level work beyond what `deployment-playbook.md` promises to deliver (verified SSH access to a correctly-networked guest, not a deployed application).

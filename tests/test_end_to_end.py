@@ -339,3 +339,76 @@ def test_lifecycle_with_calibration_weights_and_ingested_citations(system):
     assert last["status_counts"]["weakened"] >= 1
     report = s.audits.history("calibration")[-1]
     assert report["drifting"] == [] and "Mathematics" in report["agents"]
+
+
+# ---------------------------------------------------------------------------
+# Batch 5 (W-Z), on the API's own wiring (build_app): scheduled ingestion, a
+# failing question given up visibly, a grade change reaching every dependent
+# answer through the graph, and the review queue -- read back the way the
+# client reads it.
+# ---------------------------------------------------------------------------
+
+def test_lifecycle_on_the_api_wiring(tmp_path, monkeypatch):
+    from athenaeum_body.api import build_app
+    from athenaeum_brain import maintenance
+
+    monkeypatch.setattr(model_backed_reasoning, "ask_model", lambda *a, **k: None)
+    real_factory = maintenance.make_deliberation_unit
+
+    def factory(question, qid, **kw):   # Phase W: one question's deliberation always breaks
+        unit = real_factory(question, qid, **kw)
+        if qid == "q-4":
+            def broken(state, round_index):
+                raise RuntimeError("backend exploded")
+            unit.round_handler = broken
+        return unit
+    monkeypatch.setattr(maintenance, "make_deliberation_unit", factory)
+
+    app = build_app(tmp_path)
+    submit, list_questions, get_question, _ = app
+    m = app.maintainer
+    m.policy.idle_sample_size, m.policy.importance_threshold = 1, 0.0
+
+    # Phase Y: a scheduled ingestion batch fills the graph the idle cycles read
+    m.submit_ingestion("seed", [
+        {"url": "fixture:paper", "license": "cc-by", "content": "a paper"},
+        {"url": "fixture:review", "license": "cc-by", "content": "a review", "cites": ["fixture:paper"]},
+        {"url": "https://paywalled.example", "license": "cc-by", "is_paid_or_metered": True},
+    ])
+    for i, n in enumerate((17, 19, 23), start=1):
+        m.submit_question(f"q-{i}", f"is {n} prime?")
+    m.submit_question("q-4", "is 29 prime?")
+    events = m.run()
+    (ingested,) = [e for e in events if e["kind"] == "ingestion"]
+    assert ingested["accepted"] == ["fixture:paper", "fixture:review"]
+    assert m.idle.citation_map() == {"fixture:review": ["fixture:paper"]}
+
+    # Phase W: the broken question is suspended with its error; the rest answered
+    q4 = get_question("q-4")
+    assert q4["status"] == "suspended" and "backend exploded" in q4["error"] and q4["question"] == "is 29 prime?"
+    assert app.maintenance_status()["failed_units"] == ["q-4"]
+    assert [q["status"] for q in list_questions()] == ["completed", "completed", "completed", "suspended"]
+
+    # Phase X: the primality source is downgraded; the next cycle reopens every
+    # answer resting on it, though it samples a single claim
+    src = "computed:trial_division"
+    rep = app.maintainer.idle.reputability
+    before = rep.current_grade(src)["grade"]
+    while rep.current_grade(src)["grade"] == before:
+        rep.record_outcome(src, "source", "challenged")
+    for _ in range(5):
+        rep.record_outcome(src, "source", "challenged")
+    m.submit_question("q-5", "is 31 prime?")
+    (cycle,) = [e for e in m.run() if e["kind"] == "idle"]
+    assert cycle["reopened"] == ["q-1", "q-2", "q-3"]
+    assert all(len(get_question(f"q-{i}")["versions"]) == 2 for i in (1, 2, 3))
+    assert get_question("q-1")["versions"][1]["diff"]["cause"]
+
+    # Phase Z: what waits for a reviewer is visible, read-only
+    app.maintainer.idle.checkpoints.set_pending("q-5", reason="human input disputes the answer",
+                                                triggering_claim_id="c1", submitter_id="alice")
+    (pending,) = [c for c in app.checkpoints() if c["status"] == "pending_human_checkpoint"]
+    assert pending["kind"] == "question" and pending["ref"] == "q-5"
+
+    # and the synchronous path still works alongside, on the same stores
+    assert submit("is 37 prime?")["answer"]["committed"][0]["statement"] == "37 is prime"
