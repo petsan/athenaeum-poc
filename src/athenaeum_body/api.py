@@ -26,6 +26,7 @@ from __future__ import annotations
 import json
 import sys
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse, parse_qs
@@ -270,9 +271,18 @@ def build_app(data_dir: Path) -> App:
         return _view()["checkpoints"]
 
     def health() -> dict:
+        """Resources, plus whether work is moving (batch 8, Phase AG). Never
+        waits for the lock: the queue length comes from the read snapshot and
+        the worker's progress from attributes it rebinds atomically."""
         s = monitor.get_state()
+        last = maintainer.last_round_at
         return {"status": "ok", "cores_available": s.cores_available,
-                "dram_headroom_gb": s.dram_headroom_gb}
+                "dram_headroom_gb": s.dram_headroom_gb,
+                "worker": {"started": bool(worker_thread),
+                           "alive": bool(worker_thread) and worker_thread[0].is_alive(),
+                           "rounds_run": maintainer.rounds_run,
+                           "seconds_since_last_round": None if last is None else round(time.time() - last, 3)},
+                "queued_units": _view()["maintenance"]["queued_units"]}
 
     with lock:
         _refresh_locked()

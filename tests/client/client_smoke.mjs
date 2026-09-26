@@ -52,6 +52,8 @@ const state = {
                                  { kind: "idle", cycle_id: "idle-1", status_counts: { survived: 2, challenged: 0 },
                                    reopened: ["q-1"], amendments_adopted: [], calibration_drifting: [] }] },
 };
+state.health = { cores_available: 4, dram_headroom_gb: 3, queued_units: 0,
+                 worker: { started: false, alive: false, rounds_run: 0, seconds_since_last_round: null } };
 state.checkpoints = [
   { key: "standard-amendment:idle-4", kind: "standard-amendment", ref: "idle-4", status: "pending_human_checkpoint",
     reason: "2 claim(s) resting only on 'foundational' sources were challenged", note: null, reviewer_id: null,
@@ -65,7 +67,7 @@ const posts = [];
 const fullFetches = {};
 const fetch = async (path, opts = {}) => {
   let status = 200, body;
-  if (path === "/api/health") body = { cores_available: 4, dram_headroom_gb: 3 };
+  if (path === "/api/health") body = state.health;
   else if (path === "/api/questions" && opts.method === "POST") {
     posts.push(JSON.parse(opts.body)); status = 202; body = { id: "q-3", status: "queued" };
     state.questions.push({ id: "q-3", status: "queued", importance: 0.5, versions: [], question: posts.at(-1).question });
@@ -139,8 +141,12 @@ state.questions[1] = { id: "q-2", status: "completed", importance: 0.3, question
                        versions: [{ question: "is 17 prime?", committed: [{ issuing_agent: "Mathematics", statement: "17 is prime" }],
                                     dissent: [], plural_answers: [] }] };
 assert.deepEqual(fullFetches, { "q-1": 1, "q-2": 1 });
+assert.match(document.getElementById("status").textContent, /4 cores, 3GB .* background worker not started yet$/);
+state.health = { ...state.health, queued_units: 2,
+                 worker: { started: true, alive: true, rounds_run: 9, seconds_since_last_round: 500 } };
 timers.at(-1).f();
 await settle();
+assert.match(document.getElementById("status").textContent, /background worker: 2 queued, no progress for 500s$/);
 assert.deepEqual(fullFetches, { "q-1": 1, "q-2": 2 });   // only the question that changed is re-fetched
 assert.match(cardHtml("q-2"), /17 is prime/);
 assert.ok(!cardHtml("q-2").includes("pending"));

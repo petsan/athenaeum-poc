@@ -402,7 +402,7 @@ Same rules and stop conditions.
 | Phase | Scope | Status |
 |---|---|---|
 | AF | **Reads don't wait behind deliberation** — measured on LXC 104 with a model call slowed to 2 s: a summary poll that takes 1 ms idle took 1.7 s during an async deliberation. The API's one lock is held for every worker round, model calls included, and for the whole of a synchronous deliberation. Real model calls take tens of seconds, so the client would freeze. Serve the read endpoints from a snapshot refreshed under the lock after each write, so a read never waits for a round. | **done** — §82 |
-| AG | **Health that says whether work is moving** — `/api/health` reports resources only. Add the worker's state (started, alive), the time of the last completed round, and the queue length, so a stuck or slow deployment is visible from the client. | open |
+| AG | **Health that says whether work is moving** — `/api/health` reports resources only. Add the worker's state (started, alive), the time of the last completed round, and the queue length, so a stuck or slow deployment is visible from the client. | **done** — §83 |
 | — | End-to-end test extended; README draft refreshed (local); plan batch 9. | open |
 
 - [ ] `execution_sandbox.enabled` stays `false` — not actionable right now (the CPU-time gap is a confirmed environment limitation on this specific kernel, not a bug to fix), but re-run `scripts/preflight_check.py` if this project is ever deployed to a *different* host, per `security-review-sandbox.md` Section 7.3/7.4.
@@ -1119,6 +1119,20 @@ The trade-off is explicit: during a round, a reader sees the state as of that ro
 - a read during a synchronous deliberation answers at once from the prior snapshot, and is fresh once it finishes.
 
 **Full live suite: 587 passed, 1 skipped.** 588 collected (586 prior + 2 new in `tests/test_api_read_latency.py`).
+
+## 83. Health says whether work is moving — Phase AG
+
+`/api/health` reported only cores and memory headroom, so a stuck or slow worker was invisible. It now also reports:
+- `worker`: whether it was `started` and is `alive`, `rounds_run`, and `seconds_since_last_round`;
+- `queued_units`.
+
+The Maintainer counts every round that ran, including those that raised, in `rounds_run` and `last_round_at`. These are in-memory attributes that are rebound, never mutated, so health reads them without the lock, and it takes the queue length from Phase AF's snapshot. Health therefore answers even while a round is held open (tested).
+
+The client re-checks health on every poll, not just at load. Its status line says whether the background worker hasn't started, is idle, is busy with N queued, has stopped, or has queued work with no round for over 120 s (a placeholder), e.g. "2 queued, no progress for 500s".
+
+Tests: `tests/test_api_health.py` (before any work; during a held model call, answered in under a second with the worker alive and work queued; after, with the queue empty and rounds counted) and the client smoke test (the not-started and stalled wordings).
+
+**Full live suite: 589 passed, 1 skipped.** 590 collected (588 prior + 2 new in `tests/test_api_health.py`).
 
 ### Explicitly not on this list
 Any application-level work beyond what `deployment-playbook.md` promises to deliver (verified SSH access to a correctly-networked guest, not a deployed application).

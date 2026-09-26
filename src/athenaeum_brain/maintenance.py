@@ -39,6 +39,7 @@ given up. A given-up question is marked `suspended`, and its error is kept
 under `failed`, never silently dropped (see _on_round_failed).
 """
 from __future__ import annotations
+import time
 from dataclasses import dataclass, field
 from typing import Callable
 from athenaeum_body.ledger import QuestionLedger
@@ -96,6 +97,10 @@ class Maintainer:
         })
         self.events: list[dict] = []        # what happened recently, in order (bounded: emit)
         self.recovered: list[str] = []
+        # progress, in memory only (batch 8, Phase AG): read by the API's health
+        # check without its lock, so plain attributes rebound, never mutated
+        self.rounds_run = 0
+        self.last_round_at: float | None = None
         if self.idle.belief_graph is None:
             self.idle.belief_graph = self.belief_graph  # idle cycles read ingested citations from it
         self._recover()
@@ -216,15 +221,22 @@ class Maintainer:
         try:
             unit = self.scheduler.process_one_round()
         except Exception as e:  # the scheduler has already dropped the unit from its queue
+            self._round_done()
             event = self._on_round_failed(upcoming, e)
             self.emit(event)
             return event
+        self._round_done()
         if unit.status != "completed":
             return None
         event = self._complete(unit.id)
         if event:
             self.emit(event)
         return event
+
+    def _round_done(self) -> None:
+        """A round ran (to completion or to an exception): work is moving."""
+        self.rounds_run += 1
+        self.last_round_at = time.time()
 
     def emit(self, event: dict) -> None:
         """`events` is a window of the most recent `policy.event_history`,

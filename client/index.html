@@ -117,10 +117,24 @@ async function getJSON(path, opts) {
   return { status: r.status, body: await r.json() };
 }
 
+const STALL_SECONDS = 120;   // queued work with no round this long is worth flagging
+
+function describeWorker(w, queued) {
+  if (!w.started) return "background worker not started yet";
+  if (!w.alive) return "background worker STOPPED";
+  if (!queued) return "background worker idle";
+  const since = w.seconds_since_last_round;
+  if (since !== null && since !== undefined && since > STALL_SECONDS) {
+    return `background worker: ${queued} queued, no progress for ${Math.round(since)}s`;
+  }
+  return `background worker busy: ${queued} queued`;
+}
+
 async function checkHealth() {
   try {
     const h = (await getJSON("/api/health")).body;
-    statusEl.textContent = `connected -- ${h.cores_available} cores, ${h.dram_headroom_gb}GB DRAM headroom`;
+    statusEl.textContent = `connected -- ${h.cores_available} cores, ${h.dram_headroom_gb}GB DRAM headroom` +
+      ` -- ${describeWorker(h.worker || {}, h.queued_units || 0)}`;
     return true;
   } catch (e) {
     statusEl.textContent = "cannot reach API -- is athenaeum_body.api running and reachable?";
@@ -288,6 +302,7 @@ function anyPending() {
 }
 
 async function poll() {
+  await checkHealth();
   await refreshQuestions();
   await refreshMaintenance();
   await refreshCheckpoints();
@@ -329,7 +344,7 @@ async function ask() {
 
 go.addEventListener("click", ask);
 input.addEventListener("keydown", e => { if (e.key === "Enter") ask(); });
-checkHealth().then(poll);
+poll();
 </script>
 </body>
 </html>
