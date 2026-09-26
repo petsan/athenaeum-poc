@@ -324,7 +324,7 @@ Same rules and stop conditions as batch 1. Ordered so each phase builds on the l
 | N | **Async API** — submit → poll over the ledger's `queued/active/completed` lifecycle (api.py's own stated limitation), plus read endpoints for versions and diffs. | **done** — §57 |
 | — | End-to-end test extended over J–N, then plan batch 3. | **done** — `test_full_lifecycle_through_the_maintainer` (§58) |
 
-**Owner decisions accumulated so far (not in any batch — each needs a call from the owner):** ~~(1) the OLMo 3 guest's memory problem, known-bugs.md #24~~ (resolved §59 once guest changes were permitted); (2) the flaky `qwen2.5-1.5b` factual assertion; (3) what Engineering's reasoning style is while the sandbox is off (its `executable` rounding claims vs. the fidelity fingerprint); (4) which models to admit before the API passes a fitness store (§48); (5) whether §11.5's importance threshold should narrow when human input triggers a checkpoint (§45); (6) adopting `README.draft.md`.
+**Owner decisions accumulated so far (not in any batch — each needs a call from the owner):** ~~(1) the OLMo 3 guest's memory problem, known-bugs.md #24~~ (resolved §59 once guest changes were permitted); (2) the flaky `qwen2.5-1.5b` factual assertion; (3) what Engineering's reasoning style is while the sandbox is off (its `executable` rounding claims vs. the fidelity fingerprint); (4) which models to admit before the API passes a fitness store (§48); (5) whether §11.5's importance threshold should narrow when human input triggers a checkpoint (§45); (6) adopting `README.draft.md`; (7) how a reviewer approves a checkpoint in the deployed system. The API has no authentication, so approval stays a Python call until the owner picks an auth approach (batch 5, Phase Z).
 
 **Batch 2 (J–N) complete 2026-09-26**, end-to-end extended (Section 58).
 
@@ -352,7 +352,21 @@ Same rules and stop conditions. Again, each item is a gap found while building, 
 | T | **Grade weights into the versioned standard** — synthesis's `GRADE_WEIGHT` (§41) sits outside the reputability standard §43 versioned, so it can't evolve under the same review; move it into the standard's params with v0 = today's values. | **done** — §66 |
 | U | **Ingestion feeds the Belief Graph** — ingested sources and their `cites` become `source` nodes and `cites` edges, so dispute resolution and consolidation can read citation data from the graph instead of a hand-passed map. | **done** — §67 |
 | V | **Mobile client: async mode and history** — the client only knows the synchronous call; let it submit async, poll status, and show versions/diffs and maintenance activity. | **done** — §68 |
-| — | End-to-end test extended; README draft refreshed (local, still unpushed); plan batch 5. | open |
+| — | End-to-end test extended; README draft refreshed (local, still unpushed); plan batch 5. | **done** — §69 |
+
+**Batch 4 (S–V) complete 2026-09-26.**
+
+### Batch 5 (self-planned 2026-09-26)
+
+Same rules and stop conditions. Each item is a gap confirmed in the code while building batch 4, not new scope.
+
+| Phase | Scope | Status |
+|---|---|---|
+| W | **A failing unit is lost silently** — `MultiUnitScheduler.process_one_round` pops a unit before running its round and requeues it only on success, so a round that raises drops the unit. The API worker logs an `error` event, but the question stays `active` forever; after a restart the Maintainer resubmits it and loses it again. Catch per-unit failures in the Maintainer, retry a bounded number of times from the last completed round, then mark the question `suspended` with the error and drop it from the registry. Surface this in the API and the client. | open |
+| X | **Grade changes reach every dependent answer (§7.2, first trigger)** — re-evaluation candidates come only from the ~20 claims an idle cycle samples, so a source that turns `rejected` leaves unsampled answers relying on it unreopened indefinitely. Each cycle, use the Belief Graph (source ← claim ← answer) to find every question whose latest answer relies on a source whose grade changed since the previous cycle, and hand those questions to re-evaluation as well. | open |
+| Y | **Scheduled ingestion (§9)** — `ingestion.py`'s docstring promises "a scheduled work-unit type", and none exists. Make ingestion a checkpointed WorkUnit the Maintainer runs at low priority: per source, fetch, check, normalize, then record in the CAS and graph, with no re-fetch or double record after a kill. Tests use fixtures plus a real localhost HTTP fetch. | open |
+| Z | **Human checkpoints visible** — standard-amendment proposals and human-input checkpoints wait for a reviewer, but nothing outside Python can see them. Add a read-only `GET /api/checkpoints` and a client panel. *Approving* over the unauthenticated API is deliberately not built (owner decision 7). | open |
+| — | End-to-end test extended; README draft refreshed (local); plan batch 6. | open |
 
 - [ ] `execution_sandbox.enabled` stays `false` — not actionable right now (the CPU-time gap is a confirmed environment limitation on this specific kernel, not a bug to fix), but re-run `scripts/preflight_check.py` if this project is ever deployed to a *different* host, per `security-review-sandbox.md` Section 7.3/7.4.
 
@@ -855,6 +869,17 @@ A card is only redrawn when its status, version count, chosen version or importa
 `tests/test_client.py` runs the smoke test and skips when node is absent; nodejs 18 is now installed on LXC 104. Along the way, the guest sync script turned out never to have copied `client/` — the guest had been serving a stale page. Fixed.
 
 **Full live suite: 526 passed, 1 skipped.** 527 collected (525 prior + `tests/test_client.py` + one new test in `tests/test_api_async.py`).
+
+## 69. End-to-end test over batch 4
+
+`test_lifecycle_with_calibration_weights_and_ingested_citations` runs S–U through one Maintainer:
+- sources seed-loaded into the Maintainer's own graph show up in idle evolution's citation map, and a rejected source doesn't;
+- answering a question brings idle cycles that feed calibration and record a `calibration` audit with no drift;
+- a weights-only standard amendment lowers the next answer's reputability factor (0.8 → 0.6 for an ungraded source). It leaves the earlier answer untouched and unreopened (not material under §7.2), while idle re-examination reports that earlier claim as `weakened`, which still counts as verified for calibration.
+
+V has its own tests (§68). `README.draft.md` is refreshed to cover batch 4, still local and unpushed (owner decision 6). Batch 5 is planned above, and its first phase fixes a bug found while planning: a unit whose round raises is silently dropped by the scheduler.
+
+**Full live suite: 527 passed, 1 skipped.** 528 collected (527 prior + 1 new end-to-end test).
 
 ### Explicitly not on this list
 Any application-level work beyond what `deployment-playbook.md` promises to deliver (verified SSH access to a correctly-networked guest, not a deployed application).

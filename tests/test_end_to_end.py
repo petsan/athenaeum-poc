@@ -283,3 +283,59 @@ def test_lifecycle_across_a_restart_with_self_compaction(system):
 
     # audits ran every cycle; the demo (Phase R) has its own test
     assert len(s.audits.history("consolidation")) >= 3
+
+
+# ---------------------------------------------------------------------------
+# Batch 4 (S-V): calibration fed and audited, grade weights amended under the
+# versioned standard, and citations ingested into the Maintainer's graph --
+# all through one Maintainer. (V, the client, has its own tests.)
+# ---------------------------------------------------------------------------
+
+def test_lifecycle_with_calibration_weights_and_ingested_citations(system):
+    from athenaeum_body.belief_graph_store import BeliefGraphStore
+    from athenaeum_body.calibration_store import CalibrationStore
+    from athenaeum_body.ingestion import FixtureSource, seed_load
+    from athenaeum_brain.maintenance import Maintainer, MaintenancePolicy
+
+    s = system
+    graph, cal = BeliefGraphStore(s.log("graph")), CalibrationStore(s.log("cal"))
+    idle = IdleContext(ledger=s.ledger, reputability=s.rep, consolidation=s.cons, fidelity=s.fid,
+                       checkpoints=s.cp, calibration=cal)
+    m = Maintainer(idle=idle, log_for=s.log, belief_graph=graph, audits=s.audits,
+                   policy=MaintenancePolicy(idle_every_questions=1, audit_every_cycles=1))
+
+    # Phase U: ingestion writes citations into the Maintainer's own graph,
+    # which idle evolution now reads
+    seed_load([FixtureSource(url="https://b.example/review", content=b"review", license="cc-by",
+                             cites=["https://a.example/paper"]),
+               FixtureSource(url="https://c.example/closed", content=b"x", license="all-rights-reserved")],
+              s.cas, graph)
+    assert idle.belief_graph is graph
+    assert idle.citation_map() == {"https://b.example/review": ["https://a.example/paper"]}
+
+    # Phase S: answering brings idle cycles, which feed calibration and audit it
+    m.submit_question("p1", "is 17 prime?")
+    events = m.run()
+    before = s.ledger.get("p1").versions[0]
+    assert before["committed"][0]["reputability_factor"] == 0.8  # ungraded source, seed weight
+    idle_events = [e for e in events if e["kind"] == "idle"]
+    assert idle_events and idle_events[-1]["calibration_drifting"] == []
+    assert "Mathematics" in cal.agents()
+    assert s.audits.history("calibration")[-1]["drifting"] == []
+
+    # Phase T: a weights-only amendment applies to new answers only...
+    s.rep.adopt_standard(dict(s.rep.current_standard()["params"]), "ungraded sources weigh less",
+                         grade_weights={"foundational": 1.0, "provisionally_accepted": 0.6,
+                                        "contested": 0.3, "rejected": 0.0})
+    m.submit_question("p2", "is 29 prime?")
+    events = m.run()
+    assert s.ledger.get("p2").versions[0]["committed"][0]["reputability_factor"] == 0.6
+    # ...never rewrites or reopens an earlier one (not material under 7.2)...
+    assert s.ledger.get("p1").versions == [before]
+    assert all(e["reopened"] == [] for e in events if e["kind"] == "idle")
+    # ...but idle re-examination does see p1's claim as weaker than when made,
+    # and 'weakened' still counts as verified for calibration
+    last = [e for e in events if e["kind"] == "idle"][-1]
+    assert last["status_counts"]["weakened"] >= 1
+    report = s.audits.history("calibration")[-1]
+    assert report["drifting"] == [] and "Mathematics" in report["agents"]
