@@ -170,3 +170,64 @@ def test_full_lifecycle(system):
 
     suite = run_adversarial_suite()
     assert suite["passed"] == suite["total"] == 16
+
+
+# ---------------------------------------------------------------------------
+# Batch 2 (J-N): the same system driven the way the async API drives it --
+# through the Maintainer, with questions interleaved on one scheduler, the
+# Belief Graph, fingerprints and the fixed number parsing all in play.
+# ---------------------------------------------------------------------------
+
+def test_full_lifecycle_through_the_maintainer(system):
+    from athenaeum_body.belief_graph_store import BeliefGraphStore
+    from athenaeum_brain.maintenance import Maintainer, MaintenancePolicy
+    from athenaeum_brain.belief_graph import dependents
+
+    s = system
+    admit_model(s.fit, "olmo3-7b", rationale="evaluated on the workbench", admitted_by="owner")
+    graph = BeliefGraphStore(s.log("graph"))
+    m = Maintainer(idle=s.idle, log_for=s.log, model_fitness=s.fit, belief_graph=graph, audits=s.audits,
+                   verification={"enabled": True, "sandbox_run": local_runner},
+                   policy=MaintenancePolicy(idle_every_questions=10, audit_every_cycles=1))
+    batch = {
+        "p17": "is 17 prime?",
+        "believe": "should we believe 17 is prime?",
+        "round": "how should we round 2.5?",
+        "even": "is 4 even?",                   # Phase K: no irrelevant primality claim
+        "fall": "did the berlin wall fall in 1989?",  # #21: no 1989 m drop
+    }
+    for qid, q in batch.items():
+        m.submit_question(qid, q)
+    events = m.run()
+
+    # every question answered -- its OWN question (known-bugs #26) -- then one idle cycle
+    assert [e["kind"] for e in events] == ["question"] * 5 + ["idle"]
+    latest = {qid: s.ledger.get(qid).versions[-1] for qid in batch}
+    assert all(latest[qid]["question"] == q for qid, q in batch.items())
+    assert [c["statement"] for c in latest["p17"]["committed"]] == ["17 is prime"]
+    assert not any("prime" in c["statement"] for c in latest["even"]["committed"])
+    assert not any("1989m" in c["statement"] for c in latest["fall"]["committed"])
+
+    # Belief Graph: the shared claim links the two primality questions (Phase L)
+    assert dependents(graph, "p17") == ["believe"]
+
+    # a later claim about the same subject reopens the rounding question (7.2 trigger 2)
+    s.ledger.update_importance("round", 0.9)
+    m.submit_question("round-b", "should we round 2.50 up or down?")
+    m.run()
+    result = reopen_if_material(s.ledger, "round", reputability=s.rep, unit_log=s.fresh(), belief_graph=graph)
+    assert result["reopened"] and any("newly relevant" in c for c in result["answer"]["diff"]["cause"])
+
+    # fingerprints now cover every agent the idle cycle scored (Phase J)
+    from athenaeum_brain.domain_fidelity import FINGERPRINT_CHECKS
+    for agent in ("Mathematics", "Physics", "Philosophy"):
+        history = s.fid.history_for(agent)
+        assert history and agent in FINGERPRINT_CHECKS
+
+    # audits ran on their cadence; nothing left over in the scheduler's state
+    assert s.audits.history("reevaluation")
+    assert not [k for k in m.scheduler.runner.shared_state if k.startswith(("deliberation:", "idle:"))]
+
+    for qid in list(batch) + ["round-b"]:
+        assert check_integrity_gates(s.ledger.get(qid).versions[-1])["passed"], qid
+    assert run_adversarial_suite()["passed"] == 16

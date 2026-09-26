@@ -80,8 +80,8 @@ These aren't aspirational — every one of them is here because violating it (or
   invariant enforced in `config.py` itself (`disallow_paid_apis`), not
   just a policy.
 - Before marking any task "done," run the actual test suite
-  (`pytest -q`, currently 461 collected; last fully-green live run was 362 passed + 1 skipped on
-  2026-09-26 before the OLMo 3 guest degraded — see `docs/progress.md` §48–57 for the offline runs since) and update `docs/progress.md` — don't
+  (`pytest -q`, currently 462 collected; last fully-green live run was 362 passed + 1 skipped on
+  2026-09-26 before the OLMo 3 guest degraded — see `docs/progress.md` §48–58 for the offline runs since) and update `docs/progress.md` — don't
   let the checkpoint file go stale. If the model-lab guests are down or
   degraded (known-bugs.md #24), verify non-model changes with
   `ATHENAEUM_OFFLINE_MODELS=1 pytest -q --ignore=tests/test_model_backed_reasoning.py`

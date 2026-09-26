@@ -307,7 +307,7 @@ The owner approved this batch to run unattended, in whatever order works best, *
 | H | Adversarial suite toward 15/15 (§8, §9.2) — plan item 9 | **done** — §51, 15/15 (offline-verified) |
 | I | *(optional)* README body refresh — **draft only; never pushed without the owner's review.** The top notice and LICENSE are never touched. | **drafted, awaiting owner review** — `README.draft.md` in the owner's local clone (`C:\Users\petsa\athenaeum-poc`), deliberately *not* committed (listed in `.git/info/exclude`). It replaces the chronological changelog body (which still said "19 tests", the Brain was unbuilt, and a 50% resource cap) with what the system is, how a question is answered, what's built, how it's verified, running it, layout, and further reading; the top notice is copied verbatim. Every command and figure in it was checked on 2026-09-26 (demo exit 0, API `/api/health` ok, 417 tests collected). To adopt: review, then replace `README.md`'s body with it. |
 
-**Stop-and-wait conditions (from the approval):** a failing test whose root cause is unclear; the design is silent on a hard-to-reverse choice (e.g. persisted-state shape); an existing test's *meaning* (not just shape) would have to change; the Proxmox host goes down. **Never:** alter LICENSE/README notice, create/modify/destroy Proxmox guests, enable `execution_sandbox`, touch credentials or paid services, or write tests that require the GPU worker.
+**Stop-and-wait conditions (from the approval):** a failing test whose root cause is unclear; the design is silent on a hard-to-reverse choice (e.g. persisted-state shape); an existing test's *meaning* (not just shape) would have to change; the Proxmox host goes down. **Never:** alter LICENSE/README notice, create/modify/destroy Proxmox guests (lifted by the owner 2026-09-26, §58), enable `execution_sandbox`, touch credentials or paid services, or write tests that require the GPU worker.
 
 **Batch 1 (A–I) complete 2026-09-26**, end-to-end test passing (Section 52).
 
@@ -322,9 +322,23 @@ Same rules and stop conditions as batch 1. Ordered so each phase builds on the l
 | L | **Belief Graph store** (schemas.md already specifies node/edge shapes): answers → claims → sources as real edges, written by the loop. `count_dependents` switches from its shared-claim proxy to real edges, and §7.2's second trigger ("a newly corroborated/challenged claim the framing round would route to the same question") becomes implementable. | **done** — §55 |
 | M | **Maintenance cadence** — a driver that runs idle cycles as low-priority units on the existing `MultiUnitScheduler` alongside questions, audits every N cycles, feeds re-evaluation, and applies approved amendments; the system then evolves without a human calling each function. | **done** — §56 (+ known-bugs #26 fixed) |
 | N | **Async API** — submit → poll over the ledger's `queued/active/completed` lifecycle (api.py's own stated limitation), plus read endpoints for versions and diffs. | **done** — §57 |
-| — | End-to-end test extended over J–N, then plan batch 3. | open |
+| — | End-to-end test extended over J–N, then plan batch 3. | **done** — `test_full_lifecycle_through_the_maintainer` (§58) |
 
 **Owner decisions accumulated so far (not in any batch — each needs a call from the owner):** (1) the OLMo 3 guest's memory problem, known-bugs.md #24; (2) the flaky `qwen2.5-1.5b` factual assertion; (3) what Engineering's reasoning style is while the sandbox is off (its `executable` rounding claims vs. the fidelity fingerprint); (4) which models to admit before the API passes a fitness store (§48); (5) whether §11.5's importance threshold should narrow when human input triggers a checkpoint (§45); (6) adopting `README.draft.md`.
+
+**Batch 2 (J–N) complete 2026-09-26**, end-to-end extended (Section 58).
+
+### Batch 3 (self-planned 2026-09-26)
+
+Same rules and stop conditions. Each item is a real gap found while building batches 1–2, not new scope.
+
+| Phase | Scope | Status |
+|---|---|---|
+| O | **Whole-word jurisdiction matching** — every agent matches its keywords as *substrings* (`"all"` routes Logic for "does a b**all** fall"; `"if"` matches "d**if**ferent"), which is also the root of the "fall of the Berlin Wall" over-reach limitation. Match whole words; add a physical-context requirement for Physics's motion verbs. | open |
+| P | **Automatic compaction and de-compaction in idle evolution** — §10.3 says compaction is *performed by* an idle-evolution process, but idle cycles only record survival; §10.5 requires expanding a compacted claim before resolving a challenge to it, which idle disputes don't do yet. | open |
+| Q | **Maintainer restart recovery** — its queue is in memory (§56's stated limitation), so a restart strands queued or mid-way questions. Persist the unit registry in the Maintainer's own checkpoint and resubmit on start; deliberations resume from their last completed round. | open |
+| R | **Refresh the narrated demo** (`demo_brain.py`) to show batches 1–2 end to end; mind known-bugs #16 (the final-print trap). | open |
+| — | End-to-end test extended, then plan batch 4. | open |
 
 - [ ] `execution_sandbox.enabled` stays `false` — not actionable right now (the CPU-time gap is a confirmed environment limitation on this specific kernel, not a bug to fix), but re-run `scripts/preflight_check.py` if this project is ever deployed to a *different* host, per `security-review-sandbox.md` Section 7.3/7.4.
 
@@ -713,6 +727,14 @@ The worker starts **lazily on the first async submission**, so a purely synchron
 Tested against a real running server: async submit returns 202 without an answer and completes in the background; three async questions interleaved on the Maintainer each get their own correct answer (known-bugs #26 through the public API); versions fetch individually; an idle cycle runs once the queue goes quiet, with no error events.
 
 **Verified offline** (OLMo 3 guest still degraded): **442 passed, 1 skipped, 3 failed**, the usual three `olmo3-7b` timeouts. 461 collected (456 prior + 5 new in `tests/test_api_async.py`).
+
+## 58. End-to-end test over batch 2
+
+`tests/test_end_to_end.py::test_full_lifecycle_through_the_maintainer` drives the system the way the async API does — through a `Maintainer` — with the Belief Graph, model fitness (one admitted model), verification routing and every store wired in. Five questions interleaved on one scheduler each get their own answer (known-bugs #26); "is 4 even?" gets no primality claim (#25) and "did the berlin wall fall in 1989?" no 1989 m drop (#21); one idle cycle follows. The Belief Graph links the two primality questions as dependents; a later question about 2.50 makes a claim newly relevant to the 2.5 question and reopens it (§7.2 trigger 2); fingerprints and fidelity records exist for every agent the idle cycle scored; audits ran on their cadence; no unit namespace is left in the scheduler's state; integrity gates pass on every latest answer; adversarial suite 16/16.
+
+**Verified offline** (OLMo 3 guest still degraded — ~73 s per 4-token call): **443 passed, 1 skipped, 3 failed**, the usual three `olmo3-7b` timeouts. 462 collected.
+
+**Permission change, 2026-09-26 (owner):** Proxmox guests may now be created, modified or destroyed as needed during this development phase. This lifts the batch rule "never create/modify/destroy Proxmox guests" and unblocks the OLMo 3 guest fix (known-bugs.md #24, owner decision 1).
 
 ### Explicitly not on this list
 Any application-level work beyond what `deployment-playbook.md` promises to deliver (verified SSH access to a correctly-networked guest, not a deployed application).
