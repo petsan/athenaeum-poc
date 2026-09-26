@@ -263,11 +263,23 @@ async function refreshCheckpoints() {
   } catch (e) { /* retried on the next poll */ }
 }
 
+const fetchedAs = new Map();   // id -> the summary signature its full entry was fetched for
+
 async function refreshQuestions() {
+  // Poll the light summary; fetch a question's full entry (every answer
+  // version) only when its summary shows something changed.
   try {
-    const list = (await getJSON("/api/questions")).body;
+    const list = (await getJSON("/api/questions?view=summary")).body;
     list.sort((a, b) => idNumber(a.id) - idNumber(b.id));
-    for (const entry of list) { questions.set(entry.id, entry); renderCard(entry); }
+    for (const s of list) {
+      const signature = JSON.stringify([s.status, s.versions, s.importance, s.error || null]);
+      if (fetchedAs.get(s.id) === signature) continue;
+      const { status, body } = await getJSON(`/api/questions/${encodeURIComponent(s.id)}`);
+      if (status !== 200) continue;
+      fetchedAs.set(s.id, signature);
+      questions.set(s.id, body);
+      renderCard(body);
+    }
   } catch (e) { /* retried on the next poll */ }
 }
 

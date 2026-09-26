@@ -390,7 +390,7 @@ Same rules and stop conditions. Both items were confirmed in the code while clos
 | Phase | Scope | Status |
 |---|---|---|
 | AD | **Bound the Maintainer's in-memory event history** — `Maintainer.events` is appended to on every completed unit and never trimmed. The API's worker lives as long as the process, so it is a slow memory leak, even though `/api/maintenance` only ever shows the last 10. Keep a bounded window (a placeholder size), without breaking `run()`, which returns the events produced during that call. | **done** — §79 |
-| AE | **Question listing that doesn't ship every answer on every poll** — the client polls `GET /api/questions` every 2–15 s, and it returns every question with every full answer version, so the response grows with the whole history. Add a summary view (`?view=summary`: id, status, question, importance, version count, error), keeping the default response unchanged for existing callers. The client should poll the summary and fetch a question's full entry only when its card changed. | open |
+| AE | **Question listing that doesn't ship every answer on every poll** — the client polls `GET /api/questions` every 2–15 s, and it returns every question with every full answer version, so the response grows with the whole history. Add a summary view (`?view=summary`: id, status, question, importance, version count, error), keeping the default response unchanged for existing callers. The client should poll the summary and fetch a question's full entry only when its card changed. | **done** — §80 |
 | — | End-to-end test extended; README draft refreshed (local); plan batch 8. | open |
 
 - [ ] `execution_sandbox.enabled` stays `false` — not actionable right now (the CPU-time gap is a confirmed environment limitation on this specific kernel, not a bug to fix), but re-run `scripts/preflight_check.py` if this project is ever deployed to a *different* host, per `security-review-sandbox.md` Section 7.3/7.4.
@@ -1068,6 +1068,16 @@ The final banner was moved, not duplicated (known-bugs #16). `tests/test_demo_br
 Tests (`tests/test_maintenance_events.py`): with a window of 5, eight answered questions come back from `run()` in full while memory holds the last five; 1,000 direct `emit`s leave exactly the last five.
 
 **Full live suite: 581 passed, 1 skipped.** 582 collected (580 prior + 2 new in `tests/test_maintenance_events.py`).
+
+## 80. The client polls a summary, not every answer — Phase AE
+
+The client polled `GET /api/questions` every 2–15 s, and every response carried every question with every full answer version, so each poll grew with the whole history. Now:
+- **`GET /api/questions?view=summary`** returns, per question, `id`, `status`, `question`, `importance`, `created_at`, `error` when suspended, and `versions` as a **count**. On three answered questions it is over 10× smaller than the full listing, a margin that widens as answers accumulate. An unknown `view` is a 400. The default listing, and `view=full`, are unchanged for existing callers.
+- **The client** polls the summary and fetches `GET /api/questions/<id>` only for a question whose status, version count, importance or error changed since it last fetched it. The smoke test's fake server refuses the full listing outright, and counts per-question fetches: after a poll where only one question changed, only that one is re-fetched.
+
+Tests: `tests/test_api_listing.py` (summary shape and size, default unchanged, unknown view refused), plus the client smoke test.
+
+**Full live suite: 584 passed, 1 skipped.** 585 collected (582 prior + 3 new in `tests/test_api_listing.py`).
 
 ### Explicitly not on this list
 Any application-level work beyond what `deployment-playbook.md` promises to deliver (verified SSH access to a correctly-networked guest, not a deployed application).

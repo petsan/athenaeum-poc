@@ -62,13 +62,22 @@ state.checkpoints = [
     reason: "already approved", note: null, reviewer_id: "rev-2" },
 ];
 const posts = [];
+const fullFetches = {};
 const fetch = async (path, opts = {}) => {
   let status = 200, body;
   if (path === "/api/health") body = { cores_available: 4, dram_headroom_gb: 3 };
   else if (path === "/api/questions" && opts.method === "POST") {
     posts.push(JSON.parse(opts.body)); status = 202; body = { id: "q-3", status: "queued" };
     state.questions.push({ id: "q-3", status: "queued", importance: 0.5, versions: [], question: posts.at(-1).question });
-  } else if (path === "/api/questions") body = state.questions;
+  } else if (path === "/api/questions?view=summary") {
+    body = state.questions.map(q => ({ id: q.id, status: q.status, question: q.question, importance: q.importance,
+                                       versions: q.versions.length, ...(q.error ? { error: q.error } : {}) }));
+  } else if (path.startsWith("/api/questions/")) {
+    const id = decodeURIComponent(path.slice("/api/questions/".length));
+    fullFetches[id] = (fullFetches[id] || 0) + 1;
+    body = state.questions.find(q => q.id === id);
+    if (!body) { status = 404; body = { error: "not found" }; }
+  } else if (path === "/api/questions") throw new Error("the client must poll the summary view");
   else if (path === "/api/maintenance") body = state.maintenance;
   else if (path === "/api/checkpoints") body = state.checkpoints;
   else { status = 404; body = { error: "not found" }; }
@@ -129,8 +138,10 @@ assert.equal(timers.at(-1).ms, 2000);
 state.questions[1] = { id: "q-2", status: "completed", importance: 0.3, question: "is 17 prime?",
                        versions: [{ question: "is 17 prime?", committed: [{ issuing_agent: "Mathematics", statement: "17 is prime" }],
                                     dissent: [], plural_answers: [] }] };
+assert.deepEqual(fullFetches, { "q-1": 1, "q-2": 1 });
 timers.at(-1).f();
 await settle();
+assert.deepEqual(fullFetches, { "q-1": 1, "q-2": 2 });   // only the question that changed is re-fetched
 assert.match(cardHtml("q-2"), /17 is prime/);
 assert.ok(!cardHtml("q-2").includes("pending"));
 assert.match(cardHtml("q-1"), /round half to even gives 2/, "the reader's chosen version survived a refresh");

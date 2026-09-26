@@ -28,7 +28,7 @@ import sys
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import urlparse, parse_qs
 
 from .storage.content_addressed import ContentAddressedStore
 from .storage.checkpoint import CheckpointLog
@@ -201,9 +201,18 @@ def build_app(data_dir: Path) -> App:
         failed = maintainer.failed.get(entry["id"])
         return {**entry, "question": question, **({"error": failed["last_error"]} if failed else {})}
 
-    def list_questions() -> list:
+    SUMMARY_FIELDS = ("id", "status", "question", "importance", "created_at", "error")
+
+    def list_questions(view: str = "full") -> list:
+        """view="full" (the default): every entry with every answer version.
+        view="summary": what a poller needs to notice a change -- no answers,
+        just `versions` as a count (batch 7, Phase AE)."""
         with lock:
-            return [_with_question(q) for q in ledger._state()["questions"].values()]
+            entries = [_with_question(q) for q in ledger._state()["questions"].values()]
+        if view == "summary":
+            return [{**{k: e[k] for k in SUMMARY_FIELDS if k in e}, "versions": len(e["versions"])}
+                    for e in entries]
+        return entries
 
     def get_question(qid: str):
         with lock:
@@ -282,11 +291,16 @@ class Handler(BaseHTTPRequestHandler):
             self._json(500, {"error": f"internal error: {type(e).__name__}"})
 
     def _get(self):
-        path = urlparse(self.path).path
+        url = urlparse(self.path)
+        path = url.path
         if path == "/api/health":
             self._json(200, self.health())
         elif path == "/api/questions":
-            self._json(200, self.list_questions())
+            view = parse_qs(url.query).get("view", ["full"])[-1]
+            if view not in ("full", "summary"):
+                self._json(400, {"error": f"unknown view {view!r}; expected 'full' or 'summary'"})
+            else:
+                self._json(200, self.list_questions(view))
         elif path == "/api/maintenance":
             self._json(200, self.maintenance_status())
         elif path == "/api/checkpoints":
