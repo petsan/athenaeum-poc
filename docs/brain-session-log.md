@@ -891,6 +891,47 @@ attributed by id. Now uuid-based.
 
 ---
 
+## 2026-09-26 — Cross-agent verification routing (task 44, Phase D): design choices
+
+**Q: Why does each verifier use a different method from the claim's
+issuer?**
+
+Running Mathematics's own trial division again in a sandbox would only
+prove the same code gives the same answer twice. The value of routing a
+claim to Engineering is an independent re-derivation: a sieve for
+primality, numerical integration for a fall time. Agreement between two
+different methods is corroboration; agreement between one method and
+itself is not.
+
+**Q: Why is routing off by default, and why not read the config inside
+the loop?**
+
+CLAUDE.md's hard constraint keeps `execution_sandbox.enabled` false until
+every sandbox security scenario passes on the target host. The loop
+itself takes routing as an explicit parameter — no hidden file read in
+the middle of a deliberation — and the one production caller (the HTTP
+API) derives it from config. Only a literal `True` enables it, so a
+typo like `"yes"` can't switch it on.
+
+**Q: Why report a skipped verification instead of staying quiet?**
+
+An answer where a checkable claim *could* have been independently
+verified but wasn't is weaker than one where it was, and the reader
+should be able to tell the two apart. The `verification` field says
+"N verifiable claim(s) left to ordinary cross-examination" and why.
+
+**Q: Why not fix Engineering's `executable` rounding claims here, as
+planned?**
+
+Looking closely, the fix isn't mechanical: Domain Fidelity identifies
+Engineering's reasoning style by `claim_type == "executable"`. Retyping
+the claims would register as drift; widening the fingerprint would erase
+the difference between Engineering and Mathematics. That's a question
+about what Engineering *is* with the sandbox off, so it's written up for
+the owner instead of decided unilaterally.
+
+---
+
 *See `docs/progress.md` §26 for the checklist this log's entries track
 against, and `docs/infra-topology.md` for the infrastructure-side design
 decisions made in the same planning conversation.*

@@ -258,7 +258,7 @@ Earlier sections each ended with their own "suggested next step," repeatedly sup
 - [x] ~~Forecast and Recommendation builders wired into `loop.py` (§5.4, tasks 13–14) — builders exist, no producer.~~ Done 2026-09-26 (Phase A) — see Section 44.
 - [x] ~~Importance rating (§7.1, task 16) and reopen-with-diff (§7.3, task 18).~~ Done 2026-09-26 (Phase B) — see Section 45.
 - [x] ~~Idle-evolution rounds (§3.6).~~ Done 2026-09-26 (Phase C) — see Section 46.
-- [ ] Cross-agent verification routing, e.g. Mathematics → Engineering sandbox (task 44).
+- [x] ~~Cross-agent verification routing, e.g. Mathematics → Engineering sandbox (task 44).~~ Done 2026-09-26 (Phase D) — see Section 47. Off in normal operation because `execution_sandbox.enabled` is false.
 - [ ] Model admission gate (§6.7, task 47), and applying Model Fitness weight at synthesis.
 - [ ] Domain Fidelity re-grounding and escalation-to-checkpoint (§2.4.3, task 30).
 - [ ] Re-evaluation and consolidation audit sampling (§9.4–9.5, tasks 22–23).
@@ -282,7 +282,7 @@ Earlier sections each ended with their own "suggested next step," repeatedly sup
 2. ~~**Forecast/Recommendation producers (§5.4, tasks 13–14).**~~ — **done 2026-09-26 as Phase A, Section 44.** The builders exist in `output_types.py`; nothing produces their inputs. Add an optional structured payload on `Claim` (e.g. `forecast: {statement, probability, resolution_criterion, resolution_date}`) and have `loop.py` build the section when the frame asks for it *and* a committed claim carries one — otherwise the section explicitly says no agent produced one (honest, not silently omitted). Find one agent that can produce a genuine forecast deterministically before reaching for the model fallback.
 3. ~~**§7.1 importance rating + §7.3 reopen-with-diff.**~~ — **done 2026-09-26 as Phase B, Section 45.** Importance from framing (domains routed, output types) plus dependency count. Reopen = re-run the loop with the prior answer as context, `QuestionLedger.append_version`, and an explicit diff (committed claims added/removed, leading-conclusion change, weighted-confidence deltas, cause). Uses `consolidation.expand` first if the prior answer was compacted.
 4. ~~**§3.6 Idle-evolution round.**~~ — **done 2026-09-26 as Phase C, Section 46.** A work-unit type that samples existing committed claims and re-runs cross-examination against current grades; is the natural caller for `resolve_dispute` (§42), consolidation `record_survival`, and `domain_fidelity.needs_review`. Feeds materiality from item 3.
-5. **Task 44 cross-agent verification routing.** Mathematics's formalizable claims (primality) routed to `MasterOfEngineering.verify_claim` so a sandbox run corroborates/challenges them. Sandbox stays behind its existing config gate.
+5. ~~**Task 44 cross-agent verification routing.**~~ — **done 2026-09-26 as Phase D, Section 47.** Mathematics's formalizable claims (primality) routed to `MasterOfEngineering.verify_claim` so a sandbox run corroborates/challenges them. Sandbox stays behind its existing config gate.
 6. **§6.7 model admission gate + fitness at synthesis.** Provisional status for a newly admitted model; apply `model_fitness.apply_fitness_to_confidence` alongside `reputability_factor` for claims with `serving_model` (keep raw `confidence` untouched, same as §41).
 7. **§2.4.3 Domain Fidelity re-grounding/escalation** — on `needs_review`, re-ground against the agent's baseline cases; escalate to a human checkpoint after repeated failure (reuse `human_checkpoint_store`).
 8. **§9.4–9.5 audit sampling** for re-evaluation and consolidation fidelity.
@@ -299,7 +299,7 @@ The owner approved this batch to run unattended, in whatever order works best, *
 | A | Forecast/Recommendation producers (§5.4) — plan item 2 | **done** — §44 |
 | B | Importance rating + reopen-with-diff (§7.1, §7.3) — plan item 3 | **done** — §45 |
 | C | Idle-evolution round (§3.6) — plan item 4; standard amendments only *proposed* to the human checkpoint, never auto-adopted | **done** — §46 |
-| D | Cross-agent verification routing (task 44) — plan item 5; respects the existing sandbox gate | open |
+| D | Cross-agent verification routing (task 44) — plan item 5; respects the existing sandbox gate | **done** — §47 |
 | E | Model admission gate + fitness weighting at synthesis (§6.7) — plan item 6 | open |
 | F | Domain Fidelity re-grounding/escalation (§2.4.3) — plan item 7 | open |
 | G | Audit sampling (§9.4–9.5) — plan item 8 | open |
@@ -560,6 +560,19 @@ Supporting changes: every answer now records its own `question` and `frame` (ans
 Two open limitations logged in `known-bugs.md`: idle re-examination can only re-challenge claim shapes today's cross-examiners recognise; and one full-suite run hit a **flaky live-model assertion** — `qwen2.5-1.5b` answered "Saturn is the largest planet" once (5/5 re-runs passed); the test's factual assertion is left for the owner's decision, not loosened.
 
 **340 passed, 1 skipped** on LXC 104 (327 prior + 13 new in `tests/test_idle_evolution.py`), confirmed on a re-run after the one sampling-variance failure described above. Design reasoning in `docs/brain-session-log.md`.
+
+## 47. Cross-agent verification routing (task 44) — Phase D
+
+`src/athenaeum_brain/verification_routing.py` (new) routes another agent's formalizable claim to Engineering, which checks it by executing an **independent** method in the Body's sandbox; `MasterOfEngineering.verify_claim` (which already existed, unused) turns the run into a corroborating or challenging round-2 response against the original claim, so synthesis treats it exactly like any cross-examination (a challenged claim lands in dissent — tested). Two verifiers, registered with `@verifier` so more can be added without touching the router:
+- **Primality** (`N is prime` / `N is not prime`): a sieve of Eratosthenes, not Mathematics's trial division.
+- **Free fall** (Physics's fall-time statement): semi-implicit Euler integration at 0.1 ms steps, not the closed form — the design's own "a Physics simulation" example.
+Each has a size cap (n ≤ 10⁷, h ≤ 10 km) so a sandbox job is decided by the maths, not by the wall-clock limit; larger claims are left to ordinary cross-examination. Engineering's own claims are never routed back to it.
+
+**Gate:** routing happens only when the caller passes `verification={"enabled": True, ...}`. `sandbox_enabled()` reads `execution_sandbox.enabled` from config and accepts only a literal `True`; the shipped config is `false` (tested as a hard constraint), and the HTTP API passes exactly that, so **nothing is routed or executed in normal operation.** When skipped, the answer's new `verification` field says how many verifiable claims went unverified and why, rather than skipping silently. Tests exercise routing with a small local runner that executes the generated check code in a plain subprocess, plus one test through the real `run_sandboxed` (same convention as `test_engineering_execution.py`); the config setting itself was not changed.
+
+**Open limitation re-examined, still open:** Engineering types its in-process `decimal` rounding as `executable`. Retyping it collides with Domain Fidelity's Engineering fingerprint (`claim_type == "executable"`); resolving it needs a decision about what Engineering's reasoning style is while the sandbox is disabled. Recorded in `known-bugs.md` for the owner rather than decided here.
+
+**362 passed, 1 skipped** on LXC 104 (340 prior + 22 new in `tests/test_verification_routing.py`). Design reasoning in `docs/brain-session-log.md`.
 
 ### Explicitly not on this list
 Any application-level work beyond what `deployment-playbook.md` promises to deliver (verified SSH access to a correctly-networked guest, not a deployed application).

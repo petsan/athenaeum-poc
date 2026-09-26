@@ -33,6 +33,7 @@ from .reputability_store import ReputabilityStore
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from athenaeum_brain.loop import make_deliberation_unit  # noqa: E402
 from athenaeum_brain.reopening import rate_and_store_importance  # noqa: E402
+from athenaeum_brain.verification_routing import sandbox_enabled  # noqa: E402
 
 CLIENT_DIR = Path(__file__).resolve().parents[2] / "client"
 
@@ -44,6 +45,9 @@ def build_app(data_dir: Path):
     monitor = ResourceMonitor()
     rep_log = CheckpointLog(cas=cas, index_path=data_dir / "reputability-index.txt")
     reputability = ReputabilityStore(rep_log)
+    # Task 44 routing follows config's execution_sandbox.enabled (false by
+    # default and by hard constraint until the sandbox review passes).
+    verification = {"enabled": sandbox_enabled()}
     lock = threading.Lock()
 
     def submit_question(question: str) -> dict:
@@ -52,7 +56,8 @@ def build_app(data_dir: Path):
             ledger.submit(QuestionLedgerEntry(id=qid, importance=0.5))
             unit_log = CheckpointLog(cas=cas, index_path=data_dir / f"unit-{qid}.txt")
             runner = SingleUnitRunner(unit_log, shared_state={})
-            unit = make_deliberation_unit(question, qid, reputability=reputability)
+            unit = make_deliberation_unit(question, qid, reputability=reputability,
+                                          verification=verification)
             while unit.status != "completed":
                 runner.run_round(unit)
             answer = unit_log.read_latest()["shared_state"]["answer"]

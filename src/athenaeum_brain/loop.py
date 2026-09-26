@@ -9,6 +9,7 @@ from athenaeum_body.scheduler.work_unit import WorkUnit, RoundResult
 from athenaeum_body.reputability_store import ReputabilityStore
 from .rounds import framing_round, exploration_round, cross_examination_round, synthesis_round
 from .claims import Claim
+from .verification_routing import route_for_verification
 from .output_types import (
     RESEARCH, FORECAST, RECOMMENDATION, build_research_answer, compose_answer,
     forecast_section_from_claims, recommendation_section_from_claims,
@@ -38,14 +39,18 @@ def _attach_grades_and_record_outcomes(result: dict, reputability: ReputabilityS
 
 
 def make_deliberation_handler(question: str, question_id: str, reputability: ReputabilityStore = None,
-                              reopen_context: dict = None):
+                              reopen_context: dict = None, verification: dict = None):
     """Returns a round_handler(state, round_index) -> RoundResult usable
     directly as a WorkUnit.round_handler in athenaeum_body's scheduler.
 
     reopen_context (Section 7.3): the prior answer and why it was reopened.
     It is attached to the new answer as input context only -- every round
     still re-derives from scratch, so the prior answer is never a starting
-    point to rubber-stamp."""
+    point to rubber-stamp.
+
+    verification (task 44): {'enabled': bool, 'sandbox_run': optional
+    runner}. Omitted means no routing. Callers derive 'enabled' from
+    verification_routing.sandbox_enabled(), i.e. from config."""
 
     def handler(state: dict, round_index: int) -> RoundResult:
         if round_index == 0:
@@ -63,8 +68,18 @@ def make_deliberation_handler(question: str, question_id: str, reputability: Rep
         if round_index == 2:
             claims = [Claim(**d) for d in state["exploration_claims"]]
             exam = cross_examination_round(claims, question_id)
+            # Task 44: formalizable claims routed to Engineering for an
+            # independent executed check -- only when the caller passes an
+            # enabled sandbox (config execution_sandbox.enabled), else skipped
+            # and reported.
+            routing = route_for_verification(
+                claims, question_id, enabled=bool(verification and verification.get("enabled")),
+                sandbox_run=(verification or {}).get("sandbox_run"))
+            exam += routing["responses"]
             return RoundResult(
-                proposed_writes={"exam_claims": [c.to_dict() for c in exam]},
+                proposed_writes={"exam_claims": [c.to_dict() for c in exam],
+                                 "verification": {"routed": routing["routed"],
+                                                  "skipped_reason": routing["skipped_reason"]}},
                 done=False,
             )
 
@@ -88,6 +103,8 @@ def make_deliberation_handler(question: str, question_id: str, reputability: Rep
             }
             if reopen_context is not None:
                 answer["reopen_context"] = reopen_context
+            if "verification" in state:  # absent in checkpoints from before task 44
+                answer["verification"] = state["verification"]
             # Section 5.4: one section per output type the framing round
             # classified this question as. Forecast and Recommendation are
             # built only from committed claims carrying that structure;
@@ -113,11 +130,12 @@ def make_deliberation_handler(question: str, question_id: str, reputability: Rep
 
 def make_deliberation_unit(question: str, question_id: str, priority: int = 0,
                             reputability: ReputabilityStore = None, reopen_context: dict = None,
-                            unit_id: str = None) -> WorkUnit:
+                            unit_id: str = None, verification: dict = None) -> WorkUnit:
     """unit_id defaults to question_id; a reopen passes a distinct one so
     the new run's checkpoints never collide with the original's."""
     return WorkUnit(
         id=unit_id or question_id,
         priority=priority,
-        round_handler=make_deliberation_handler(question, question_id, reputability, reopen_context),
+        round_handler=make_deliberation_handler(question, question_id, reputability, reopen_context,
+                                                verification),
     )
