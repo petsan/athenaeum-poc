@@ -67,6 +67,7 @@ class MaintenancePolicy:
     idle_sample_size: int = 20
     importance_threshold: float = 0.3
     max_round_failures: int = 3   # attempts at a failing round before its unit is given up
+    event_history: int = 200      # recent events kept in memory (Maintainer.events)
 
 
 @dataclass
@@ -93,7 +94,7 @@ class Maintainer:
             "units": {}, "cycles": 0, "answered_since_idle": 0,
             "idle_since_last_question": False, "pending_amendments": {},
         })
-        self.events: list[dict] = []        # what happened, in order -- for callers and tests
+        self.events: list[dict] = []        # what happened recently, in order (bounded: emit)
         self.recovered: list[str] = []
         if self.idle.belief_graph is None:
             self.idle.belief_graph = self.belief_graph  # idle cycles read ingested citations from it
@@ -196,7 +197,7 @@ class Maintainer:
                 event = None
             self.recovered.append(unit_id)
             if event:
-                self.events.append(event)
+                self.emit(event)
 
     # --- running -----------------------------------------------------------------
 
@@ -216,14 +217,23 @@ class Maintainer:
             unit = self.scheduler.process_one_round()
         except Exception as e:  # the scheduler has already dropped the unit from its queue
             event = self._on_round_failed(upcoming, e)
-            self.events.append(event)
+            self.emit(event)
             return event
         if unit.status != "completed":
             return None
         event = self._complete(unit.id)
         if event:
-            self.events.append(event)
+            self.emit(event)
         return event
+
+    def emit(self, event: dict) -> None:
+        """`events` is a window of the most recent `policy.event_history`,
+        not a full history: the Maintainer lives as long as its process, and
+        the durable record is in the stores (batch 7, Phase AD)."""
+        self.events.append(event)
+        overflow = len(self.events) - self.policy.event_history
+        if overflow > 0:
+            del self.events[:overflow]
 
     def _complete(self, unit_id: str) -> dict | None:
         """Questions are at-least-once and idempotent: the answer is recorded
@@ -299,12 +309,17 @@ class Maintainer:
         return self._m.get("failed", {})
 
     def run(self, max_rounds: int = 10_000) -> list[dict]:
-        """Tick until there's nothing left to do (or max_rounds)."""
-        start = len(self.events)
+        """Tick until there's nothing left to do (or max_rounds). Returns
+        every event this call produced, however many -- collected here,
+        not sliced from the bounded `events` window."""
+        produced = []
         for _ in range(max_rounds):
-            if self.tick() is None and not self.scheduler._heap:
+            event = self.tick()
+            if event is not None:
+                produced.append(event)
+            elif not self.scheduler._heap:
                 break
-        return self.events[start:]
+        return produced
 
     # --- harvesting -----------------------------------------------------------------
 

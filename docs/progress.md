@@ -389,7 +389,7 @@ Same rules and stop conditions. Both items were confirmed in the code while clos
 
 | Phase | Scope | Status |
 |---|---|---|
-| AD | **Bound the Maintainer's in-memory event history** — `Maintainer.events` is appended to on every completed unit and never trimmed. The API's worker lives as long as the process, so it is a slow memory leak, even though `/api/maintenance` only ever shows the last 10. Keep a bounded window (a placeholder size), without breaking `run()`, which returns the events produced during that call. | open |
+| AD | **Bound the Maintainer's in-memory event history** — `Maintainer.events` is appended to on every completed unit and never trimmed. The API's worker lives as long as the process, so it is a slow memory leak, even though `/api/maintenance` only ever shows the last 10. Keep a bounded window (a placeholder size), without breaking `run()`, which returns the events produced during that call. | **done** — §79 |
 | AE | **Question listing that doesn't ship every answer on every poll** — the client polls `GET /api/questions` every 2–15 s, and it returns every question with every full answer version, so the response grows with the whole history. Add a summary view (`?view=summary`: id, status, question, importance, version count, error), keeping the default response unchanged for existing callers. The client should poll the summary and fetch a question's full entry only when its card changed. | open |
 | — | End-to-end test extended; README draft refreshed (local); plan batch 8. | open |
 
@@ -1060,6 +1060,14 @@ The final banner was moved, not duplicated (known-bugs #16). `tests/test_demo_br
 `README.draft.md` is refreshed for batch 6, still local. Batch 7 is planned above.
 
 **Full live suite: 579 passed, 1 skipped.** 580 collected (579 prior + 1 new end-to-end test).
+
+## 79. The Maintainer's event history is bounded — Phase AD
+
+`Maintainer.events` was appended to on every completed unit and never trimmed, a slow memory leak in the API's long-lived worker. Every append now goes through `Maintainer.emit`, which keeps the most recent `MaintenancePolicy.event_history` (200, a placeholder). The API worker's own error events go through it too, instead of appending to the list directly. `run()` used to slice `events` from its starting length, which a trimmed list would break. It now collects the events its own ticks return, so it still returns everything that call produced, however many. The durable record was always in the stores; `/api/maintenance` shows the last 10, as before.
+
+Tests (`tests/test_maintenance_events.py`): with a window of 5, eight answered questions come back from `run()` in full while memory holds the last five; 1,000 direct `emit`s leave exactly the last five.
+
+**Full live suite: 581 passed, 1 skipped.** 582 collected (580 prior + 2 new in `tests/test_maintenance_events.py`).
 
 ### Explicitly not on this list
 Any application-level work beyond what `deployment-playbook.md` promises to deliver (verified SSH access to a correctly-networked guest, not a deployed application).

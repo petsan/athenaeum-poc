@@ -170,7 +170,7 @@ def build_app(data_dir: Path) -> App:
                     maintainer.tick()
                 except Exception as e:  # a failing round is the Maintainer's to retry; this catches
                     # anything else (e.g. a completed unit's follow-ups) so the worker never dies silently
-                    maintainer.events.append({"kind": "error", "error": repr(e)})
+                    maintainer.emit({"kind": "error", "error": repr(e)})
                 busy = bool(maintainer.scheduler._heap)
             if not busy:
                 work_available.wait(timeout=1.0)
