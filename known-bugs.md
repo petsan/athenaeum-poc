@@ -92,6 +92,12 @@ These aren't bugs in the sense of "code that was wrong" — they're incorrect as
 **Fix:** Every server- or user-supplied string goes through `esc()` before reaching `innerHTML`; `tests/client/client_smoke.mjs` (run by `tests/test_client.py`) asserts a markup-bearing statement is rendered escaped, and was checked to fail when escaping is disabled.
 **Lesson:** Any text that crosses a storage or network boundary is untrusted at render time, even in a demo. Prefer `textContent`; where HTML templating is used, escape at the interpolation site and test it with a hostile string.
 
+### 32. The API's static file server served any file the process could read
+**What happened:** `api.Handler._static` served `CLIENT_DIR / path.lstrip("/")` with no normalization check. Browsers and `urllib` collapse `..` before sending, which hid it, but a raw request line does not: `GET /../pyproject.toml` returned the file (reproduced against a real server on LXC 104, 2026-09-26). More `../` segments reach anything readable by the server process, including the data directory, source and, when run as root as on the guest, system files. Found while adding the checkpoints route in batch 5's Phase Z, by reading the handler; there is no evidence it was ever exploited.
+**Root cause:** Joining a request path onto a directory was treated as confining it there. `pathlib`'s `/` doesn't resolve `..`, and `exists()` then happily follows it.
+**Fix:** The joined path is `resolve()`d, and anything not `is_relative_to(CLIENT_DIR.resolve())` is a 404. Pinned by `tests/test_api_review.py`, which sends raw request lines: plain, percent-encoded and mixed traversals get a 404, and the client pages are still served.
+**Lesson:** Any path built from request input must be resolved and checked against its root *after* resolving. And test servers with raw requests: well-behaved clients normalize away exactly the inputs an attacker would send.
+
 ---
 
 ## Test-authoring bugs (not library bugs, but worth the same scrutiny)
@@ -248,6 +254,7 @@ Before writing similar code again in this project:
 - **Any new content-addressed or checkpoint code:** re-read entries 8–9. Be explicit about what's hashed vs. stored vs. derived, and make sure "verified" checks everything a caller would assume it checks.
 - **Any new API/serialization boundary:** re-read entry 10. Check the actual runtime type after a round-trip.
 - **Any client-side rendering of stored or fetched text:** re-read entry 30 — escape every interpolation, and test with a hostile string.
+- **Any filesystem path built from request input:** re-read entry 32 — resolve, then check it's still under its root, and test with raw request lines.
 - **Any new test:** re-read entries 11–14 before assuming a failing test means the implementation is wrong (entry 12 has recurred once already).
 - **Any new claim statement template:** re-read entry 22 — statements must be self-contained, never "this question".
 - **Any new identifier that is persisted or crosses a process boundary:** re-read entry 23 — never a per-process counter.

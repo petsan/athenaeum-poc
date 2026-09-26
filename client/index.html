@@ -83,6 +83,11 @@
     <button id="go">Ask</button>
   </div>
   <label class="mode"><input id="wait" type="checkbox"> wait for the answer (only for quick, deterministic questions)</label>
+  <details class="panel" id="review">
+    <summary>Awaiting human review: <span id="review-summary">...</span></summary>
+    <ul id="review-items"></ul>
+    <div class="note">Approving happens outside this app for now: the API has no authentication.</div>
+  </details>
   <details class="panel" id="maint">
     <summary>Maintenance: <span id="maint-summary">...</span></summary>
     <ul id="maint-events"></ul>
@@ -235,6 +240,29 @@ async function refreshMaintenance() {
   } catch (e) { /* the health line already says the API is unreachable */ }
 }
 
+const KIND_LABELS = {"standard-amendment": "standard amendment", "domain-fidelity": "domain fidelity",
+                     "question": "human input"};
+
+function describeCheckpoint(c) {
+  let text = `<strong>${esc(KIND_LABELS[c.kind] || c.kind)}</strong> ${esc(c.ref)}: ${esc(c.reason)}`;
+  if (c.proposal && c.proposal.params) {
+    text += ` <em>(proposes ${esc(Object.entries(c.proposal.params).map(([k, v]) => `${k}=${v}`).join(", "))})</em>`;
+  }
+  if (c.note) text += ` -- reviewer ${esc(c.reviewer_id)}: ${esc(c.note)}`;
+  return text;
+}
+
+async function refreshCheckpoints() {
+  try {
+    const all = (await getJSON("/api/checkpoints")).body;
+    const pending = all.filter(c => c.status === "pending_human_checkpoint");
+    document.getElementById("review-summary").textContent = pending.length ? `${pending.length}` : "nothing";
+    document.getElementById("review-items").innerHTML = pending.length
+      ? pending.map(c => `<li>${describeCheckpoint(c)}</li>`).join("")
+      : `<li>Nothing is waiting for a reviewer.</li>`;
+  } catch (e) { /* retried on the next poll */ }
+}
+
 async function refreshQuestions() {
   try {
     const list = (await getJSON("/api/questions")).body;
@@ -250,6 +278,7 @@ function anyPending() {
 async function poll() {
   await refreshQuestions();
   await refreshMaintenance();
+  await refreshCheckpoints();
   // quick while something is deliberating; slow otherwise, to catch
   // versions that idle evolution's reopens add later
   setTimeout(poll, anyPending() ? 2000 : 15000);

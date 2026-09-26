@@ -37,6 +37,10 @@ class HumanCheckpointStore:
     def get(self, question_id: str) -> dict | None:
         return self._state()["checkpoints"].get(question_id)
 
+    def all(self) -> dict[str, dict]:
+        """Every tracked checkpoint by key, whatever its status."""
+        return self._state()["checkpoints"]
+
     def _transition(self, question_id: str, new_status: str, reviewer_id: str, note: str | None) -> dict:
         state = self._state()
         cp = state["checkpoints"].get(question_id)

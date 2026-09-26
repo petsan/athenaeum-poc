@@ -365,7 +365,7 @@ Same rules and stop conditions. Each item is a gap confirmed in the code while b
 | W | **A failing unit is lost silently** — `MultiUnitScheduler.process_one_round` pops a unit before running its round and requeues it only on success, so a round that raises drops the unit. The API worker logs an `error` event, but the question stays `active` forever; after a restart the Maintainer resubmits it and loses it again. Catch per-unit failures in the Maintainer, retry a bounded number of times from the last completed round, then mark the question `suspended` with the error and drop it from the registry. Surface this in the API and the client. | **done** — §70, known-bugs #31 |
 | X | **Grade changes reach every dependent answer (§7.2, first trigger)** — re-evaluation candidates come only from the ~20 claims an idle cycle samples, so a source that turns `rejected` leaves unsampled answers relying on it unreopened indefinitely. Each cycle, use the Belief Graph (source ← claim ← answer) to find every question whose latest answer relies on a source whose grade changed since the previous cycle, and hand those questions to re-evaluation as well. | **done** — §71 |
 | Y | **Scheduled ingestion (§9)** — `ingestion.py`'s docstring promises "a scheduled work-unit type", and none exists. Make ingestion a checkpointed WorkUnit the Maintainer runs at low priority: per source, fetch, check, normalize, then record in the CAS and graph, with no re-fetch or double record after a kill. Tests use fixtures plus a real localhost HTTP fetch. | **done** — §72 |
-| Z | **Human checkpoints visible** — standard-amendment proposals and human-input checkpoints wait for a reviewer, but nothing outside Python can see them. Add a read-only `GET /api/checkpoints` and a client panel. *Approving* over the unauthenticated API is deliberately not built (owner decision 7). | open |
+| Z | **Human checkpoints visible** — standard-amendment proposals and human-input checkpoints wait for a reviewer, but nothing outside Python can see them. Add a read-only `GET /api/checkpoints` and a client panel. *Approving* over the unauthenticated API is deliberately not built (owner decision 7). | **done** — §73, known-bugs #32 |
 | — | End-to-end test extended; README draft refreshed (local); plan batch 6. | open |
 
 - [ ] `execution_sandbox.enabled` stays `false` — not actionable right now (the CPU-time gap is a confirmed environment limitation on this specific kernel, not a bug to fix), but re-run `scripts/preflight_check.py` if this project is ever deployed to a *different* host, per `security-review-sandbox.md` Section 7.3/7.4.
@@ -945,6 +945,19 @@ Tested:
 - the configuration errors.
 
 **Full live suite: 545 passed, 1 skipped.** 546 collected (538 prior + 8 new in `tests/test_scheduled_ingestion.py`).
+
+## 73. Human checkpoints visible; a path traversal fixed — Phase Z
+
+§11.5's checkpoints hold everything that waits for a human: standard-amendment proposals from idle evolution (§46), domain-fidelity escalations (§49) and human-input checkpoints. Until now nothing outside Python could see them. Now:
+- **`HumanCheckpointStore.all()`** returns every checkpoint;
+- **`GET /api/checkpoints`** lists them pending first, each with its `kind` (`standard-amendment`, `domain-fidelity`, or `question` for human input) and `ref`, plus reason, submitter, reviewer, note and status history. A pending amendment also carries the **proposal itself**, so a reviewer sees what would change;
+- the client has an "Awaiting human review" panel listing only what is still pending, escaped like everything else.
+
+**Approving is deliberately not an endpoint:** the API has no authentication, so a reviewer still approves through `human_input.clear_checkpoint` in Python. Tested: a POST to `/api/checkpoints` is a 404. Owner decision 7 covers how that should change.
+
+**Security fix — known-bugs.md #32:** while adding the route, the static file handler turned out to serve `CLIENT_DIR / <request path>` unchecked. A raw `GET /../pyproject.toml` returned the file, reproduced against a real server. Paths are now resolved and must stay under `client/`. The tests send raw request lines covering plain, percent-encoded and mixed traversals, including `/etc/hostname`.
+
+**Full live suite: 554 passed, 1 skipped.** 555 collected (546 prior + 9 new in `tests/test_api_review.py`).
 
 ### Explicitly not on this list
 Any application-level work beyond what `deployment-playbook.md` promises to deliver (verified SSH access to a correctly-networked guest, not a deployed application).

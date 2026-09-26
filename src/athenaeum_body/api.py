@@ -168,6 +168,21 @@ def build_app(data_dir: Path) -> App:
             entry = ledger.get(qid)
             return _with_question(entry.to_dict()) if entry else None
 
+    def checkpoints() -> list:
+        """Section 11.5's human checkpoints, read-only: what waits for a
+        reviewer, and why. Pending first. A standard amendment carries the
+        proposal itself so a reviewer can see what would change. Approving
+        is deliberately not exposed here: this API has no authentication."""
+        with lock:
+            found = []
+            for key, cp in maintainer.idle.checkpoints.all().items() if maintainer.idle.checkpoints else []:
+                kind, _, ref = key.partition(":") if ":" in key else ("question", "", key)
+                item = {"key": key, "kind": kind, "ref": ref, **cp}
+                if kind == "standard-amendment" and ref in maintainer.pending_amendments:
+                    item["proposal"] = maintainer.pending_amendments[ref]
+                found.append(item)
+            return sorted(found, key=lambda c: (c["status"] != "pending_human_checkpoint", c["key"]))
+
     def health() -> dict:
         s = monitor.get_state()
         return {"status": "ok", "cores_available": s.cores_available,
@@ -175,13 +190,13 @@ def build_app(data_dir: Path) -> App:
 
     app = App((submit_question, list_questions, get_question, health))
     app.submit_async, app.get_version, app.maintenance_status = submit_async, get_version, maintenance_status
-    app.maintainer, app.worker_thread = maintainer, worker_thread
+    app.maintainer, app.worker_thread, app.checkpoints = maintainer, worker_thread, checkpoints
     return app
 
 
 class Handler(BaseHTTPRequestHandler):
     submit_question = list_questions = get_question = health = None  # set by make_handler
-    submit_async = get_version = maintenance_status = None
+    submit_async = get_version = maintenance_status = checkpoints = None
 
     def _json(self, code: int, payload) -> None:
         body = json.dumps(payload).encode("utf-8")
@@ -195,8 +210,10 @@ class Handler(BaseHTTPRequestHandler):
     def _static(self) -> None:
         path = urlparse(self.path).path
         rel = "index.html" if path in ("/", "") else path.lstrip("/")
-        f = CLIENT_DIR / rel
-        if not f.exists() or not f.is_file():
+        f = (CLIENT_DIR / rel).resolve()
+        # Only files inside client/ are served: a raw "GET /../x" is not
+        # normalized by the server, and must never escape it (known-bugs #32).
+        if not f.is_relative_to(CLIENT_DIR.resolve()) or not f.is_file():
             self._json(404, {"error": "not found"})
             return
         ctype = "text/html" if f.suffix == ".html" else "application/octet-stream"
@@ -215,6 +232,8 @@ class Handler(BaseHTTPRequestHandler):
             self._json(200, self.list_questions())
         elif path == "/api/maintenance":
             self._json(200, self.maintenance_status())
+        elif path == "/api/checkpoints":
+            self._json(200, self.checkpoints())
         elif path.startswith("/api/questions/"):
             parts = path[len("/api/questions/"):].split("/")
             if len(parts) == 3 and parts[1] == "versions" and parts[2].isdigit():
@@ -261,6 +280,7 @@ def make_handler(data_dir: Path):
     BoundHandler.submit_async = staticmethod(app.submit_async)
     BoundHandler.get_version = staticmethod(app.get_version)
     BoundHandler.maintenance_status = staticmethod(app.maintenance_status)
+    BoundHandler.checkpoints = staticmethod(app.checkpoints)
     return BoundHandler
 
 

@@ -52,6 +52,15 @@ const state = {
                                  { kind: "idle", cycle_id: "idle-1", status_counts: { survived: 2, challenged: 0 },
                                    reopened: ["q-1"], amendments_adopted: [], calibration_drifting: [] }] },
 };
+state.checkpoints = [
+  { key: "standard-amendment:idle-4", kind: "standard-amendment", ref: "idle-4", status: "pending_human_checkpoint",
+    reason: "2 claim(s) resting only on 'foundational' sources were challenged", note: null, reviewer_id: null,
+    proposal: { params: { rejected_min_challenges: 3, foundational_min_corroborations: 6 } } },
+  { key: "q-9", kind: "question", ref: "q-9", status: "pending_human_checkpoint", reason: XSS,
+    note: "needs a source", reviewer_id: "rev-1" },
+  { key: "domain-fidelity:Physics", kind: "domain-fidelity", ref: "Physics", status: "current",
+    reason: "already approved", note: null, reviewer_id: "rev-2" },
+];
 const posts = [];
 const fetch = async (path, opts = {}) => {
   let status = 200, body;
@@ -61,6 +70,7 @@ const fetch = async (path, opts = {}) => {
     state.questions.push({ id: "q-3", status: "queued", importance: 0.5, versions: [], question: posts.at(-1).question });
   } else if (path === "/api/questions") body = state.questions;
   else if (path === "/api/maintenance") body = state.maintenance;
+  else if (path === "/api/checkpoints") body = state.checkpoints;
   else { status = 404; body = { error: "not found" }; }
   return { status, json: async () => JSON.parse(JSON.stringify(body)) };
 };
@@ -104,6 +114,15 @@ assert.equal(document.getElementById("maint-summary").textContent, "1 idle cycle
 const events = document.getElementById("maint-events").innerHTML;
 assert.match(events, /idle-1: re-examined 2 survived; reopened q-1/);
 assert.match(events, /q-1 answered \(importance 0\.42\)/);
+
+// human checkpoints: only what is still pending, with the proposal, escaped
+assert.equal(document.getElementById("review-summary").textContent, "2");
+const review = document.getElementById("review-items").innerHTML;
+assert.match(review, /standard amendment<\/strong> idle-4: 2 claim\(s\)/);
+assert.match(review, /proposes rejected_min_challenges=3, foundational_min_corroborations=6/);
+assert.match(review, /human input<\/strong> q-9: &lt;img/);
+assert.match(review, /reviewer rev-1: needs a source/);
+assert.ok(!review.includes("already approved") && !review.includes(XSS));
 
 // polls fast while something is pending...
 assert.equal(timers.at(-1).ms, 2000);
