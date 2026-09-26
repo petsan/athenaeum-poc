@@ -318,7 +318,7 @@ Same rules and stop conditions as batch 1. Ordered so each phase builds on the l
 | Phase | Scope | Status |
 |---|---|---|
 | J | **Fingerprints for Physics, Philosophy, Theology** (§2.4.1 names them: Physics — explicit defeat condition present; Philosophy — assumption/premise surfacing; Theology — `traditional` typing attached). Closes the §49 gap where those agents' drift could be flagged but never confirmed. | **done** — §53 |
-| K | **Mathematics bare-integer parsing** — primality only for integers the question actually asks about (same bug class as known-bugs #21); moves the open limitation into a fixed bug. | open |
+| K | **Mathematics bare-integer parsing** — primality only for integers the question actually asks about (same bug class as known-bugs #21); moves the open limitation into a fixed bug. | **done** — §54, known-bugs #25 |
 | L | **Belief Graph store** (schemas.md already specifies node/edge shapes): answers → claims → sources as real edges, written by the loop. `count_dependents` switches from its shared-claim proxy to real edges, and §7.2's second trigger ("a newly corroborated/challenged claim the framing round would route to the same question") becomes implementable. | open |
 | M | **Maintenance cadence** — a driver that runs idle cycles as low-priority units on the existing `MultiUnitScheduler` alongside questions, audits every N cycles, feeds re-evaluation, and applies approved amendments; the system then evolves without a human calling each function. | open |
 | N | **Async API** — submit → poll over the ledger's `queued/active/completed` lifecycle (api.py's own stated limitation), plus read endpoints for versions and diffs. | open |
@@ -673,6 +673,12 @@ Verified against the agents' **real** claims, including Physics's forecast claim
 One test-authoring slip on the way, a recurrence of known-bugs.md #11 (a test question that no keyword routes to Philosophy); recorded there.
 
 **Verified offline** (OLMo 3 guest still degraded): **410 passed, 1 skipped, 3 failed**, the same three `olmo3-7b` timeouts. 429 collected (419 prior + 10 new in `tests/test_fingerprints.py`).
+
+## 54. Mathematics number parsing (known-bugs.md #25) — Phase K
+
+Mathematics used to claim "N is (not) prime" for every bare integer in any question it was routed to ("is 4 even?" committed "4 is not prime"; the 1 in "…in 1 second" became a primality claim). Now primality — the only property it computes — is claimed only when the question asks about primality, and only for whole numbers that aren't decimals or unit-bearing quantities (`4.9m`, `1 second`, `20 kg`), each once. Questions about other properties fall through to the model fallback instead of receiving an irrelevant confidence-1.0 claim. Moved from known-bugs.md's open-limitations list to fixed bug #25; `tests/test_math_parsing.py` pins eleven shapes.
+
+**Verified offline** (OLMo 3 guest still degraded): **421 passed, 1 skipped, 3 failed**, the same three `olmo3-7b` timeouts. 440 collected (429 prior + 11 new).
 
 ### Explicitly not on this list
 Any application-level work beyond what `deployment-playbook.md` promises to deliver (verified SSH access to a correctly-networked guest, not a deployed application).

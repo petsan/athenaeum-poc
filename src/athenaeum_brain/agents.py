@@ -84,20 +84,29 @@ class MasterOfMathematics:
                 claims = [fallback]
         return claims
 
+    # A whole number that isn't part of a decimal and doesn't carry a unit:
+    # "17" yes; "4.9m", "1 second", "20 kg" no (known-bugs.md #25).
+    _BARE_INTEGER = re.compile(
+        r"(?<![\d.])(\d+)(?![\d.])"
+        r"(?!\s*(?:m|meters?|metres?|km|cm|mm|s|secs?|seconds?|min|minutes?|hours?|days?|years?|kg|g|%)\b)")
+
     def _explore_deterministic(self, question: str, question_id: str) -> list[Claim]:
         claims = []
-        for token in question.replace("?", "").split():
-            if token.isdigit():
-                n = int(token)
-                prime = _is_prime(n)
-                claims.append(Claim(
-                    question_id=question_id, round=1, issuing_agent=self.name,
-                    statement=f"{n} is {'prime' if prime else 'not prime'}",
-                    claim_type="formal", confidence=1.0 if n > 1 else 0.99,
-                    defeat_condition=f"a divisor of {n} other than 1 and itself is exhibited",
-                    jurisdiction_check=True,
-                    supporting_provenance=["computed:trial_division"],
-                ))
+        # Primality is the one property computed here, so it is only claimed
+        # when the question asks about primality -- "is 4 even?" used to get
+        # the irrelevant claim "4 is not prime".
+        candidates = self._BARE_INTEGER.findall(question.lower()) if "prime" in question.lower() else []
+        for token in dict.fromkeys(candidates):
+            n = int(token)
+            prime = _is_prime(n)
+            claims.append(Claim(
+                question_id=question_id, round=1, issuing_agent=self.name,
+                statement=f"{n} is {'prime' if prime else 'not prime'}",
+                claim_type="formal", confidence=1.0 if n > 1 else 0.99,
+                defeat_condition=f"a divisor of {n} other than 1 and itself is exhibited",
+                jurisdiction_check=True,
+                supporting_provenance=["computed:trial_division"],
+            ))
         if "round" in question.lower():
             for token in question.replace("?", "").split():
                 try:
