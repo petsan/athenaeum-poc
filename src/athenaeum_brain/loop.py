@@ -7,6 +7,8 @@ toy runner. This is the actual integration point.
 from __future__ import annotations
 from athenaeum_body.scheduler.work_unit import WorkUnit, RoundResult
 from athenaeum_body.reputability_store import ReputabilityStore
+from athenaeum_body.model_fitness_store import ModelFitnessStore
+from .model_fitness import fitness_factor, is_model_backed
 from .rounds import framing_round, exploration_round, cross_examination_round, synthesis_round
 from .claims import Claim
 from .verification_routing import route_for_verification
@@ -38,10 +40,38 @@ def _attach_grades_and_record_outcomes(result: dict, reputability: ReputabilityS
     return result
 
 
+def _attach_fitness_and_record_outcomes(result: dict, store: ModelFitnessStore) -> dict:
+    """Section 6.7, same non-retroactive shape as the grades above: the
+    factors synthesis used (already on each committed claim) are the
+    snapshot; outcomes are recorded only afterwards. Outcomes are recorded
+    only for ADMITTED models -- an unadmitted model must not accumulate a
+    track record before anyone has admitted it."""
+    fitness_at_use, unadmitted = {}, set()
+    for c in result["committed"]:
+        if is_model_backed(c.get("serving_model")):
+            fitness_at_use[f"{c['issuing_agent']}::{c['serving_model']}"] = c.get("fitness_factor")
+            if store.admission(c["serving_model"]) is None:
+                unadmitted.add(c["serving_model"])
+    outcomes = [(c, "corroborated") for c in result["committed"]] + \
+               [(d["claim"], "challenged") for d in result["dissent"]]
+    for c, outcome in outcomes:
+        model = c.get("serving_model")
+        if is_model_backed(model) and store.admission(model) is not None:
+            store.record_outcome(c["issuing_agent"], model, outcome)
+    result["fitness_at_use"] = fitness_at_use
+    result["unadmitted_models"] = sorted(unadmitted)
+    return result
+
+
 def make_deliberation_handler(question: str, question_id: str, reputability: ReputabilityStore = None,
-                              reopen_context: dict = None, verification: dict = None):
+                              reopen_context: dict = None, verification: dict = None,
+                              model_fitness: ModelFitnessStore = None):
     """Returns a round_handler(state, round_index) -> RoundResult usable
     directly as a WorkUnit.round_handler in athenaeum_body's scheduler.
+
+    model_fitness (Section 6.7): when given, model-backed claims are
+    weighted by their (agent, model) fitness at time of use -- zero for a
+    model never admitted -- and outcomes are recorded afterwards.
 
     reopen_context (Section 7.3): the prior answer and why it was reopened.
     It is attached to the new answer as input context only -- every round
@@ -90,7 +120,9 @@ def make_deliberation_handler(question: str, question_id: str, reputability: Rep
             # outcomes are only recorded afterwards, in
             # _attach_grades_and_record_outcomes.
             grade_lookup = (lambda src: reputability.current_grade(src)["grade"]) if reputability else None
-            result = synthesis_round(claims, exam, grade_lookup=grade_lookup)
+            fitness_lookup = ((lambda agent, model: fitness_factor(model_fitness, agent, model))
+                              if model_fitness is not None else None)
+            result = synthesis_round(claims, exam, grade_lookup=grade_lookup, fitness_lookup=fitness_lookup)
             answer = {
                 # The question and its frame ride on the answer so a later
                 # reopen (reopening.py, Section 7.3) and importance rating
@@ -122,6 +154,8 @@ def make_deliberation_handler(question: str, question_id: str, reputability: Rep
             answer["output_answer"] = compose_answer(output_types, sections)
             if reputability is not None:
                 answer = _attach_grades_and_record_outcomes(answer, reputability)
+            if model_fitness is not None:
+                answer = _attach_fitness_and_record_outcomes(answer, model_fitness)
             return RoundResult(proposed_writes={"answer": answer}, done=True)
         raise ValueError(f"no round {round_index} in the deliberation loop")
 
@@ -130,12 +164,13 @@ def make_deliberation_handler(question: str, question_id: str, reputability: Rep
 
 def make_deliberation_unit(question: str, question_id: str, priority: int = 0,
                             reputability: ReputabilityStore = None, reopen_context: dict = None,
-                            unit_id: str = None, verification: dict = None) -> WorkUnit:
+                            unit_id: str = None, verification: dict = None,
+                            model_fitness: ModelFitnessStore = None) -> WorkUnit:
     """unit_id defaults to question_id; a reopen passes a distinct one so
     the new run's checkpoints never collide with the original's."""
     return WorkUnit(
         id=unit_id or question_id,
         priority=priority,
         round_handler=make_deliberation_handler(question, question_id, reputability, reopen_context,
-                                                verification),
+                                                verification, model_fitness),
     )

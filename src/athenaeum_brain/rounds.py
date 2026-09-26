@@ -7,6 +7,7 @@ from __future__ import annotations
 from .claims import Claim
 from .agents import all_agents
 from .output_types import classify_output_type
+from .model_fitness import apply_fitness_to_confidence
 
 # Built from agents.py's @master_agent registry, not a hardcoded class
 # list -- adding a new domain (agents.py) requires no change here. See
@@ -84,7 +85,7 @@ def reputability_factor(provenance: list[str], grade_lookup) -> float:
 
 
 def synthesis_round(exploration_claims: list[Claim], exam_claims: list[Claim],
-                    grade_lookup=None) -> dict:
+                    grade_lookup=None, fitness_lookup=None) -> dict:
     """
     Section 4: the ONLY step allowed to move a claim's status from
     'proposed' to 'committed' (Section 4.4 -- single commit boundary).
@@ -112,6 +113,9 @@ def synthesis_round(exploration_claims: list[Claim], exam_claims: list[Claim],
     deliberation's own outcomes). Weighting never decides what is
     committed or dissented; it only orders what was committed, which is
     what build_research_answer's leading conclusion is chosen from.
+    `fitness_lookup(agent, serving_model) -> factor` (Section 6.7,
+    model_fitness.fitness_factor) multiplies in a second, independent
+    factor for model-backed claims, on the same time-of-use terms.
     Without a lookup, claims are left unweighted (None), which is exactly
     what evaluation.py's no-reputability ablation compares against.
     """
@@ -157,9 +161,15 @@ def synthesis_round(exploration_claims: list[Claim], exam_claims: list[Claim],
                 ],
             })
 
-    if grade_lookup is not None:
+    if grade_lookup is not None or fitness_lookup is not None:
         for c in committed:
-            c.reputability_factor = reputability_factor(c.supporting_provenance, grade_lookup)
-            c.weighted_confidence = c.confidence * c.reputability_factor
+            weight = c.confidence
+            if grade_lookup is not None:
+                c.reputability_factor = reputability_factor(c.supporting_provenance, grade_lookup)
+                weight *= c.reputability_factor
+            if fitness_lookup is not None:
+                c.fitness_factor = fitness_lookup(c.issuing_agent, c.serving_model)
+                weight = apply_fitness_to_confidence(weight, c.fitness_factor)
+            c.weighted_confidence = weight
 
     return {"committed": committed, "dissent": dissent, "plural_answers": plural_answers}

@@ -40,7 +40,11 @@ class Claim:
     reputability_factor: float = None  # set only by synthesis_round (Section 4.1): the
                                      # weakest-link grade weight across supporting_provenance,
                                      # using grades AT TIME OF USE -- None if unweighted
-    weighted_confidence: float = None  # confidence * reputability_factor; `confidence`
+    fitness_factor: float = None     # set only by synthesis_round (Section 6.7): the
+                                     # (agent, serving_model) fitness weight at time of use;
+                                     # 1.0 for deterministic claims, 0.0 for an unadmitted model
+    weighted_confidence: float = None  # confidence * reputability_factor * fitness_factor
+                                     # (each factor only when its lookup was given); `confidence`
                                      # itself stays the issuing agent's own, untouched value
     forecast: dict = None            # Section 5.4: keyword args for output_types.
                                      # build_forecast_answer when this claim IS a forecast;

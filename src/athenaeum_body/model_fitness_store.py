@@ -22,7 +22,34 @@ class ModelFitnessStore:
     log: CheckpointLog
 
     def _state(self) -> dict:
-        return self.log.read_latest() or {"tallies": {}}
+        state = self.log.read_latest() or {"tallies": {}}
+        state.setdefault("admissions", {})  # absent in checkpoints from before the admission gate
+        return state
+
+    # --- Section 6.7 model admission (storage only; the gate's policy is
+    # athenaeum_brain/model_fitness.py) -----------------------------------
+
+    def admit(self, model_id: str, rationale: str, admitted_by: str) -> dict:
+        """Records a model's admission once; a second admit is a no-op that
+        returns the original record (admission history is never rewritten)."""
+        state = self._state()
+        if model_id not in state["admissions"]:
+            state["admissions"][model_id] = {"model_id": model_id, "rationale": rationale,
+                                             "admitted_by": admitted_by}
+            self.log.write_checkpoint(state, label="model_fitness")
+        return state["admissions"][model_id]
+
+    def admission(self, model_id: str) -> dict | None:
+        return self._state()["admissions"].get(model_id)
+
+    def outcomes_for_model(self, model_id: str) -> dict:
+        """Totals across every agent this model has backed."""
+        total = {"corroborated": 0, "challenged": 0}
+        for key, tally in self._state()["tallies"].items():
+            if key.endswith(f"::{model_id}"):
+                for k in total:
+                    total[k] += tally[k]
+        return total
 
     def record_outcome(self, agent_name: str, model_id: str, outcome: str) -> None:
         """Section 6.7: did claims produced by this (agent, model) pairing

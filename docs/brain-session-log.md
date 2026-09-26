@@ -932,6 +932,56 @@ the owner instead of decided unilaterally.
 
 ---
 
+## 2026-09-26 — Model admission gate and fitness weighting (§6.7, Phase E): design choices
+
+**Q: What does "admitted at provisional status" mean mechanically?**
+
+Admission records who admitted a model and why (a rationale is
+required), and nothing else. It grants no weight: a freshly admitted
+model sits at the cold-start fitness of 0.5 for every agent (Open
+Question 10's Laplace resolution), and moves only as its claims survive
+or fail cross-examination. `model_standing` reports "provisional" until
+the model has a minimum number of outcomes across all agents —
+informational; synthesis uses the weight itself.
+
+**Q: Why does an unadmitted model's claim get weight 0 rather than being
+blocked?**
+
+§4.4 makes cross-examination the only thing that decides commitment;
+adding a second gate there would contradict it. Weight 0 means the claim
+can never lead an answer, the answer names the unadmitted model
+(`unadmitted_models`), and — deliberately — no outcomes are recorded
+for it, so a model can't accumulate a track record before anyone has
+admitted it.
+
+**Q: Isn't this double-counting with the reputability of `llm:<model>`
+as a source?**
+
+No: they measure different things. The source grade of `llm:olmo3-7b`
+is how that model's output has fared across *all* agents; fitness is
+per (agent, model) pairing — §6.7's point that a model can suit
+Engineering's reasoning mode and not Theology's. Both multiply into the
+same evidence weight, and each is visible separately on the claim
+(`reputability_factor`, `fitness_factor`).
+
+**Q: Why not use the existing `snapshot_and_record` in the loop?**
+
+It snapshots and records in one call, so with two claims from the same
+pairing in one deliberation, the second snapshot would already include
+the first claim's outcome. The loop snapshots every factor during
+synthesis and records all outcomes afterwards, the same order the
+reputability grades use. The old helper is kept (a test covers it) with
+a docstring warning.
+
+**Not done here:** the HTTP API doesn't pass a fitness store, because
+wiring it means deciding which models are admitted — with no admissions,
+every model-backed claim would weigh zero. That's the owner's call.
+The agents' fallback still always asks `DEFAULT_MODEL`;
+`rank_models_for` exists for the day more than one admitted model can
+back an agent.
+
+---
+
 *See `docs/progress.md` §26 for the checklist this log's entries track
 against, and `docs/infra-topology.md` for the infrastructure-side design
 decisions made in the same planning conversation.*

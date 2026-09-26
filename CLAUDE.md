@@ -27,7 +27,7 @@ These aren't aspirational — every one of them is here because violating it (or
    maintained checklist of actual open work**, not scattered prose; check
    there first for "what's next" instead of re-deriving it from the
    narrative sections above it.
-2. **`known-bugs.md`** — twenty-three real bugs hit during development (plus a list of open known limitations), each
+2. **`known-bugs.md`** — twenty-four real bugs hit during development (plus a list of open known limitations), each
    with root cause and generalizable lesson. Read the relevant section
    before touching sandboxing/namespace code, checkpoint/content-addressed
    storage, any narrated demo script (`demo.py`, `demo_brain.py`), or any
@@ -80,8 +80,11 @@ These aren't aspirational — every one of them is here because violating it (or
   invariant enforced in `config.py` itself (`disallow_paid_apis`), not
   just a policy.
 - Before marking any task "done," run the actual test suite
-  (`pytest -q`, currently 362 passed + 1 skipped when no GPU worker is online) and update `docs/progress.md` — don't
-  let the checkpoint file go stale.
+  (`pytest -q`, currently 373 collected: 372 pass + 1 skipped when no GPU worker is online) and update `docs/progress.md` — don't
+  let the checkpoint file go stale. If the model-lab guests are down or
+  degraded (known-bugs.md #24), verify non-model changes with
+  `ATHENAEUM_OFFLINE_MODELS=1 pytest -q --ignore=tests/test_model_backed_reasoning.py`
+  and say plainly which live-model tests were not run.
 
 ## Current status (see `docs/progress.md` for full detail)
 

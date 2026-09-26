@@ -65,12 +65,13 @@ As implemented in `reputability_store.py` (Section 6.5, 2026-09-26): each stored
 | `source_grades_at_use` | dict | no | present when a ReputabilityStore was used: `{source_id: {grade, version, standard_version}}` snapshot (Section 6.3) |
 | `reopen_context` | dict | no | on a reopened version: `prior_version`, `reasons`, `prior_answer` (without its own `reopen_context`), `expanded_traces`, optional `forecast_resolution` |
 | `diff` | dict | no | on a reopened version (Section 7.3): `added`, `removed`, `weight_changes`, `leading_conclusion`, `plural_answers`, `cause` |
+| `fitness_at_use`, `unadmitted_models` | dict, list | no | present when a ModelFitnessStore was used (Section 6.7): `{"agent::model": factor}` snapshot, and models that backed a committed claim without being admitted |
 | `verification` | dict | no | task 44 routing report: `{routed, skipped_reason}` — `skipped_reason` names how many verifiable claims went unverified because `execution_sandbox.enabled` is false |
 
 ## Claim (Brain, Section 3.5) — implemented in `athenaeum_brain/claims.py`
 | Field | Type | Required | Notes |
 |---|---|---|---|
-| `claim_id` | str | yes | auto-generated |
+| `claim_id` | str | yes | auto-generated `claim-<16 hex>` from a uuid4 — globally unique across processes (known-bugs.md #23); ids in answers written before 2026-09-26 are per-process counters |
 | `question_id` | str | yes | |
 | `round` | int | yes | which deliberation round produced this |
 | `issuing_agent` | str | yes | |
@@ -88,7 +89,8 @@ As implemented in `reputability_store.py` (Section 6.5, 2026-09-26): each stored
 | `output_type_relevance` | list[str] | no | which of `research\|forecast\|recommendation` the claim bears on |
 | `serving_model` | str | no | which local model produced this (Section 6.7); set on Engineering's sandbox-verified claims and on every model-backed fallback claim, `None` for purely deterministic claims |
 | `reputability_factor` | float | no | set only by `synthesis_round` (Section 4.1): weakest-link grade weight across `supporting_provenance`, grades at time of use |
-| `weighted_confidence` | float | no | `confidence × reputability_factor`; `confidence` itself is never modified |
+| `fitness_factor` | float | no | set only by `synthesis_round` (Section 6.7): (agent, serving_model) fitness at time of use; 1.0 deterministic, 0.0 unadmitted model |
+| `weighted_confidence` | float | no | `confidence × reputability_factor × fitness_factor` (each only when its lookup was given); `confidence` itself is never modified |
 | `forecast` | dict | no | Section 5.4: keyword args for `output_types.build_forecast_answer` (`statement, probability, resolution_criterion, resolution_source, deadline, sensitivity, assumptions`) when the claim *is* a forecast. The probability lives only here, never in `confidence`. |
 | `recommendation_option` | dict | no | Section 5.4: `{option, serves_objective, reversibility}` when the claim's conclusion is one course of action a Recommendation can weigh |
 
