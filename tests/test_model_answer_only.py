@@ -24,6 +24,9 @@ def _backend(monkeypatch, completions):
             return next(completions)
     monkeypatch.setattr(mbr, "build_elastic_gpu_backend", lambda: NoGpu())
     monkeypatch.setattr(mbr, "LlamaCppBackend", Fake)
+    # offline mode (conftest) stubs ask_model itself; the backend is stubbed
+    # here instead, so the real ask_model is the thing under test
+    monkeypatch.setattr(mbr, "ask_model", ask_model)
 
 
 def test_answer_only_keeps_the_answer_and_nothing_after_it():

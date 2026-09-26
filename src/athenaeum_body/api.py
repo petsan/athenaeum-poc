@@ -122,12 +122,54 @@ def build_app(data_dir: Path) -> App:
     # on an unauthenticated API, is not something to add without auth.
     work_available = threading.Event()
 
+    # --- the inbox (batch 9, Phase AJ) -------------------------------------------
+    # An async submission must not wait for the lock a worker round holds
+    # (through a whole model call). It is written durably to its own small
+    # log under its own lock, and the worker registers it with the Maintainer
+    # before its next round. The inbox also issues question ids for both
+    # paths, so ids stay unique without the main lock. Draining skips any id
+    # the ledger already has, so a crash between registering and clearing
+    # is harmless, and a restart drains whatever was left.
+    inbox_log = log_for("inbox")
+    inbox_lock = threading.Lock()
+    saved_inbox = inbox_log.read_latest() or {"items": [], "issued": 0}
+    inbox = {"items": list(saved_inbox["items"]),
+             "issued": max(saved_inbox["issued"], len(ledger._state()["questions"]))}
+
     def _new_id() -> str:
-        return f"q-{len(ledger._state()['questions']) + 1}"
+        """Caller holds inbox_lock."""
+        inbox["issued"] += 1
+        return f"q-{inbox['issued']}"
+
+    def _save_inbox() -> None:
+        """Caller holds inbox_lock."""
+        inbox_log.write_checkpoint({"items": inbox["items"], "issued": inbox["issued"]}, label="inbox")
+
+    def _drain_inbox_locked() -> int:
+        """Caller holds `lock`. Registers every waiting submission, in order."""
+        with inbox_lock:
+            waiting = list(inbox["items"])
+        for item in waiting:
+            if ledger.get(item["id"]) is None:
+                maintainer.submit_question(item["id"], item["question"])
+        if waiting:
+            # snapshot first, then clear: a reader must see each submission in
+            # one place or the other throughout, never in neither
+            _refresh_locked()
+            with inbox_lock:
+                drained = {i["id"] for i in waiting}
+                inbox["items"] = [i for i in inbox["items"] if i["id"] not in drained]
+                _save_inbox()
+        return len(waiting)
 
     def submit_question(question: str) -> dict:
-        with lock:
-            qid = _new_id()
+        with lock:                 # lock order everywhere: lock, then inbox_lock
+            with inbox_lock:
+                # questions registered with the Maintainer directly (not via
+                # this API) also take ids; the ledger is safe to read here
+                inbox["issued"] = max(inbox["issued"], len(ledger._state()["questions"]))
+                qid = _new_id()
+                _save_inbox()      # the id is issued durably, so it is never reused
             ledger.submit(QuestionLedgerEntry(id=qid, importance=0.5))
             unit_log = CheckpointLog(cas=cas, index_path=data_dir / f"unit-{qid}.txt")
             runner = SingleUnitRunner(unit_log, shared_state={})
@@ -153,25 +195,30 @@ def build_app(data_dir: Path) -> App:
     worker_thread: list[threading.Thread] = []
 
     def submit_async(question: str) -> dict:
-        with lock:
+        with inbox_lock:
             qid = _new_id()
-            maintainer.submit_question(qid, question)
-            _refresh_locked()
-            # Started on first use, so a purely synchronous user never gets
-            # background idle cycles running over their questions.
+            inbox["items"].append({"id": qid, "question": question, "submitted_at": time.time()})
+            _save_inbox()          # durable before the 202
+        _start_worker()
+        return {"id": qid, "question": question, "status": "queued"}
+
+    def _start_worker() -> None:
+        # Started on first use, so a purely synchronous user never gets
+        # background idle cycles running over their questions.
+        with inbox_lock:
             if not worker_thread:
                 worker_thread.append(threading.Thread(target=worker, name="athenaeum-maintainer", daemon=True))
                 worker_thread[0].start()
         work_available.set()
-        return {"id": qid, "question": question, "status": "queued"}
 
     def worker() -> None:
         """One thread drives the Maintainer, one round at a time, taking the
-        lock per round so synchronous requests interleave; reads never wait
-        for it (they use the snapshot refreshed here)."""
+        lock per round so synchronous requests interleave; reads and async
+        submissions never wait for it (the snapshot and the inbox)."""
         while True:
             with lock:
                 try:
+                    _drain_inbox_locked()
                     maintainer.tick()
                 except Exception as e:  # a failing round is the Maintainer's to retry; this catches
                     # anything else (e.g. a completed unit's follow-ups) so the worker never dies silently
@@ -195,7 +242,8 @@ def build_app(data_dir: Path) -> App:
 
     def _refresh_locked() -> None:
         """Caller holds `lock`."""
-        entries = [_with_question(q) for q in ledger._state()["questions"].values()]
+        entries = sorted((_with_question(q) for q in ledger._state()["questions"].values()),
+                         key=lambda e: _number(e["id"]))
         fresh = {
             "questions": entries,
             "by_id": {e["id"]: e for e in entries},
@@ -209,6 +257,10 @@ def build_app(data_dir: Path) -> App:
             snapshot.clear()
             snapshot.update(fresh)
 
+    def _number(qid: str) -> int:
+        tail = qid.rsplit("-", 1)[-1]
+        return int(tail) if tail.isdigit() else 0
+
     def _view() -> dict:
         if lock.acquire(blocking=False):
             try:
@@ -216,7 +268,17 @@ def build_app(data_dir: Path) -> App:
             finally:
                 lock.release()
         with snapshot_lock:
-            return dict(snapshot)
+            view = dict(snapshot)
+        # Submissions still in the inbox are already questions to the caller
+        # (they got a 202 and an id): show them as queued (Phase AJ).
+        with inbox_lock:
+            waiting = [i for i in inbox["items"] if i["id"] not in view["by_id"]]
+        if waiting:
+            pending = [{"id": i["id"], "status": "queued", "importance": 0.5, "created_at": i["submitted_at"],
+                        "versions": [], "question": i["question"]} for i in waiting]
+            view["questions"] = sorted(view["questions"] + pending, key=lambda e: _number(e["id"]))
+            view["by_id"] = {**view["by_id"], **{e["id"]: e for e in pending}}
+        return view
 
     def get_version(qid: str, n: int):
         entry = _view()["by_id"].get(qid)
@@ -285,10 +347,14 @@ def build_app(data_dir: Path) -> App:
                 "queued_units": _view()["maintenance"]["queued_units"]}
 
     with lock:
+        drained = _drain_inbox_locked()   # what a previous process accepted but never registered
         _refresh_locked()
+    if drained:
+        _start_worker()
     app = App((submit_question, list_questions, get_question, health))
     app.submit_async, app.get_version, app.maintenance_status = submit_async, get_version, maintenance_status
     app.maintainer, app.worker_thread, app.checkpoints = maintainer, worker_thread, checkpoints
+    app.lock = lock   # a test seam: holding it stands in for a round in progress
     return app
 
 

@@ -38,8 +38,9 @@ def main(base: str = "http://127.0.0.1:8080", timeout: float = 900) -> dict:
     report = {"health_at_start": health, "submitted": {}, "polls": [], "problems": []}
     started = time.time()
     for q in ASYNC_QUESTIONS:
-        _, status, body = call(base, "/api/questions", {"question": q, "async": True})
-        report["submitted"][body["id"]] = {"question": q, "at": time.time() - started}
+        submit_s, status, body = call(base, "/api/questions", {"question": q, "async": True})
+        report["submitted"][body["id"]] = {"question": q, "at": time.time() - started,
+                                           "submit_s": round(submit_s, 3)}
 
     # a synchronous question alongside, in its own thread: it waits for the
     # worker's lock between rounds, while the polls below carry on
@@ -53,8 +54,9 @@ def main(base: str = "http://127.0.0.1:8080", timeout: float = 900) -> dict:
     done_at = {}
     while time.time() - started < timeout:
         elapsed, _, summary = call(base, "/api/questions?view=summary")
-        _, _, h = call(base, "/api/health")
-        report["polls"].append({"seconds": elapsed, "queued": h["queued_units"]})
+        health_s, _, h = call(base, "/api/health")
+        report["polls"].append({"seconds": elapsed, "health_s": health_s, "queued": h["queued_units"],
+                                "at": time.time() - started})
         for s in summary:
             if s["id"] in report["submitted"] and s["status"] in ("completed", "suspended") and s["id"] not in done_at:
                 done_at[s["id"]] = time.time() - started
@@ -97,7 +99,10 @@ if __name__ == "__main__":
         print(f"{qid} '{info['question']}': {info['status']} after {info['finished_after']}s")
         for c in info["committed"]:
             print(f"    {c[:140]}")
+    print("submit latency:", [i["submit_s"] for i in r["submitted"].values()])
     print("poll latency:", r["poll_latency"])
+    print("first polls (at, summary_s, health_s, queued):",
+          [(round(p["at"], 1), round(p["seconds"], 3), round(p["health_s"], 3), p["queued"]) for p in r["polls"][:5]])
     print("health at end:", r["health_at_end"]["worker"], "queued", r["health_at_end"]["queued_units"])
     print("events:", [e.get("question_id") or e.get("cycle_id") or e.get("kind") for e in r["events"]])
     print("problems:", r["problems"] or "none")

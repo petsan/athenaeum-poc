@@ -415,7 +415,7 @@ Same rules and stop conditions. Most remaining substantive work now waits on own
 |---|---|---|
 | AH | **Live deployment smoke** — every end-to-end test stubs the model. Start the real API process (`python -m athenaeum_body.api`) on LXC 104 against the live model-lab guests, drive it over HTTP with a script (`scripts/live_smoke.py`): async questions including a model-only one, sync alongside, polls, health. Record real latencies, including how long polls take while a real model call runs (Phase AF under real conditions). Report, don't gate: live-model output isn't deterministic. | **done** — §85, known-bugs #35 |
 | AI | **Decision briefs** — one document (`docs/owner-decisions.md`) laying out each open owner decision with the evidence gathered, the options, their costs, and a recommendation, so each can be settled in minutes. Documentation only; nothing is decided. | **done** — `docs/owner-decisions.md` (decisions 2–10; 10 is new) |
-| AJ | **Submitting never waits behind a deliberation** (found by AH) — `POST /api/questions` with `async` takes the same lock as a worker round, so each submission waits up to a whole model call (live: about 40 s before four async submits and one sync question were all in). Record a submission durably in its own small inbox, return 202 at once, have the worker register it before its next round, and have a restart drain what's left. | open |
+| AJ | **Submitting never waits behind a deliberation** (found by AH) — `POST /api/questions` with `async` takes the same lock as a worker round, so each submission waits up to a whole model call (live: about 40 s before four async submits and one sync question were all in). Record a submission durably in its own small inbox, return 202 at once, have the worker register it before its next round, and have a restart drain what's left. | **done** — §86 |
 | — | Final full live run; handoff notes. | open |
 
 - [ ] `execution_sandbox.enabled` stays `false` — not actionable right now (the CPU-time gap is a confirmed environment limitation on this specific kernel, not a bug to fix), but re-run `scripts/preflight_check.py` if this project is ever deployed to a *different* host, per `security-review-sandbox.md` Section 7.3/7.4.
@@ -1172,6 +1172,32 @@ Every end-to-end test stubs the model, so `scripts/live_smoke.py` drives a **rea
 **A second finding, now Phase AJ.** The script's polling didn't start until about 40 s in, because each **async submit** took the same lock as the worker's rounds and waited behind a live model call; the synchronous question waited 19.8 s the same way. Phase AF made reads independent of the lock, but not submits. So during a real deliberation, each tap of "Ask" in the client can hang for a whole model call. Because of that, this run couldn't measure poll latency *during* a real call. That remains covered by AF's held-call tests (under a second, vs 1.7 s before).
 
 **Full live suite: 594 passed, 1 skipped.** 595 collected (591 prior + 4 new in `tests/test_model_answer_only.py`).
+
+## 86. Submitting never waits behind a deliberation — Phase AJ
+
+Found by the live smoke (§85): an async `POST /api/questions` took the same lock as the worker's rounds, so each submission waited up to a whole model call. Now:
+- **The inbox.** An async submission is written durably to its own small checkpoint log (`inbox`), under its own lock, and gets its 202 at once. The inbox also issues question ids for both paths, persisted, so an id is never reused, even after a crash. The synchronous path, which holds the main lock anyway, also catches the counter up to the ledger, so questions registered directly with the Maintainer don't collide. The lock order is always the main lock, then the inbox lock.
+- **Draining.** Before each round, the worker registers every waiting submission with the Maintainer, in order, and skips any id the ledger already has, so a crash between registering and clearing is harmless. It refreshes the read snapshot *before* clearing the inbox, so a reader always finds each submission in one place or the other, never in neither. A new process drains what a dead one accepted and starts its worker.
+- **Reads** show inbox submissions as `queued` at once, and listings are ordered by question number rather than ledger insertion order.
+
+Tests (`tests/test_api_inbox.py`), holding the lock to stand in for a round of any length:
+- three async submits each answer in under a second, with sequential ids, and are listed `queued` immediately, then all complete once the round ends;
+- a process that accepted two submissions and died before draining: its successor drains them at startup, answers them, and never re-issues their ids;
+- 15 concurrent submissions across both paths get 15 distinct ids, and all complete;
+- a data dir from before the inbox existed continues its numbering.
+
+The first draft of the restart test drove the Maintainer from the test thread while the new process's worker was also running. It passed, but it was a race, so it now waits on the worker instead.
+
+Also fixed: `tests/test_model_answer_only.py`, from §85, failed under `ATHENAEUM_OFFLINE_MODELS=1`, because offline mode stubs `ask_model` itself. The test now restores the real `ask_model` over its own stubbed backend, and passes in both modes.
+
+**Live re-run** (`scripts/live_smoke.py`, now also recording per-submit and per-health-call timings):
+- async submits answered in **2–8 ms** (before: up to a whole model call);
+- **65 polls** ran while real model calls were in flight, the slowest summary poll taking **3 ms** and health 1 ms;
+- all four questions completed with clean answers ("Physics: Gravity" for both model-only questions), with no problems.
+
+One earlier re-run, before the script recorded these timings, polled only once, at 31.8 s. Instrumented, it didn't recur, and it isn't explained, so it is noted here rather than explained away. If it recurs, the recorded `first polls` line will show which call stalled.
+
+**Full live suite: 598 passed, 1 skipped.** 599 collected (595 prior + 4 new in `tests/test_api_inbox.py`).
 
 ### Explicitly not on this list
 Any application-level work beyond what `deployment-playbook.md` promises to deliver (verified SSH access to a correctly-networked guest, not a deployed application).
