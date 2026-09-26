@@ -139,7 +139,8 @@ def answer_diff(prior: dict, new: dict) -> dict:
 
 def reopen_question(ledger: QuestionLedger, question_id: str, *, reasons: list[str],
                     unit_log: CheckpointLog, reputability=None, consolidation=None,
-                    extra_context: dict | None = None, belief_graph: BeliefGraphStore | None = None) -> dict:
+                    extra_context: dict | None = None, belief_graph: BeliefGraphStore | None = None,
+                    model_fitness=None) -> dict:
     """Section 7.3. `unit_log` holds the re-run's own round checkpoints
     (kill/resume works exactly as for any deliberation). Returns the new
     answer, already appended to the ledger with its `diff` (and, with a
@@ -172,7 +173,7 @@ def reopen_question(ledger: QuestionLedger, question_id: str, *, reasons: list[s
     runner = SingleUnitRunner(unit_log, shared_state={})
     unit = make_deliberation_unit(prior["question"], question_id, reputability=reputability,
                                   reopen_context=context, unit_id=f"{question_id}-v{prior_version + 1}",
-                                  belief_graph=belief_graph)
+                                  belief_graph=belief_graph, model_fitness=model_fitness)
     while unit.status != "completed":
         runner.run_round(unit)
     new = unit_log.read_latest()["shared_state"]["answer"]
@@ -185,7 +186,7 @@ def reopen_if_material(ledger: QuestionLedger, question_id: str, *, reputability
                        importance_threshold: float = 0.3, grade_threshold: int = 1,
                        forecast_outcome: bool | None = None, consolidation=None,
                        additional_reasons: list[str] = (),
-                       belief_graph: BeliefGraphStore | None = None) -> dict:
+                       belief_graph: BeliefGraphStore | None = None, model_fitness=None) -> dict:
     """Section 7.3's trigger: reopen when materiality (7.2) fires for a
     sufficiently important question. A forecast resolution is the one
     exception to the importance gate -- always material, unconditionally.
@@ -229,5 +230,5 @@ def reopen_if_material(ledger: QuestionLedger, question_id: str, *, reputability
                 "materiality_reasons": reasons, "importance": entry.importance}
     answer = reopen_question(ledger, question_id, reasons=reasons, unit_log=unit_log,
                              reputability=reputability, consolidation=consolidation, extra_context=extra,
-                             belief_graph=belief_graph)
+                             belief_graph=belief_graph, model_fitness=model_fitness)
     return {"reopened": True, "answer": answer, "importance": entry.importance}

@@ -1251,6 +1251,22 @@ The known-bugs open limitation is marked resolved. The change in claim type is o
 
 **Full live suite: 606 passed, 1 skipped.** 607 collected (603 prior + 4 new in `tests/test_engineering_style.py`).
 
+## 90. OLMo 3 7B admitted; model claims weighted in the API — Phase AM (decision 4)
+
+Until now the API passed no fitness store, so model-backed claims weighed exactly as much as a deterministic proof. Now:
+- **Admission.** `api.ADMITTED_MODELS` lists the models the owner admitted, with their written rationales. Today that is `olmo3-7b` (the `DEFAULT_MODEL` every agent's fallback asks), per decision 4. `build_app` admits each into a new `ModelFitnessStore` (`model-fitness` log). Admission is recorded once and never rewritten, so a restart is a no-op (tested).
+- **Weighting everywhere.** The fitness store goes to the synchronous path and the Maintainer. A model claim starts at the cold-start weight of 0.5 per agent, with `fitness_factor` on the claim and `fitness_at_use` on the answer, and moves with outcomes. A model not on the list can still answer, but weighs 0 and is listed under `unadmitted_models`.
+- **`/api/maintenance`** reports each admitted model's standing (`provisional` until it has `ESTABLISHED_AFTER` outcomes).
+
+**A gap found and closed on the way.** Reopens (`reopen_question`, `reopen_if_material`, `feed_reevaluation`) re-deliberated *without* the fitness store, so a reopened version would have lost its model weighting. The store is now threaded through all three, and the Maintainer passes its own. The reopen path still doesn't take `verification` or `fidelity`: re-grounding suppression and verification routing don't apply to reopens. That was already true, and it is noted here as a follow-up rather than changed in passing.
+
+Tests (`tests/test_model_admission_api.py`):
+- the API admits OLMo 3 7B once, as `owner`, with its rationale, and reports it `provisional`;
+- a model-only question's claim carries `fitness_factor` 0.5 on the synchronous path;
+- after the model's own source is downgraded, the reopened version still carries `fitness_at_use`.
+
+**Full live suite: 609 passed, 1 skipped.** 610 collected (607 prior + 3 new).
+
 ### Batch 10 (planned 2026-09-26, implementing the owner's decisions)
 
 The owner decided 2–5 and 7–10 on 2026-09-26, each as recommended in `docs/owner-decisions.md`; 6 waits on reading `README.draft.md`. Each phase implements one or two decisions. Where a decision changes an existing test's meaning, that change is now owner-approved and is called out in the phase's write-up.
@@ -1259,7 +1275,7 @@ The owner decided 2–5 and 7–10 on 2026-09-26, each as recommended in `docs/o
 |---|---|---|---|
 | AK | 2, 9 | The qwen routing test asserts a non-empty answer from the right backend and model only. Grade upgrades stop being material under §7.2: only downgrades reopen, and upgrades are picked up at the next reopen for any other reason. | **done** — §88 |
 | AL | 3 | Engineering's rounding claims become `formal`. Its fidelity fingerprint becomes "names an implementation standard" (IEEE-754, formats, protocols), without depending on the sandbox. The Mathematics-vs-Engineering plural answer is kept. | **done** — §89 |
-| AM | 4 | Admit OLMo 3 7B with a written rationale, and wire a `ModelFitnessStore` into the API. Model claims start at 0.5 per agent and move with outcomes. | open |
+| AM | 4 | Admit OLMo 3 7B with a written rationale, and wire a `ModelFitnessStore` into the API. Model claims start at 0.5 per agent and move with outcomes. | **done** — §90 |
 | AN | 5 | Human input triggers a checkpoint only at importance ≥ the re-evaluation threshold, configured alongside it. | open |
 | AO | 10 | During idle re-examination a model may challenge a model-backed claim. The challenge is dissent, and counts toward reputability, fitness and calibration only once the challenging model is admitted and `established`. | open |
 | AP | 7 | Per-reviewer tokens from a local config file (never in the repo) on new write endpoints: approve, reject or request more deliberation on a checkpoint, and submit ingestion. The reviewer id comes from the token, so §11's role and conflict-of-interest checks apply, and ingestion URLs are checked against a curator allow-list. | open |

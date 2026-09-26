@@ -44,9 +44,12 @@ from .human_checkpoint_store import HumanCheckpointStore
 from .belief_graph_store import BeliefGraphStore
 from .audit_store import AuditStore
 from .calibration_store import CalibrationStore
+from .model_fitness_store import ModelFitnessStore
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from athenaeum_brain.loop import make_deliberation_unit  # noqa: E402
+from athenaeum_brain.model_fitness import admit_model, model_standing  # noqa: E402
+from athenaeum_brain.model_backed_reasoning import DEFAULT_MODEL  # noqa: E402
 from athenaeum_brain.reopening import rate_and_store_importance  # noqa: E402
 from athenaeum_brain.verification_routing import sandbox_enabled  # noqa: E402
 from athenaeum_brain.idle_evolution import IdleContext  # noqa: E402
@@ -57,6 +60,15 @@ CLIENT_DIR = Path(__file__).resolve().parents[2] / "client"
 
 MAX_BODY_BYTES = 64 * 1024      # placeholder limits, generous for a question
 MAX_QUESTION_CHARS = 2000
+
+# Section 6.7's admission gate, as decided by the owner (decision 4,
+# 2026-09-26). Admission grants no weight: an admitted model starts at the
+# cold-start fitness of 0.5 per agent and moves only with outcomes. A model
+# not listed here can still answer, but its claims weigh 0 at synthesis.
+ADMITTED_MODELS = {
+    DEFAULT_MODEL: ("Owner decision 4 (2026-09-26): the model every agent's fallback asks. The batch 9 live "
+                    "smoke showed correct short answers once run-on output was cut (known-bugs #35)."),
+}
 
 
 class BadRequest(ValueError):
@@ -108,6 +120,9 @@ def build_app(data_dir: Path) -> App:
     # default and by hard constraint until the sandbox review passes).
     verification = {"enabled": sandbox_enabled()}
     lock = threading.Lock()
+    model_fitness = ModelFitnessStore(log_for("model-fitness"))
+    for model_id, rationale in ADMITTED_MODELS.items():   # recorded once; a restart is a no-op
+        admit_model(model_fitness, model_id, rationale=rationale, admitted_by="owner")
     maintainer = Maintainer(
         idle=IdleContext(ledger=ledger, reputability=reputability,
                          consolidation=ConsolidationStore(log_for("consolidation"),
@@ -116,7 +131,7 @@ def build_app(data_dir: Path) -> App:
                          checkpoints=HumanCheckpointStore(log_for("checkpoints")),
                          calibration=CalibrationStore(log_for("calibration"))),
         log_for=log_for, belief_graph=graph, audits=AuditStore(log_for("audits")),
-        verification=verification, ingestion_cas=cas)
+        verification=verification, ingestion_cas=cas, model_fitness=model_fitness)
     # Ingestion runs through maintainer.submit_ingestion from Python only: an
     # HTTP endpoint that fetches caller-chosen URLs from inside the network,
     # on an unauthenticated API, is not something to add without auth.
@@ -175,7 +190,8 @@ def build_app(data_dir: Path) -> App:
             runner = SingleUnitRunner(unit_log, shared_state={})
             try:
                 unit = make_deliberation_unit(question, qid, reputability=reputability,
-                                              verification=verification, belief_graph=graph)
+                                              verification=verification, belief_graph=graph,
+                                              model_fitness=model_fitness)
                 while unit.status != "completed":
                     runner.run_round(unit)
             except Exception as e:
@@ -250,6 +266,7 @@ def build_app(data_dir: Path) -> App:
             "maintenance": {"idle_cycles": maintainer.cycles, "queued_units": len(maintainer.scheduler._heap),
                             "pending_amendments": sorted(maintainer.pending_amendments),
                             "failed_units": sorted(maintainer.failed),
+                            "models": {m: model_standing(model_fitness, m) for m in ADMITTED_MODELS},
                             "recent_events": list(maintainer.events[-10:])},
             "checkpoints": _checkpoints_locked(),
         }

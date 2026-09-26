@@ -348,7 +348,7 @@ def apply_amendment_if_approved(ctx: IdleContext, cycle_id: str, proposal: dict)
 
 
 def feed_reevaluation(ctx: IdleContext, idle_result: dict, *, unit_log_for, importance_threshold: float = 0.3,
-                      belief_graph=None) -> dict:
+                      belief_graph=None, model_fitness=None) -> dict:
     """Hands each question the cycle implicated to reopen_if_material, with
     the cycle's findings as additional material reasons (7.2). The usual
     importance gate still applies. unit_log_for(question_id) supplies a
@@ -367,5 +367,5 @@ def feed_reevaluation(ctx: IdleContext, idle_result: dict, *, unit_log_for, impo
         outcomes[qid] = reopen_if_material(
             ctx.ledger, qid, reputability=ctx.reputability, unit_log=unit_log_for(qid),
             importance_threshold=importance_threshold, consolidation=ctx.consolidation,
-            additional_reasons=reasons, belief_graph=belief_graph)
+            additional_reasons=reasons, belief_graph=belief_graph, model_fitness=model_fitness)
     return outcomes
