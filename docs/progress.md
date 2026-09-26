@@ -348,7 +348,7 @@ Same rules and stop conditions. Again, each item is a gap found while building, 
 
 | Phase | Scope | Status |
 |---|---|---|
-| S | **Feed calibration (§5.3, §9.3)** — the per-agent calibration store — "the accountability mechanism" — is never written outside tests. Idle re-examination is exactly when a claim's fate becomes known: record survived claims as verified and challenged/unsupported ones as overturned, per agent at the confidence it claimed; the Maintainer's audits then report `calibration_drift` per agent. | open |
+| S | **Feed calibration (§5.3, §9.3)** — the per-agent calibration store — "the accountability mechanism" — is never written outside tests. Idle re-examination is exactly when a claim's fate becomes known: record survived claims as verified and challenged/unsupported ones as overturned, per agent at the confidence it claimed; the Maintainer's audits then report `calibration_drift` per agent. | **done** — §65 |
 | T | **Grade weights into the versioned standard** — synthesis's `GRADE_WEIGHT` (§41) sits outside the reputability standard §43 versioned, so it can't evolve under the same review; move it into the standard's params with v0 = today's values. | open |
 | U | **Ingestion feeds the Belief Graph** — ingested sources and their `cites` become `source` nodes and `cites` edges, so dispute resolution and consolidation can read citation data from the graph instead of a hand-passed map. | open |
 | V | **Mobile client: async mode and history** — the client only knows the synchronous call; let it submit async, poll status, and show versions/diffs and maintenance activity. | open |
@@ -803,6 +803,16 @@ Known-bugs #16 (the final-banner trap, hit twice before) was respected — the e
 `tests/test_end_to_end.py::test_lifecycle_across_a_restart_with_self_compaction`: a physical question routes to Physics alone (whole-word matching); a Maintainer is thrown away with two questions in flight and a new one recovers both, answering each exactly once; three more questions each bring an idle cycle, by the third of which idle evolution has compacted the surviving claims on its own; the consolidation audit passes over everything it compacted; audits ran every cycle. With the batch-1 and batch-2 scenarios, the end-to-end file now exercises all 22 phases together.
 
 **Full live suite: 501 passed, 1 skipped.** 502 collected.
+
+## 65. Calibration is finally fed (§5.3, §9.3) — Phase S
+
+The per-agent calibration store — §5.3's "accountability mechanism" — had never been written anywhere outside its own adversarial check. Idle re-examination is exactly when a claim's fate becomes known, so the idle commit round now records every re-examined claim's outcome at the confidence its agent originally claimed: `survived`/`weakened` count as verified (both withstood cross-examination), `challenged`/`unsupported` as overturned.
+
+**One claim, one data point:** the new `CalibrationStore.set_outcome(claim_key, …)` keeps each claim's *latest* fate and overwrites it if the fate changes; per-agent tallies are computed from those plus any explicit `record` calls. Tallying every re-examination instead would let a single long-lived claim swamp its agent's record — the same self-reinforcement trap §46 avoided for reputability (tested: three cycles over one surviving claim → one verified outcome; a claim whose source is later rejected flips to overturned).
+
+The Maintainer now computes `calibration_drift` for every agent after each idle cycle, reports `calibration_drifting` on its event, and records a `calibration` audit (tested: five 0.95-confidence claims that all fail re-examination flag Physics with an observed rate of 0.0). The API's Maintainer gets a calibration store too.
+
+**Full live suite: 506 passed, 1 skipped.** 507 collected (502 prior + 5 new in `tests/test_calibration_feeding.py`).
 
 ### Explicitly not on this list
 Any application-level work beyond what `deployment-playbook.md` promises to deliver (verified SSH access to a correctly-networked guest, not a deployed application).

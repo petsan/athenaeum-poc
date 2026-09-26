@@ -48,6 +48,7 @@ from .idle_evolution import (
 )
 from .reopening import rate_and_store_importance
 from .audits import reevaluation_audit, consolidation_audit
+from .evaluation import calibration_drift
 
 
 @dataclass
@@ -242,6 +243,14 @@ class Maintainer:
                 consolidation_audit(self.idle.consolidation, audit_id=f"cons-{cycle_id}", seed=self.cycles,
                                     cites=self.idle.cites, store=self.audits)
             audited = True
+        drifting = []
+        if self.idle.calibration is not None:
+            # 9.3: calibration as a continuous health metric -- per agent, every cycle
+            report = {a: calibration_drift(self.idle.calibration, a) for a in self.idle.calibration.agents()}
+            drifting = sorted(a for a, r in report.items() if r["drifting"])
+            if self.audits is not None:
+                self.audits.record("calibration", {"audit_id": f"cal-{cycle_id}", "agents": report,
+                                                   "drifting": drifting})
         return {"kind": "idle", "cycle_id": cycle_id, "status_counts": result["status_counts"],
                 "reopened": sorted(q for q, r in reopened.items() if r["reopened"]),
-                "amendments_adopted": adopted, "audited": audited}
+                "amendments_adopted": adopted, "audited": audited, "calibration_drifting": drifting}

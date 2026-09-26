@@ -38,6 +38,7 @@ from athenaeum_body.reputability_store import ReputabilityStore
 from athenaeum_body.consolidation_store import ConsolidationStore
 from athenaeum_body.domain_fidelity_store import DomainFidelityStore
 from athenaeum_body.human_checkpoint_store import HumanCheckpointStore
+from athenaeum_body.calibration_store import CalibrationStore
 from athenaeum_body.scheduler.work_unit import WorkUnit, RoundResult
 from .claims import Claim, next_claim_id
 from .rounds import cross_examination_round, reputability_factor
@@ -61,6 +62,7 @@ class IdleContext:
     # values unset by the design -- these are placeholders)
     consolidation_min_cycles: int = 5
     consolidation_min_sources: int = 2
+    calibration: CalibrationStore | None = None  # Section 5.3: fed with each claim's latest fate
 
 
 # --- round 0 ---------------------------------------------------------------
@@ -198,6 +200,15 @@ def commit(ctx: IdleContext, cycle_id: str, findings: list[dict], plan: dict) ->
                 if entry is not None and entry.get("tier") == "C":
                     decompact(ctx.consolidation, f["claim_key"], reason=f"{cycle_id}: now {f['status']}")
                     decompacted.append(f["claim_key"])
+
+    # 5.3: re-examination is when a claim's fate becomes known. Each claim's
+    # LATEST fate is kept (set_outcome overwrites), at the confidence its
+    # agent originally claimed; 'weakened' still survived cross-examination,
+    # 'unsupported' lost the source it rested on.
+    if ctx.calibration is not None:
+        for f in findings:
+            ctx.calibration.set_outcome(f["claim_key"], f["claim"]["issuing_agent"], f["claim"]["confidence"],
+                                        verified=f["status"] in ("survived", "weakened"))
 
     rulings = {}
     by_key = {f["claim_key"]: f for f in findings}

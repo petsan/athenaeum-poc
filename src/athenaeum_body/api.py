@@ -42,6 +42,7 @@ from .domain_fidelity_store import DomainFidelityStore
 from .human_checkpoint_store import HumanCheckpointStore
 from .belief_graph_store import BeliefGraphStore
 from .audit_store import AuditStore
+from .calibration_store import CalibrationStore
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from athenaeum_brain.loop import make_deliberation_unit  # noqa: E402
@@ -76,7 +77,8 @@ def build_app(data_dir: Path) -> App:
                          consolidation=ConsolidationStore(log_for("consolidation"),
                                                           ContentAddressedStore(data_dir / "archive")),
                          fidelity=DomainFidelityStore(log_for("fidelity")),
-                         checkpoints=HumanCheckpointStore(log_for("checkpoints"))),
+                         checkpoints=HumanCheckpointStore(log_for("checkpoints")),
+                         calibration=CalibrationStore(log_for("calibration"))),
         log_for=log_for, belief_graph=graph, audits=AuditStore(log_for("audits")),
         verification=verification)
     work_available = threading.Event()
