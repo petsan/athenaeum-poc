@@ -1,6 +1,6 @@
 # Open owner decisions — briefs
 
-Each brief covers one call that is the owner's to make. **Decisions 2–10 were made on 2026-09-26 (marked "Decided" below); 11 is open.** It gives the evidence gathered so far, the realistic options, what each costs, and a recommendation. None of the decided items is implemented yet (see batch 10 in `docs/progress.md`); the numbers match `docs/progress.md`'s owner-decision list. Written 2026-09-26, at the end of batch 9.
+Each brief covers one call that is the owner's to make. **Decisions 2–12 were made on 2026-09-26 (marked "Decided" below).** It gives the evidence gathered so far, the realistic options, what each costs, and a recommendation. None of the decided items is implemented yet (see batch 10 in `docs/progress.md`); the numbers match `docs/progress.md`'s owner-decision list. Written 2026-09-26, at the end of batch 9.
 
 ---
 
@@ -144,3 +144,14 @@ Each brief covers one call that is the owner's to make. **Decisions 2–10 were 
 - **(c)** Require **two** independent challengers to agree before a model challenge counts. Cost: only one model is admitted today, so nothing would count until a second is.
 
 **Recommendation: (a).** It measures the thing being trusted. The live probes in #36 are the seed of that benchmark.
+**Decided (owner, 2026-09-26): (a).** A curated judging benchmark; a challenger's "no" counts only once it scores above a stated accuracy on it, re-checked whenever the model, the prompt or the benchmark changes. Until then, dissent only.
+
+---
+
+## 12. Belief Graph storage layout (2026-09-26)
+
+**Evidence (§95).** After the ledger's per-question layout (decision 8), the Belief Graph was the fastest-growing store: every write snapshotted the whole graph (5.4 MB, a 177 KB state, after 60 questions).
+
+**Options.** (a) the same treatment: each write costs only its own entries, not the whole graph, with existing data carried over; (b) not yet.
+
+**Decided (owner, 2026-09-26): (a).** Implemented as an append-only journal (batch 11, Phase AS). Graph nodes are shared between questions (a source or claim belongs to many), so it is not split by question: each checkpoint holds just the nodes and edges it adds.
