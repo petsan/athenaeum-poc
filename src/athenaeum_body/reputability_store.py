@@ -154,13 +154,19 @@ class ReputabilityStore:
 
     # --- Section 6.4 -------------------------------------------------------
 
-    def log_dispute(self, subject_id: str, claim_ids: list[str], rationale: str, ruling: str) -> None:
-        """Section 6.4: dispute resolution, logged permanently with rationale."""
+    def log_dispute(self, subject_id: str, claim_ids: list[str], rationale: str, ruling: str,
+                    dispute_id: str | None = None) -> None:
+        """Section 6.4: dispute resolution, logged permanently with rationale.
+        A dispute_id makes the write idempotent -- logging the same id twice
+        (e.g. a killed-and-resumed idle-evolution cycle) records it once."""
         state = self._state()
-        state["disputes"].append({
-            "subject_id": subject_id, "claim_ids": claim_ids,
-            "rationale": rationale, "ruling": ruling,
-        })
+        if dispute_id is not None and any(d.get("dispute_id") == dispute_id for d in state["disputes"]):
+            return
+        entry = {"subject_id": subject_id, "claim_ids": claim_ids,
+                 "rationale": rationale, "ruling": ruling}
+        if dispute_id is not None:
+            entry["dispute_id"] = dispute_id
+        state["disputes"].append(entry)
         self.log.write_checkpoint(state, label="reputability")
 
     def disputes_for(self, subject_id: str) -> list[dict]:

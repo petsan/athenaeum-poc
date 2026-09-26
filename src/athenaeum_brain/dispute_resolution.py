@@ -91,7 +91,7 @@ def _category_errors(claims: list[Claim], question_id: str) -> list[dict]:
 
 def resolve_dispute(subject_id: str, sides: dict[str, list[Claim]], *,
                     reputability: ReputabilityStore, cites: dict | None = None,
-                    question_id: str = "dispute") -> dict:
+                    question_id: str = "dispute", dispute_id: str | None = None) -> dict:
     """Section 6.4. `sides` maps a side label to the claims on that side.
     A side's strength is the number of independent lines of evidence
     behind its category-error-free claims, not counting a line whose
@@ -141,5 +141,6 @@ def resolve_dispute(subject_id: str, sides: dict[str, list[Claim]], *,
     record.update({"ruling": ruling, "rationale": "; ".join(rationale),
                    "chaired_by": "Logic", "reversible_on_new_evidence": True})
     claim_ids = [c["claim_id"] for s in record["sides"].values() for c in s["claims"]]
-    reputability.log_dispute(subject_id, claim_ids, record["rationale"], ruling)  # step 4
+    reputability.log_dispute(subject_id, claim_ids, record["rationale"], ruling,
+                             dispute_id=dispute_id)  # step 4; idempotent when dispute_id is given
     return record

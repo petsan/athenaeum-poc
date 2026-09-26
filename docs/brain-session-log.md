@@ -843,6 +843,54 @@ consolidation compares claims across questions the same way.
 
 ---
 
+## 2026-09-26 — Idle evolution (§3.6, Phase C): design choices
+
+**Q: Why doesn't surviving re-examination count as corroboration?**
+
+Because it isn't new evidence. The same claim, citing the same source,
+re-examined by the same deterministic agents, will survive every cycle.
+If each survival recorded a `corroborated` outcome, any source would
+drift to `foundational` purely by being cited once and then idling —
+exactly the self-referential support §8's circular-corroboration row
+warns about, at the level of the system rather than of sources. Survival
+feeds consolidation (which *is* about repeated survival, §10.2) and
+nothing else.
+
+**Q: Why record current evidence weight, not raw confidence, in the
+consolidation history?**
+
+§10.2 excludes a claim with a declining confidence trend from Tier C
+even if it hasn't been overturned. An agent's raw confidence in a
+deterministic computation never declines; what declines is the support
+underneath it when a source is contested. Recording the weighted value
+makes §10.2's rule see that.
+
+**Q: Why propose amendments to a human instead of adopting them?**
+
+§6.5 says an amendment is "logged and reviewed the same way a
+substantive dispute is". Changing the standard regrades every source at
+once, the most far-reaching single write the Brain can make, and the
+evidence for it here is a heuristic (foundational-only claims being
+challenged). §11.5's checkpoint exists for exactly this kind of
+high-consequence change; the proposal goes there, and adoption requires
+a Reviewer's approval through the existing role- and conflict-checked
+path.
+
+**Q: Why four rounds with only the last writing anything?**
+
+The scheduler checkpoints between rounds; a process can die anywhere.
+Keeping rounds 0–2 pure means a resume just recomputes them. Round 3's
+writes are each keyed by the cycle id, so if the process dies after
+writing but before the checkpoint, re-running round 3 is a no-op for
+everything already written.
+
+**Real bug on the way (known-bugs.md #23):** re-examining claims from
+many past answers together exposed that claim ids were a per-process
+counter — ids from different processes collide, and challenges are
+attributed by id. Now uuid-based.
+
+---
+
 *See `docs/progress.md` §26 for the checklist this log's entries track
 against, and `docs/infra-topology.md` for the infrastructure-side design
 decisions made in the same planning conversation.*

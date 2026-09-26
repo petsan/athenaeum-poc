@@ -2,12 +2,15 @@
 from __future__ import annotations
 from dataclasses import dataclass, field, asdict
 from typing import Any, Dict, List
-import itertools
+import uuid
 
-_counter = itertools.count()
 
 def next_claim_id() -> str:
-    return f"claim-{next(_counter)}"
+    """Globally unique, not a per-process counter: claims from different
+    processes (distributed_worker.py rounds, a restarted runner, past
+    ledger versions) are compared and cross-examined together, and a
+    counter restarts at claim-0 in every process (known-bugs.md #23)."""
+    return f"claim-{uuid.uuid4().hex[:16]}"
 
 @dataclass
 class Claim:

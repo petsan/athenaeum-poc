@@ -18,17 +18,25 @@ def claim_key(claim: dict) -> str:
     return f"{claim['issuing_agent']}::{claim['statement']}"
 
 
-def record_survival(store: ConsolidationStore, key: str, claim: dict) -> dict:
+def record_survival(store: ConsolidationStore, key: str, claim: dict, cycle_id: str | None = None) -> dict:
     """Section 10.1-10.2: every time a claim survives another round of
-    cross-examination unchanged (an idle-evolution re-challenge cycle, or
-    -- in this POC, since there's no idle-evolution loop yet -- a repeat
-    deliberation reaching the same conclusion), record one more cycle of
-    survival, accumulate any newly-seen independent sources, and append
-    to the confidence history."""
+    cross-examination unchanged (an idle-evolution re-challenge cycle,
+    idle_evolution.py, or a repeat deliberation reaching the same
+    conclusion), record one more cycle of survival, accumulate any
+    newly-seen independent sources, and append to the confidence history.
+
+    cycle_id makes the record idempotent: an idle-evolution cycle that is
+    killed after recording but before checkpointing re-runs its final
+    round, and must not count the same cycle twice."""
     entry = store.get(key) or {
         "tier": "B", "cycles": 0, "sources": [], "confidence_history": [],
         "statement": claim["statement"], "archive_ref": None,
     }
+    if cycle_id is not None:
+        seen = entry.setdefault("cycle_ids", [])
+        if cycle_id in seen:
+            return entry
+        seen.append(cycle_id)
     entry["cycles"] += 1
     for src in claim.get("supporting_provenance", []):
         if src not in entry["sources"]:

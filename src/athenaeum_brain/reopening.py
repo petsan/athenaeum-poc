@@ -175,17 +175,23 @@ def reopen_question(ledger: QuestionLedger, question_id: str, *, reasons: list[s
 
 def reopen_if_material(ledger: QuestionLedger, question_id: str, *, reputability, unit_log: CheckpointLog,
                        importance_threshold: float = 0.3, grade_threshold: int = 1,
-                       forecast_outcome: bool | None = None, consolidation=None) -> dict:
+                       forecast_outcome: bool | None = None, consolidation=None,
+                       additional_reasons: list[str] = ()) -> dict:
     """Section 7.3's trigger: reopen when materiality (7.2) fires for a
     sufficiently important question. A forecast resolution is the one
     exception to the importance gate -- always material, unconditionally.
     The outcome is passed in explicitly, never looked up (9.9: the system
-    must not see a resolution it could have learned early)."""
+    must not see a resolution it could have learned early).
+
+    additional_reasons: material findings from outside the grade-based
+    rules -- e.g. idle evolution (3.6) finding that a claim this answer
+    relied on is now challenged, 7.2's "newly challenged claim" trigger.
+    They are subject to the same importance gate."""
     entry = ledger.get(question_id)
     prior = entry.versions[-1]
     current, under_prior = materiality_inputs(prior, reputability)
     materiality = is_material(prior, current, threshold=grade_threshold, prior_standard_grades=under_prior)
-    reasons = list(materiality["reasons"])
+    reasons = list(materiality["reasons"]) + list(additional_reasons)
     extra = {}
 
     forecast = prior.get("output_answer", {}).get("sections", {}).get(FORECAST)

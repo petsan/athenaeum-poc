@@ -127,6 +127,12 @@ These aren't bugs in the sense of "code that was wrong" — they're incorrect as
 **Fix:** The statement now names its question (`the question '…' asks for a normative conclusion; …`). A scan of every statement template in `agents.py` found no other deictic wording (only defeat conditions use "this", which are never compared across deliberations).
 **Lesson:** A claim's statement must be self-contained — meaningful with no knowledge of the question it came from — because the Belief Graph, consolidation and dependency tracking all compare claims across questions. Review any new statement template for "this", "here", "the question" before it ships.
 
+### 23. Claim ids were a per-process counter, so they repeated across processes
+**What happened:** `claims.next_claim_id()` returned `claim-0`, `claim-1`, … from a module-level `itertools.count()`. Every process starts again at `claim-0`. Found 2026-09-26 while designing idle evolution (Phase C), which cross-examines claims drawn from *many* past ledger answers together: two claims from answers produced in different processes could share an id, and cross-examination attributes each challenge by `target_claim_id` — so a challenge could land on the wrong claim. The same collision was already possible within one deliberation run through `distributed_worker.py`, whose rounds execute in separate worker processes, and in the dispute log, which records claim ids.
+**Root cause:** An id that is only unique within one process was used as if it were globally unique, in a system whose whole point is persistence across restarts and processes.
+**Fix:** `next_claim_id()` now returns `claim-<16 hex chars of a uuid4>`. No test depended on the sequence. Idle evolution additionally gives every re-examined claim a fresh id for its pass, so historic answers written with old counter ids can't collide either.
+**Lesson:** Any identifier that is persisted, sent to another process, or compared across runs needs to be unique beyond the process that minted it. A counter is fine only for ids that never leave memory.
+
 ---
 
 ## Open known limitations (found, not yet fixed)
@@ -136,6 +142,8 @@ Real, reproduced behaviours that are wrong or weak but deliberately not fixed in
 - **Keyword routing over-reaches.** Physics is routed any question containing "fall" or "drop", including "the fall of the Berlin Wall". Since #21 it no longer makes a *deterministic* claim there, but it is still routed, so with a live model its fallback path can issue a Physics claim about a political event. Keyword jurisdiction is the POC's stated simplification; Domain Fidelity's overreach rate (§2.4) is the mechanism meant to surface this. (Found 2026-09-26.)
 - **Mathematics checks primality of any bare integer** in a question it's routed to — "is 17 prime and does a ball fall 4.9m in 1 second?" also commits "1 is not prime". Same root cause class as #21. (Found 2026-09-26.)
 - **Engineering's rounding claims are typed `executable`** although they come from an in-process `decimal` computation, not a sandbox run. The design reserves `executable` for real sandboxed execution (brain-design.md §3.5, §8 "unverified execution claims"), and `model_backed_reasoning.py` already follows that rule. Changing it alters the Engineering-vs-Mathematics plural-answer tests' fixtures, so it belongs with the cross-agent verification work (Phase D) where executable claims get re-examined. (Found 2026-09-26.)
+- **A live-model test asserts a small model's factual answer.** `test_model_serving_real.py::test_model_serving_layer_routes_real_request_through_cpu_fallback` checks that `qwen2.5-1.5b`'s reply to "Name the largest planet" contains "jupiter". On 2026-09-26 one full-suite run got *"Saturn is the largest planet…"* — genuine sampling error from a 1.5B model — and failed; five immediate re-runs all passed. The test's purpose is proving CPU-fallback routing works, which it did; the factual assertion makes it intermittently flaky. Loosening it changes what the test asserts, so it's left for an explicit decision (options: assert a non-empty response only, or ask a question the model can't plausibly get wrong).
+- **Idle evolution can only re-challenge what today's cross-examiners check.** The toy agents' `cross_examine` methods recognise specific claim shapes (re-derivable fall times, primality, normative words in empirical claims, over-confident traditional claims, jurisdiction flags). A committed model-backed claim with an unfamiliar shape survives re-examination by default. The grade-based statuses (`unsupported`, `weakened`) don't depend on this. (Found 2026-09-26, Phase C.)
 
 ---
 
@@ -191,6 +199,7 @@ Before writing similar code again in this project:
 - **Any new API/serialization boundary:** re-read entry 10. Check the actual runtime type after a round-trip.
 - **Any new test:** re-read entries 11–14 before assuming a failing test means the implementation is wrong (entry 12 has recurred once already).
 - **Any new claim statement template:** re-read entry 22 — statements must be self-contained, never "this question".
+- **Any new identifier that is persisted or crosses a process boundary:** re-read entry 23 — never a per-process counter.
 - **Any new parser that pulls numbers or quantities out of question text:** re-read entry 21 and the open limitations list — require a unit or grammatical role, never just "it's numeric".
 - **Any new demo/narrated script:** re-read entry 16 before appending to it.
 - **Any security or reliability claim in a design doc:** re-read entry 15 before writing "both X and Y share a cause" — prove it, don't infer it.
