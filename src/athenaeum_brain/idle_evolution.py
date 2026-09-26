@@ -47,7 +47,7 @@ from .consolidation import claim_key, record_survival, should_promote_to_c, comp
 from .dispute_resolution import resolve_dispute
 from .domain_fidelity import compute_score, needs_review
 from .fidelity_remediation import remediate
-from .belief_graph import citations
+from .belief_graph import citations, questions_relying_on_source
 
 SUBMITTER = "idle-evolution"  # recorded as the proposer of standard amendments
 
@@ -185,6 +185,26 @@ def review(findings: list[dict], exam: list[dict], reputability: ReputabilitySto
     }
 
 
+def grade_change_candidates(ctx: IdleContext) -> dict[str, list[str]]:
+    """7.2's first trigger at full reach. Every question whose latest answer
+    relies on a source now graded differently from the grade snapshotted when
+    the answer was made -- found through the Belief Graph, not just among the
+    claims this cycle sampled. Returns {question_id: [changed source ids]}.
+    Whether a change is material, and whether the question clears the
+    importance gate, is still reopen_if_material's call."""
+    if ctx.belief_graph is None:
+        return {}
+    found: dict[str, list[str]] = {}
+    for src in ctx.reputability.graded_subjects():
+        now = ctx.reputability.current_grade(src)["grade"]
+        for qid in questions_relying_on_source(ctx.belief_graph, src):
+            entry = ctx.ledger.get(qid)
+            then = (entry.versions[-1].get("source_grades_at_use", {}).get(src) or {}).get("grade") if entry else None
+            if then is not None and then != now:
+                found.setdefault(qid, []).append(src)
+    return found
+
+
 # --- round 3 ---------------------------------------------------------------
 
 def commit(ctx: IdleContext, cycle_id: str, findings: list[dict], plan: dict) -> dict:
@@ -264,6 +284,7 @@ def commit(ctx: IdleContext, cycle_id: str, findings: list[dict], plan: dict) ->
         "fidelity_flags": flagged,
         "remediation": remediation,
         "reevaluation_candidates": plan["reevaluation_candidates"],
+        "grade_change_candidates": plan.get("grade_change_candidates", {}),  # absent in pre-Phase-X plans
         "amendment_proposal": proposal,
     }
 
@@ -293,8 +314,9 @@ def make_idle_evolution_unit(ctx: IdleContext, cycle_id: str, *, sample_size: in
         if round_index == 1:
             return RoundResult(proposed_writes=writes(state, reexamine(mine["sample"], ctx.reputability, cycle_id)))
         if round_index == 2:
-            return RoundResult(proposed_writes=writes(
-                state, {"plan": review(mine["findings"], mine["exam"], ctx.reputability)}))
+            plan = {**review(mine["findings"], mine["exam"], ctx.reputability),
+                    "grade_change_candidates": grade_change_candidates(ctx)}
+            return RoundResult(proposed_writes=writes(state, {"plan": plan}))
         if round_index == 3:
             result = commit(ctx, cycle_id, mine["findings"], mine["plan"])
             return RoundResult(proposed_writes=writes(state, {"idle_result": result}), done=True)
@@ -326,10 +348,17 @@ def feed_reevaluation(ctx: IdleContext, idle_result: dict, *, unit_log_for, impo
     the cycle's findings as additional material reasons (7.2). The usual
     importance gate still applies. unit_log_for(question_id) supplies a
     fresh checkpoint log for each reopen; with a Belief Graph, reopened
-    versions are recorded there too."""
+    versions are recorded there too.
+
+    Questions found only through a grade change (grade_change_candidates)
+    are handed over with no additional reasons: reopen_if_material's own
+    grade materiality check states the change itself."""
     from .reopening import reopen_if_material
+    candidates = dict(idle_result["reevaluation_candidates"])
+    for qid in idle_result.get("grade_change_candidates", {}):
+        candidates.setdefault(qid, [])
     outcomes = {}
-    for qid, reasons in idle_result["reevaluation_candidates"].items():
+    for qid, reasons in candidates.items():
         outcomes[qid] = reopen_if_material(
             ctx.ledger, qid, reputability=ctx.reputability, unit_log=unit_log_for(qid),
             importance_threshold=importance_threshold, consolidation=ctx.consolidation,

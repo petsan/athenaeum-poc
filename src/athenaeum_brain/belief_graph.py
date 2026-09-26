@@ -19,6 +19,10 @@ Edges:
 Uses:
   dependents()             -- 7.1: other questions whose latest answer relies
                               on a claim this question's latest answer relies on
+  questions_relying_on_source()
+                           -- 7.2's first trigger at full reach: every question
+                              whose latest answer rests on a source, so a grade
+                              change isn't limited to what idle evolution sampled
   newly_relevant_claims()  -- 7.2's second trigger, read narrowly and
                               mechanically: after this question's latest
                               answer, some OTHER question committed a claim
@@ -116,6 +120,22 @@ def newly_relevant_claims(graph: BeliefGraphStore, question_id: str) -> list[dic
             found[e.target_id] = {"claim": e.target_id.split(":", 1)[1], "subject": claim.data["subject"],
                                   "from_question": answer.data["question_id"]}
     return list(found.values())
+
+
+def questions_relying_on_source(graph: BeliefGraphStore, source_id: str) -> list[str]:
+    """Questions whose LATEST answer relies on (commits) a claim citing this
+    source -- source <-cites- claim <-relies_on- answer. Superseded versions
+    don't count: a reopened answer already reflects what it was reopened for."""
+    found = set()
+    for cite in graph.edges(target_id=f"source:{source_id}", edge_type="cites"):
+        if not cite.source_id.startswith("claim:"):
+            continue  # a source citing a source is not reliance
+        for rel in graph.edges(target_id=cite.source_id, edge_type="relies_on"):
+            qid = graph.node(rel.source_id).data["question_id"]
+            latest = latest_answer(graph, qid)
+            if latest is not None and latest.id == rel.source_id:
+                found.add(qid)
+    return sorted(found)
 
 
 def citations(graph: BeliefGraphStore) -> dict[str, list[str]]:

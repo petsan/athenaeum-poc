@@ -137,6 +137,11 @@ class ReputabilityStore:
         return [{"decided_under": 0, "cause": "evidence", **v}
                 for v in self._state()["grade_versions"].get(subject_id, [])]
 
+    def graded_subjects(self) -> list[str]:
+        """Every subject with at least one grade decision -- the only ones
+        whose grade can differ from the ungraded default."""
+        return sorted(self._state()["grade_versions"])
+
     # --- Section 6.5: the standard itself --------------------------------
 
     def standards(self) -> list[dict]:

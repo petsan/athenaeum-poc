@@ -363,7 +363,7 @@ Same rules and stop conditions. Each item is a gap confirmed in the code while b
 | Phase | Scope | Status |
 |---|---|---|
 | W | **A failing unit is lost silently** — `MultiUnitScheduler.process_one_round` pops a unit before running its round and requeues it only on success, so a round that raises drops the unit. The API worker logs an `error` event, but the question stays `active` forever; after a restart the Maintainer resubmits it and loses it again. Catch per-unit failures in the Maintainer, retry a bounded number of times from the last completed round, then mark the question `suspended` with the error and drop it from the registry. Surface this in the API and the client. | **done** — §70, known-bugs #31 |
-| X | **Grade changes reach every dependent answer (§7.2, first trigger)** — re-evaluation candidates come only from the ~20 claims an idle cycle samples, so a source that turns `rejected` leaves unsampled answers relying on it unreopened indefinitely. Each cycle, use the Belief Graph (source ← claim ← answer) to find every question whose latest answer relies on a source whose grade changed since the previous cycle, and hand those questions to re-evaluation as well. | open |
+| X | **Grade changes reach every dependent answer (§7.2, first trigger)** — re-evaluation candidates come only from the ~20 claims an idle cycle samples, so a source that turns `rejected` leaves unsampled answers relying on it unreopened indefinitely. Each cycle, use the Belief Graph (source ← claim ← answer) to find every question whose latest answer relies on a source whose grade changed since the previous cycle, and hand those questions to re-evaluation as well. | **done** — §71 |
 | Y | **Scheduled ingestion (§9)** — `ingestion.py`'s docstring promises "a scheduled work-unit type", and none exists. Make ingestion a checkpointed WorkUnit the Maintainer runs at low priority: per source, fetch, check, normalize, then record in the CAS and graph, with no re-fetch or double record after a kill. Tests use fixtures plus a real localhost HTTP fetch. | open |
 | Z | **Human checkpoints visible** — standard-amendment proposals and human-input checkpoints wait for a reviewer, but nothing outside Python can see them. Add a read-only `GET /api/checkpoints` and a client panel. *Approving* over the unauthenticated API is deliberately not built (owner decision 7). | open |
 | — | End-to-end test extended; README draft refreshed (local); plan batch 6. | open |
@@ -903,6 +903,23 @@ Tests (`tests/test_maintenance_failures.py`, fault injection by wrapping the uni
 The client smoke test gained the suspended/failed display.
 
 **Full live suite: 533 passed, 1 skipped.** 534 collected (528 prior + 6 new in `tests/test_maintenance_failures.py`).
+
+## 71. Grade changes reach every dependent answer — Phase X
+
+§7.2's first trigger (a source an answer relied on changed grade) only ever fired for claims an idle cycle happened to sample, 20 by default. It was weaker than that, too: a source falling to `contested` leaves the sampled claim `weakened`, which isn't a re-evaluation candidate, so such a change reached no answer at all (tested as the control case).
+
+Now idle round 2 also runs `grade_change_candidates`. For every graded source (`ReputabilityStore.graded_subjects()`), `belief_graph.questions_relying_on_source` walks source ← claim ← answer to every question whose **latest** answer commits a claim citing it. Superseded versions, dissent-only claims and source→source citations don't count. A question becomes a candidate when its answer's snapshot grade for that source differs from today's. `feed_reevaluation` hands those questions to `reopen_if_material` with no added reasons, since its own grade-materiality check states the change, and the importance gate applies as always.
+
+It is idempotent without a watermark: a reopened answer snapshots the new grade, so it stops being a candidate. The idle result reports `grade_change_candidates`.
+
+Tested:
+- three prime answers citing one source are all reopened in the cycle after it is downgraded, with only one claim sampled, and the question answered after the change is not;
+- the next cycle reopens nothing;
+- without the graph, the same change reopens nothing.
+
+One behaviour surfaced while writing the test is correct but worth knowing: every deliberation citing a source records a corroboration, so a borderline downgrade can be undone by the next question's use. The answers then correctly match again, and the new answer, whose snapshot was taken under the brief downgrade, is the one reopened.
+
+**Full live suite: 537 passed, 1 skipped.** 538 collected (534 prior + 4 new in `tests/test_grade_change_reach.py`).
 
 ### Explicitly not on this list
 Any application-level work beyond what `deployment-playbook.md` promises to deliver (verified SSH access to a correctly-networked guest, not a deployed application).
