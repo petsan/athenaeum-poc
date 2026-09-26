@@ -165,3 +165,28 @@ def model_backed_claim(*, agent_name: str, question: str, question_id: str,
         supporting_provenance=[f"llm:{model_name}"],
         serving_model=model_name,
     )
+
+
+CHALLENGE_PROMPT = "Is the following statement true? Answer yes or no. Statement: {statement}"
+
+
+def model_challenge(claim: Claim, question_id: str, model_name: str = DEFAULT_MODEL) -> Claim | None:
+    """Owner decision 10 (2026-09-26): a model may challenge a model-backed
+    claim during idle re-examination. It is asked a plain yes/no question
+    about the claim; an answer starting "no" is a challenge, and anything
+    else (yes, unsure, unparseable, unreachable) is none -- a model's
+    silence or rambling is never read as disagreement. Whether the
+    challenge COUNTS is the caller's call (idle_evolution.reexamine):
+    only an established model's does."""
+    verdict = ask_model(CHALLENGE_PROMPT.format(statement=claim.statement), model_name, n_predict=8)
+    words = (verdict or "").strip().lower().split()
+    if not words or words[0].strip(".,!:;\"'") != "no":
+        return None
+    return Claim(
+        question_id=question_id, round=2, issuing_agent=f"model:{model_name}",
+        statement=f"{model_name} answers 'no' to whether '{claim.statement}' is true",
+        claim_type="empirical", confidence=FALLBACK_CONFIDENCE,
+        defeat_condition=GENERIC_DEFEAT_CONDITION, jurisdiction_check=True,
+        relation="challenges", target_claim_id=claim.claim_id,
+        supporting_provenance=[f"llm:{model_name}"], serving_model=model_name,
+    )

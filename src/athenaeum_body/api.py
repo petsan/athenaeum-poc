@@ -129,7 +129,10 @@ def build_app(data_dir: Path) -> App:
                                                           ContentAddressedStore(data_dir / "archive")),
                          fidelity=DomainFidelityStore(log_for("fidelity")),
                          checkpoints=HumanCheckpointStore(log_for("checkpoints")),
-                         calibration=CalibrationStore(log_for("calibration"))),
+                         calibration=CalibrationStore(log_for("calibration")),
+                         # owner decision 10: the admitted model re-examines model-backed
+                         # claims; its challenges count once it is 'established'
+                         model_challenger=DEFAULT_MODEL, model_fitness=model_fitness),
         log_for=log_for, belief_graph=graph, audits=AuditStore(log_for("audits")),
         verification=verification, ingestion_cas=cas, model_fitness=model_fitness)
     # Ingestion runs through maintainer.submit_ingestion from Python only: an

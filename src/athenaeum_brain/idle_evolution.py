@@ -49,6 +49,9 @@ from .domain_fidelity import compute_score, needs_review
 from .fidelity_remediation import remediate
 from .belief_graph import citations, questions_relying_on_source
 from .reevaluation import IMPORTANCE_THRESHOLD
+from .model_backed_reasoning import model_challenge
+from .model_fitness import is_model_backed, model_standing
+from athenaeum_body.model_fitness_store import ModelFitnessStore
 
 SUBMITTER = "idle-evolution"  # recorded as the proposer of standard amendments
 
@@ -67,6 +70,10 @@ class IdleContext:
     consolidation_min_cycles: int = 5
     consolidation_min_sources: int = 2
     calibration: CalibrationStore | None = None  # Section 5.3: fed with each claim's latest fate
+    # Owner decision 10: a model that re-examines model-backed claims (None:
+    # off), and the fitness store that says whether its challenges count yet
+    model_challenger: str | None = None
+    model_fitness: ModelFitnessStore | None = None
 
     def citation_map(self) -> dict:
         """`cites` merged with what ingestion recorded in the Belief Graph
@@ -98,15 +105,26 @@ def sample_claims(ledger: QuestionLedger, sample_size: int, seed: int) -> list[d
 
 # --- round 1 ---------------------------------------------------------------
 
-def reexamine(sample: list[dict], reputability: ReputabilityStore, cycle_id: str) -> dict:
+def reexamine(sample: list[dict], reputability: ReputabilityStore, cycle_id: str, *,
+              challenger: str | None = None, challenger_established: bool = False) -> dict:
     """Cross-examines every sampled claim afresh and re-weighs it under
     current grades. Claims get fresh ids for this pass: claims from
     different past deliberations are examined together and must not share
     ids. Status per claim:
       challenged  -- a current agent now challenges it
       unsupported -- its weakest source is now rejected (factor 0)
+      disputed    -- only a model disputes it, and that model hasn't yet
+                     earned the standing for its challenge to count
       weakened    -- survived, but its evidence weight fell since commit
-      survived    -- survived with undiminished support"""
+      survived    -- survived with undiminished support
+
+    Owner decision 10: the deterministic cross-examiners only recognise
+    claim shapes they were written for, so a model-backed claim of any
+    other shape used to survive by default. With a `challenger` model, each
+    model-backed claim nobody else challenged is put to it as well. An
+    established challenger's "no" is a full challenge; a provisional one's
+    is recorded as dissent ('disputed'), which reopens nothing and counts
+    toward no grade, fitness or calibration."""
     lookup = lambda src: reputability.current_grade(src)["grade"]
     claims = [Claim(**{**s["claim"], "claim_id": next_claim_id()}) for s in sample]
     exam = cross_examination_round(claims, cycle_id)
@@ -120,10 +138,17 @@ def reexamine(sample: list[dict], reputability: ReputabilityStore, cycle_id: str
         factor_now = reputability_factor(c.supporting_provenance, lookup, reputability.current_standard()["grade_weights"])
         factor_then = s["claim"].get("reputability_factor")
         against = challenges.get(c.claim_id, [])
+        dissent = None
+        if not against and challenger and is_model_backed(c.serving_model):
+            dissent = model_challenge(c, cycle_id, challenger)
+            if dissent is not None and challenger_established:
+                against, dissent = [dissent], None
         if against:
             status = "challenged"
         elif factor_now == 0.0:
             status = "unsupported"
+        elif dissent is not None:
+            status = "disputed"
         elif factor_then is not None and factor_now < factor_then:
             status = "weakened"
         else:
@@ -133,6 +158,7 @@ def reexamine(sample: list[dict], reputability: ReputabilityStore, cycle_id: str
             "claim": c.to_dict(), "status": status,
             "factor_then": factor_then, "factor_now": factor_now,
             "challenges": [r.to_dict() for r in against],
+            "dissent": [dissent.to_dict()] if dissent is not None else [],
         })
     return {"findings": findings, "exam": [r.to_dict() for r in exam]}
 
@@ -244,6 +270,8 @@ def commit(ctx: IdleContext, cycle_id: str, findings: list[dict], plan: dict) ->
     if ctx.calibration is not None:
         with ctx.calibration.log.batch():   # one checkpoint per cycle, not per claim
             for f in findings:
+                if f["status"] == "disputed":
+                    continue   # an unproven model's dissent settles nothing (decision 10)
                 ctx.calibration.set_outcome(f["claim_key"], f["claim"]["issuing_agent"], f["claim"]["confidence"],
                                             verified=f["status"] in ("survived", "weakened"))
 
@@ -282,7 +310,10 @@ def commit(ctx: IdleContext, cycle_id: str, findings: list[dict], plan: dict) ->
     return {
         "cycle_id": cycle_id,
         "status_counts": {s: sum(1 for f in findings if f["status"] == s)
-                          for s in ("survived", "weakened", "unsupported", "challenged")},
+                          for s in ("survived", "weakened", "unsupported", "challenged", "disputed")},
+        "model_dissent": [{"question_id": f["question_id"], "claim_key": f["claim_key"],
+                           "dissent": f["dissent"][0]["statement"]}
+                          for f in findings if f.get("dissent")],
         "recorded_survival": survived,
         "compacted": compacted,
         "decompacted": decompacted,
@@ -318,7 +349,11 @@ def make_idle_evolution_unit(ctx: IdleContext, cycle_id: str, *, sample_size: in
         if round_index == 0:
             return RoundResult(proposed_writes=writes(state, {"sample": sample_claims(ctx.ledger, sample_size, seed)}))
         if round_index == 1:
-            return RoundResult(proposed_writes=writes(state, reexamine(mine["sample"], ctx.reputability, cycle_id)))
+            established = (ctx.model_challenger is not None and ctx.model_fitness is not None
+                           and model_standing(ctx.model_fitness, ctx.model_challenger) == "established")
+            return RoundResult(proposed_writes=writes(state, reexamine(
+                mine["sample"], ctx.reputability, cycle_id,
+                challenger=ctx.model_challenger, challenger_established=established)))
         if round_index == 2:
             plan = {**review(mine["findings"], mine["exam"], ctx.reputability),
                     "grade_change_candidates": grade_change_candidates(ctx)}

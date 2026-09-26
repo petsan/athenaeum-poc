@@ -1288,6 +1288,29 @@ Tests (added to `tests/test_human_input.py`):
 
 **Full live suite: 615 passed, 1 skipped.** 616 collected (610 prior + 6 new).
 
+## 92. Models may challenge in idle re-examination — Phase AO (decision 10)
+
+The deterministic cross-examiners only recognise the claim shapes they were written for, so a committed model-backed claim of any other shape survived idle re-examination by default. Now:
+- **`model_backed_reasoning.model_challenge`** puts a claim to a model as a plain yes/no question. Only an answer starting with a plain "no" is a challenge. Yes, unsure, "nope", empty, or an unreachable model is none, so a model's silence or rambling is never read as disagreement. The challenge is a `challenges` claim from `model:<name>`, targeting the claim.
+- **In `idle_evolution.reexamine`**, with a `model_challenger` on the idle context, every sampled claim that is model-backed and wasn't challenged by the deterministic agents is put to the challenger. Deterministic claims are never put to it (tested).
+- **Whether it counts** depends on the challenger's standing in the fitness store:
+  - If it is `established`, its "no" is a full challenge: the claim is `challenged`, becomes a re-evaluation candidate, and goes to dispute resolution.
+  - Otherwise the claim is **`disputed`**: the dissent is recorded in the finding and listed in the cycle's new `model_dissent`. It reopens nothing, gets no consolidation survival credit, and records no calibration outcome.
+  - `status_counts` now includes `disputed`, which the client's maintenance panel shows as-is.
+- **Wiring:** the API sets the challenger to its admitted model, OLMo 3 7B, with the fitness store, and the Maintainer passes its fitness store to the idle context if it has none. Elsewhere the challenger defaults to off. Since OLMo 3 7B is `provisional` today, its challenges are currently dissent only, exactly as decided.
+
+Tests (`tests/test_model_challenge.py`):
+- which verdicts count as a challenge (8 cases);
+- a provisional challenger's "no" becomes `disputed`, with no reopen, survival or calibration, and only the model-backed claim was asked;
+- an established challenger's "no" becomes `challenged`, a reopen candidate and a dispute;
+- a "yes" changes nothing;
+- with no challenger nothing is asked;
+- the API turns it on.
+
+The known-bugs open limitation is annotated: model-backed claims are now examined, and deterministic claims of unfamiliar shapes still rely on the cross-examiners.
+
+**Full live suite: 628 passed, 1 skipped.** 629 collected (616 prior + 13 new).
+
 ### Batch 10 (planned 2026-09-26, implementing the owner's decisions)
 
 The owner decided 2–5 and 7–10 on 2026-09-26, each as recommended in `docs/owner-decisions.md`; 6 waits on reading `README.draft.md`. Each phase implements one or two decisions. Where a decision changes an existing test's meaning, that change is now owner-approved and is called out in the phase's write-up.
@@ -1298,7 +1321,7 @@ The owner decided 2–5 and 7–10 on 2026-09-26, each as recommended in `docs/o
 | AL | 3 | Engineering's rounding claims become `formal`. Its fidelity fingerprint becomes "names an implementation standard" (IEEE-754, formats, protocols), without depending on the sandbox. The Mathematics-vs-Engineering plural answer is kept. | **done** — §89 |
 | AM | 4 | Admit OLMo 3 7B with a written rationale, and wire a `ModelFitnessStore` into the API. Model claims start at 0.5 per agent and move with outcomes. | **done** — §90 |
 | AN | 5 | Human input triggers a checkpoint only at importance ≥ the re-evaluation threshold, configured alongside it. | **done** — §91 |
-| AO | 10 | During idle re-examination a model may challenge a model-backed claim. The challenge is dissent, and counts toward reputability, fitness and calibration only once the challenging model is admitted and `established`. | open |
+| AO | 10 | During idle re-examination a model may challenge a model-backed claim. The challenge is dissent, and counts toward reputability, fitness and calibration only once the challenging model is admitted and `established`. | **done** — §92 |
 | AP | 7 | Per-reviewer tokens from a local config file (never in the repo) on new write endpoints: approve, reject or request more deliberation on a checkpoint, and submit ingestion. The reviewer id comes from the token, so §11's role and conflict-of-interest checks apply, and ingestion URLs are checked against a curator allow-list. | open |
 | AQ | 8 | One checkpoint log per question for the ledger, plus an index log, with a one-time migration of existing data. Re-measure with `scripts/measure_storage.py`. | open |
 | — | — | End-to-end test extended; live smoke; README draft refreshed. | open |

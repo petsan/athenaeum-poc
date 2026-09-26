@@ -104,6 +104,8 @@ class Maintainer:
         self.last_round_at: float | None = None
         if self.idle.belief_graph is None:
             self.idle.belief_graph = self.belief_graph  # idle cycles read ingested citations from it
+        if self.idle.model_fitness is None:
+            self.idle.model_fitness = self.model_fitness  # says whether a model's challenges count yet
         self._recover()
 
     # counters and registry, persisted in the checkpoint
