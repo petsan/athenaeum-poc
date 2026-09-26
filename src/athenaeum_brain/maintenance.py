@@ -30,6 +30,11 @@ resubmits every registered unit at its last completed round and harvests
 any that finished but weren't recorded. Question answers are recorded
 at-least-once and idempotently (never lost, never duplicated); an idle
 cycle's follow-ups are at-most-once (see _complete).
+
+Failing rounds (batch 5, Phase W): a round that raises is retried from the
+unit's last completed round a bounded number of times, then the unit is
+given up. A given-up question is marked `suspended`, and its error is kept
+under `failed`, never silently dropped (see _on_round_failed).
 """
 from __future__ import annotations
 from dataclasses import dataclass, field
@@ -57,6 +62,7 @@ class MaintenancePolicy:
     audit_every_cycles: int = 5
     idle_sample_size: int = 20
     importance_threshold: float = 0.3
+    max_round_failures: int = 3   # attempts at a failing round before its unit is given up
 
 
 @dataclass
@@ -169,7 +175,12 @@ class Maintainer:
         upcoming = self.scheduler._heap[0][2]
         if self._m["units"].get(upcoming.id, {}).get("kind") == "question" and upcoming.round_index == 0:
             self.ledger.set_status(upcoming.id, "active")  # queued -> active as its first round starts
-        unit = self.scheduler.process_one_round()
+        try:
+            unit = self.scheduler.process_one_round()
+        except Exception as e:  # the scheduler has already dropped the unit from its queue
+            event = self._on_round_failed(upcoming, e)
+            self.events.append(event)
+            return event
         if unit.status != "completed":
             return None
         event = self._complete(unit.id)
@@ -193,6 +204,50 @@ class Maintainer:
         del self._m["units"][unit_id]
         self._save()
         return self._on_idle_done(unit_id)
+
+    def _namespaces(self, unit_id: str) -> tuple[str, str]:
+        return f"deliberation:{unit_id}", f"idle:{unit_id}"
+
+    def _on_round_failed(self, unit, error: Exception) -> dict:
+        """A round raised. Its unit's scratch state goes back to the last
+        checkpoint, since a handler may have changed it before raising. The
+        unit is then retried from its last completed round, up to
+        `max_round_failures` attempts. After that it is given up: dropped
+        from the registry and recorded under `failed`, and a question is
+        marked `suspended`. The failure count is persisted, so a restart
+        doesn't reset it."""
+        info = self._m["units"][unit.id]
+        info["failures"] = info.get("failures", 0) + 1
+        info["last_error"] = f"{type(error).__name__}: {error}"
+        state = self.scheduler.runner.shared_state
+        saved = (self.scheduler.runner.log.read_latest() or {}).get("shared_state", {})
+        for ns in self._namespaces(unit.id):
+            if ns in saved:
+                state[ns] = saved[ns]
+            else:
+                state.pop(ns, None)
+        event = {"kind": "unit_error", "unit_id": unit.id, "unit_kind": info["kind"],
+                 "error": info["last_error"], "failures": info["failures"]}
+        if info["failures"] < self.policy.max_round_failures:
+            retry = (self._question_unit(unit.id, info["question"]) if info["kind"] == "question"
+                     else self._idle_unit(unit.id, info))
+            retry.round_index = self.scheduler.runner.resume_round_index(unit.id)
+            self._save()
+            self.scheduler.submit(retry)
+            return {**event, "retrying": True}
+        del self._m["units"][unit.id]
+        self._m.setdefault("failed", {})[unit.id] = info
+        for ns in self._namespaces(unit.id):
+            state.pop(ns, None)
+        if info["kind"] == "question":
+            self.ledger.set_status(unit.id, "suspended")
+        self._save()
+        return {**event, "kind": "unit_failed", "retrying": False}
+
+    @property
+    def failed(self) -> dict:
+        """Units given up after repeated round failures: {unit_id: info with last_error}."""
+        return self._m.get("failed", {})
 
     def run(self, max_rounds: int = 10_000) -> list[dict]:
         """Tick until there's nothing left to do (or max_rounds)."""

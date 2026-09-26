@@ -362,7 +362,7 @@ Same rules and stop conditions. Each item is a gap confirmed in the code while b
 
 | Phase | Scope | Status |
 |---|---|---|
-| W | **A failing unit is lost silently** — `MultiUnitScheduler.process_one_round` pops a unit before running its round and requeues it only on success, so a round that raises drops the unit. The API worker logs an `error` event, but the question stays `active` forever; after a restart the Maintainer resubmits it and loses it again. Catch per-unit failures in the Maintainer, retry a bounded number of times from the last completed round, then mark the question `suspended` with the error and drop it from the registry. Surface this in the API and the client. | open |
+| W | **A failing unit is lost silently** — `MultiUnitScheduler.process_one_round` pops a unit before running its round and requeues it only on success, so a round that raises drops the unit. The API worker logs an `error` event, but the question stays `active` forever; after a restart the Maintainer resubmits it and loses it again. Catch per-unit failures in the Maintainer, retry a bounded number of times from the last completed round, then mark the question `suspended` with the error and drop it from the registry. Surface this in the API and the client. | **done** — §70, known-bugs #31 |
 | X | **Grade changes reach every dependent answer (§7.2, first trigger)** — re-evaluation candidates come only from the ~20 claims an idle cycle samples, so a source that turns `rejected` leaves unsampled answers relying on it unreopened indefinitely. Each cycle, use the Belief Graph (source ← claim ← answer) to find every question whose latest answer relies on a source whose grade changed since the previous cycle, and hand those questions to re-evaluation as well. | open |
 | Y | **Scheduled ingestion (§9)** — `ingestion.py`'s docstring promises "a scheduled work-unit type", and none exists. Make ingestion a checkpointed WorkUnit the Maintainer runs at low priority: per source, fetch, check, normalize, then record in the CAS and graph, with no re-fetch or double record after a kill. Tests use fixtures plus a real localhost HTTP fetch. | open |
 | Z | **Human checkpoints visible** — standard-amendment proposals and human-input checkpoints wait for a reviewer, but nothing outside Python can see them. Add a read-only `GET /api/checkpoints` and a client panel. *Approving* over the unauthenticated API is deliberately not built (owner decision 7). | open |
@@ -880,6 +880,29 @@ A card is only redrawn when its status, version count, chosen version or importa
 V has its own tests (§68). `README.draft.md` is refreshed to cover batch 4, still local and unpushed (owner decision 6). Batch 5 is planned above, and its first phase fixes a bug found while planning: a unit whose round raises is silently dropped by the scheduler.
 
 **Full live suite: 527 passed, 1 skipped.** 528 collected (527 prior + 1 new end-to-end test).
+
+## 70. A failing round no longer loses its unit — Phase W
+
+known-bugs.md #31: a round that raised was silently dropped by the scheduler, and its question stayed `active` forever. The Maintainer now catches it per unit:
+1. The unit's namespace in the shared state is rolled back to the last checkpoint, since a handler may have changed it before raising.
+2. The unit is retried from its last completed round, which re-runs only the round that failed.
+3. After `MaintenancePolicy.max_round_failures` attempts (3, a placeholder) it is given up. It leaves the registry, its record including `last_error` moves to `failed`, and a question is marked `suspended`.
+
+The failure count lives in the persisted registry, so a crash-and-restart loop can't grant endless fresh attempts. Events: `unit_error` (with `retrying: true`) per failed attempt, and `unit_failed` when given up. A failing idle cycle is given up the same way without touching any question, and later cycles still run.
+
+**API and client:** a suspended question carries its `error` (`GET /api/questions[/<id>]`), `GET /api/maintenance` lists `failed_units`, and the client shows the error on the card and both event kinds in the maintenance panel, escaped like everything else.
+
+Tests (`tests/test_maintenance_failures.py`, fault injection by wrapping the unit factories):
+- a transient failure is retried to the same answer as a clean run;
+- a failing round's partial writes are rolled back;
+- a persistent failure suspends only its own question;
+- the count survives a restart;
+- a failing idle cycle is given up without touching questions;
+- the API reports the error.
+
+The client smoke test gained the suspended/failed display.
+
+**Full live suite: 533 passed, 1 skipped.** 534 collected (528 prior + 6 new in `tests/test_maintenance_failures.py`).
 
 ### Explicitly not on this list
 Any application-level work beyond what `deployment-playbook.md` promises to deliver (verified SSH access to a correctly-networked guest, not a deployed application).

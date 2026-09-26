@@ -191,6 +191,8 @@ function renderCard(entry) {
     html += renderDiff(versions[shown]) + renderClaims(versions[shown]);
   } else if (pending) {
     html += `<div class="note">Deliberating in the background...</div>`;
+  } else if (entry.status === "suspended") {
+    html += `<div class="claim"><span class="tag dissent">suspended</span>Deliberation failed repeatedly and was stopped: ${esc(entry.error || "no error recorded")}</div>`;
   }
   card.innerHTML = html;
   card.querySelectorAll(".versions button").forEach(b => b.addEventListener("click", () => {
@@ -209,6 +211,8 @@ function describeEvent(e) {
     if ((e.calibration_drifting || []).length) text += `; calibration drifting: ${e.calibration_drifting.join(", ")}`;
     return text;
   }
+  if (e.kind === "unit_error") return `${e.unit_id}: round failed (attempt ${e.failures}), retrying -- ${e.error}`;
+  if (e.kind === "unit_failed") return `${e.unit_id}: gave up after ${e.failures} failed attempts -- ${e.error}`;
   if (e.kind === "error") return `error: ${e.error}`;
   return JSON.stringify(e);
 }
@@ -218,7 +222,8 @@ async function refreshMaintenance() {
     const m = (await getJSON("/api/maintenance")).body;
     document.getElementById("maint-summary").textContent =
       `${m.idle_cycles} idle cycle(s), ${m.queued_units} unit(s) queued` +
-      (m.pending_amendments.length ? `, ${m.pending_amendments.length} amendment(s) awaiting review` : "");
+      (m.pending_amendments.length ? `, ${m.pending_amendments.length} amendment(s) awaiting review` : "") +
+      ((m.failed_units || []).length ? `, ${m.failed_units.length} failed` : "");
     const events = m.recent_events.slice().reverse();
     document.getElementById("maint-events").innerHTML = events.length
       ? events.map(e => `<li>${esc(describeEvent(e))}</li>`).join("")

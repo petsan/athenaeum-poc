@@ -164,6 +164,12 @@ These aren't bugs in the sense of "code that was wrong" — they're incorrect as
 **Fix:** `record_survival` on a Tier C node keeps it compact — `cycles_since_compaction` and `current_confidence` are recorded separately, so `cycles` and `confidence` keep matching the archived trace the §9.5 audit compares them against (a first version overwrote `confidence` and the audit, correctly, reported the mismatch). `compact()` is a no-op on a compacted node and preserves `cycle_ids`, so survival stays idempotent across a compaction. Pinned by `tests/test_auto_consolidation.py`.
 **Lesson:** When an entity changes shape across a lifecycle transition, every writer of that entity must be exercised *after* the transition, not just before it. And derived fields that an audit compares against a source of truth must never be rewritten in place — add new fields instead.
 
+### 31. A round that raised dropped its unit, leaving the question `active` forever
+**What happened:** `MultiUnitScheduler.process_one_round` pops a unit off its heap, runs one round and pushes it back only if the round returned. When a round raised, the unit was simply gone from the queue. The API's worker caught the exception and logged an `error` event, but the question stayed `active` in the ledger with no answer, and nothing would ever run it again. After a restart, the Maintainer's recovery resubmitted it from its registry, and it was lost again the next time it failed. Found 2026-09-26 while planning batch 5, by reading the scheduler; confirmed by a test that injects a failing round.
+**Root cause:** The scheduler was written for handlers that don't fail, and the one catch (in the API worker) was placed at the level of "keep the thread alive", not "keep the unit". The unit's own state — the registry, its checkpointed rounds and the ledger status — was never consulted on failure.
+**Fix (batch 5, Phase W):** `Maintainer.tick` catches a failing round. It restores that unit's namespace from the last checkpoint, because a handler may have changed it before raising, then resubmits the unit from its last completed round. After `MaintenancePolicy.max_round_failures` attempts (3), counted persistently so a restart doesn't reset them, the unit is given up: dropped from the registry, recorded under `failed` with its last error, and a question is marked `suspended`. The API returns the error with the question and lists failed units, and the client shows both. Pinned by `tests/test_maintenance_failures.py`.
+**Lesson:** For any queue that removes an item before processing it, ask what happens to the item when processing throws. "Log and keep going" protects the worker, not the work.
+
 ---
 
 ## Open known limitations (found, not yet fixed)
@@ -246,7 +252,7 @@ Before writing similar code again in this project:
 - **Any new claim statement template:** re-read entry 22 — statements must be self-contained, never "this question".
 - **Any new identifier that is persisted or crosses a process boundary:** re-read entry 23 — never a per-process counter.
 - **Any keyword or text matching against questions or statements:** re-read entry 28 — use `agents.mentions`, never substring containment.
-- **Any new work-unit handler, or anything run on `MultiUnitScheduler`:** re-read entry 26 — per-unit scratch state goes under the unit's own namespace, and a concurrency test must run more than one unit.
+- **Any new work-unit handler, or anything run on `MultiUnitScheduler`:** re-read entry 26 — per-unit scratch state goes under the unit's own namespace, and a concurrency test must run more than one unit. And entry 31 — know what happens to the unit when its round raises.
 - **Any new parser that pulls numbers or quantities out of question text:** re-read entry 21 and the open limitations list — require a unit or grammatical role, never just "it's numeric".
 - **Any new demo/narrated script:** re-read entry 16 before appending to it.
 - **Any security or reliability claim in a design doc:** re-read entry 15 before writing "both X and Y share a cause" — prove it, don't infer it.

@@ -123,7 +123,8 @@ def build_app(data_dir: Path) -> App:
             with lock:
                 try:
                     maintainer.tick()
-                except Exception as e:  # never let one bad round kill the worker silently
+                except Exception as e:  # a failing round is the Maintainer's to retry; this catches
+                    # anything else (e.g. a completed unit's follow-ups) so the worker never dies silently
                     maintainer.events.append({"kind": "error", "error": repr(e)})
                 busy = bool(maintainer.scheduler._heap)
             if not busy:
@@ -141,6 +142,7 @@ def build_app(data_dir: Path) -> App:
         with lock:
             return {"idle_cycles": maintainer.cycles, "queued_units": len(maintainer.scheduler._heap),
                     "pending_amendments": sorted(maintainer.pending_amendments),
+                    "failed_units": sorted(maintainer.failed),
                     "recent_events": maintainer.events[-10:]}
 
     def _with_question(entry: dict) -> dict:
@@ -149,8 +151,10 @@ def build_app(data_dir: Path) -> App:
         if entry["versions"]:
             question = entry["versions"][-1].get("question")
         else:
-            question = maintainer._m["units"].get(entry["id"], {}).get("question")
-        return {**entry, "question": question}
+            question = (maintainer._m["units"].get(entry["id"])
+                        or maintainer.failed.get(entry["id"], {})).get("question")
+        failed = maintainer.failed.get(entry["id"])
+        return {**entry, "question": question, **({"error": failed["last_error"]} if failed else {})}
 
     def list_questions() -> list:
         with lock:

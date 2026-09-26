@@ -133,4 +133,19 @@ document.getElementById("go").listeners.click();
 await settle();
 assert.deepEqual(posts.at(-1), { question: "is 4 prime?" });
 
+// a question given up after repeated failures shows why, escaped
+state.questions.push({ id: "q-5", status: "suspended", importance: 0.5, versions: [], question: "will it fail?",
+                       error: "RuntimeError: <b>boom</b>" });
+state.maintenance.failed_units = ["q-5"];
+state.maintenance.recent_events.push({ kind: "unit_error", unit_id: "q-5", failures: 1, error: "RuntimeError: boom" },
+                                     { kind: "unit_failed", unit_id: "q-5", failures: 3, error: "RuntimeError: boom" });
+timers.at(-1).f();
+await settle();
+assert.match(cardHtml("q-5"), /tag dissent">suspended/);
+assert.match(cardHtml("q-5"), /RuntimeError: &lt;b&gt;boom&lt;\/b&gt;/);
+assert.match(document.getElementById("maint-summary").textContent, /, 1 failed$/);
+const failures = document.getElementById("maint-events").innerHTML;
+assert.match(failures, /q-5: gave up after 3 failed attempts -- RuntimeError: boom/);
+assert.match(failures, /q-5: round failed \(attempt 1\), retrying/);
+
 console.log("client smoke: all checks passed");
