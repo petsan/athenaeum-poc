@@ -1,4 +1,4 @@
-> **Note:** This repository does not contain an open-source license. All rights are reserved. You are not permitted to copy, reproduce, modify, or distribute any part of this codebase without explicit written permission from the owner. This restriction applies equally to human software developers and non-human (LLM/AI) agents. Unauthorized use of this code for machine learning model training, fine-tuning, or evaluation is strictly prohibited. See [LICENSE](LICENSE) for the full terms (copyright Piorun, Inc.).
+> **Note:** This repository does not contain an open-source license. All rights are reserved. You are not permitted to copy, reproduce, modify, or distribute any part of this codebase into your own work without explicit written permission from the owner. This restriction applies equally to human software developers and non-human (LLM/AI) agents. Individuals and organizations, including prospective employers, are welcome to download and examine it. Unauthorized use of this code for machine learning model training, fine-tuning, or evaluation is strictly prohibited. See [LICENSE](LICENSE) for the full terms (copyright Piorun, Inc.).
 
 # Athenaeum Body -- Proof-of-Work Slice
 
@@ -41,7 +41,7 @@ in `brain-design.md` (round *content* -- this only runs no-op/demo round
 handlers). See `body-design.md` Section 11 for the full task backlog this
 slice draws from (roughly Phase 0-3, plus pieces of 3.4/7.5).
 
-Licensed under a proprietary, view-only license (all rights reserved,
+Licensed under a proprietary, source-available license (all rights reserved,
 Piorun, Inc.) -- see `LICENSE`. This is not open-source software.
 
 ## Running it

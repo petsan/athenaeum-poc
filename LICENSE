@@ -1,24 +1,42 @@
 Copyright (c) 2026 Piorun, Inc. All rights reserved.
 
-PROPRIETARY SOURCE-AVAILABLE LICENSE -- VIEW ONLY
+PROPRIETARY SOURCE-AVAILABLE LICENSE -- EXAMINE, DON'T TAKE
 
 This repository and all of its contents, including without limitation
 source code, tests, scripts, configuration, documentation, and design
 documents (collectively, the "Software"), are the proprietary property of
 Piorun, Inc. (the "Owner") and are protected by copyright law and
-international treaties. The Software is made publicly visible solely so
-that it may be viewed. It is NOT open-source software, and no
-open-source license is granted.
+international treaties. The Software is published so that people can
+read, download, and study it. It is NOT open-source software, and no
+open-source license is granted. You are welcome to look; you may not
+take it.
 
 1. PERMITTED USE
 
-   You may view the Software through the hosting platform on which the
-   Owner has published it. Where the Owner has published the Software on
-   GitHub, you also have only those rights that GitHub's Terms of Service
-   require the Owner to grant to other GitHub users, namely to view and
-   to fork the repository within GitHub's service. A fork confers no
-   other right, and every restriction in this license applies in full to
-   any fork and to any copy of the Software, wherever located.
+   Any individual or organization -- including a prospective employer,
+   client, collaborator, or investor evaluating the Owner's work -- may,
+   solely to examine the Software and assess the skills and work of its
+   author ("Examination"):
+
+   (a) view the Software on the hosting platform where the Owner has
+       published it;
+   (b) download, clone, or fork the Software and keep copies of it for
+       the purpose of Examination;
+   (c) read, study, build, and run the Software, including its tests,
+       on machines they own or control, to understand how it works; and
+   (d) where the examiner is an organization, share it internally with
+       its own employees and contractors who are taking part in that
+       Examination (for example, a hiring or technical-review team).
+
+   Examination does not include using the Software, or any part copied
+   from it, in the examiner's own products, services, or internal
+   operations.
+
+   Where the Owner has published the Software on GitHub, you also have
+   the rights GitHub's Terms of Service require the Owner to grant to
+   other GitHub users. Every restriction in this license applies in full
+   to any download, clone, fork, or other copy of the Software, wherever
+   located.
 
 2. PROHIBITED USE
 
@@ -26,13 +44,19 @@ open-source license is granted.
    and signed by an authorized representative of the Owner, you may not,
    in whole or in part:
 
-   (a) copy, reproduce, download for use, or store the Software;
-   (b) modify, adapt, translate, or create derivative works of the Software;
+   (a) copy any part of the Software into any other work, project,
+       codebase, or document;
+   (b) modify, adapt, translate, or create derivative works of the
+       Software, other than temporary changes made solely for
+       Examination and never shared outside it or used for any other
+       purpose;
    (c) distribute, publish, sublicense, sell, lease, lend, or otherwise
-       make the Software available to any third party;
-   (d) use, run, execute, deploy, or incorporate the Software into any
-       other software, product, or service, whether commercial or
-       non-commercial;
+       make the Software or any copy of it available to any third party,
+       other than internal sharing permitted by Section 1(d) or sharing
+       a link to the Owner's published repository;
+   (d) use, deploy, or operate the Software, or incorporate it into any
+       other software, product, or service, for any purpose other than
+       Examination, whether commercial or non-commercial;
    (e) reverse engineer or re-implement the Software's designs, methods,
        or documentation for the purpose of creating a competing or
        substantially similar work; or
