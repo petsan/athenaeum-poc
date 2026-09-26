@@ -80,7 +80,7 @@ These aren't aspirational — every one of them is here because violating it (or
   invariant enforced in `config.py` itself (`disallow_paid_apis`), not
   just a policy.
 - Before marking any task "done," run the actual test suite
-  (`pytest -q`, currently 248/248) and update `docs/progress.md` — don't
+  (`pytest -q`, currently 257 passed + 1 skipped when no GPU worker is online) and update `docs/progress.md` — don't
   let the checkpoint file go stale.
 
 ## Current status (see `docs/progress.md` for full detail)

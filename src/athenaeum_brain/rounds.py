@@ -59,7 +59,32 @@ def _normalize_subject(subject: str):
         return ("text", subject.strip().lower())
 
 
-def synthesis_round(exploration_claims: list[Claim], exam_claims: list[Claim]) -> dict:
+# Section 4.1: how much of a claim's own confidence survives, given the
+# reputability grade of what it rests on. Explicitly a placeholder policy,
+# same status as reputability_store._grade_from_tally -- the ordering is
+# the design's (foundational > provisional > contested > rejected), the
+# exact numbers are not.
+GRADE_WEIGHT = {
+    "foundational": 1.0,
+    "provisionally_accepted": 0.8,
+    "contested": 0.4,
+    "rejected": 0.0,
+}
+
+
+def reputability_factor(provenance: list[str], grade_lookup) -> float:
+    """Weakest link, not an average: every provenance list the agents emit
+    today is conjunctive (a causal-precedence claim needs BOTH dates right),
+    so one rejected source should sink the claim rather than be diluted by
+    a good one. A claim citing nothing has nothing to trace its confidence
+    to (Section 5.1) and gets 0.0."""
+    if not provenance:
+        return 0.0
+    return min(GRADE_WEIGHT[grade_lookup(src)] for src in provenance)
+
+
+def synthesis_round(exploration_claims: list[Claim], exam_claims: list[Claim],
+                    grade_lookup=None) -> dict:
     """
     Section 4: the ONLY step allowed to move a claim's status from
     'proposed' to 'committed' (Section 4.4 -- single commit boundary).
@@ -79,6 +104,16 @@ def synthesis_round(exploration_claims: list[Claim], exam_claims: list[Claim]) -
     -- it commits every surviving conclusion, labeled by agent, as a
     structured plural answer, chaired by Logic checking only that each
     side's claim survived cross-examination on its own merits.
+
+    Evidence weighting (Section 4.1): when `grade_lookup` (source_id ->
+    grade name) is given, every committed claim gets `reputability_factor`
+    and `weighted_confidence` set -- the caller is responsible for passing
+    grades as of time-of-use (loop.py does, before recording this
+    deliberation's own outcomes). Weighting never decides what is
+    committed or dissented; it only orders what was committed, which is
+    what build_research_answer's leading conclusion is chosen from.
+    Without a lookup, claims are left unweighted (None), which is exactly
+    what evaluation.py's no-reputability ablation compares against.
     """
     by_target = {}
     for r in exam_claims:
@@ -121,5 +156,10 @@ def synthesis_round(exploration_claims: list[Claim], exam_claims: list[Claim]) -
                     for c in survivors
                 ],
             })
+
+    if grade_lookup is not None:
+        for c in committed:
+            c.reputability_factor = reputability_factor(c.supporting_provenance, grade_lookup)
+            c.weighted_confidence = c.confidence * c.reputability_factor
 
     return {"committed": committed, "dissent": dissent, "plural_answers": plural_answers}

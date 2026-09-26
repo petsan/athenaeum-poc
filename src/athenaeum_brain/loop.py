@@ -62,7 +62,11 @@ def make_deliberation_handler(question: str, question_id: str, reputability: Rep
         if round_index == 3:
             claims = [Claim(**d) for d in state["exploration_claims"]]
             exam = [Claim(**d) for d in state["exam_claims"]]
-            result = synthesis_round(claims, exam)
+            # Grades read here are time-of-use: this deliberation's own
+            # outcomes are only recorded afterwards, in
+            # _attach_grades_and_record_outcomes.
+            grade_lookup = (lambda src: reputability.current_grade(src)["grade"]) if reputability else None
+            result = synthesis_round(claims, exam, grade_lookup=grade_lookup)
             answer = {
                 "committed": [c.to_dict() for c in result["committed"]],
                 "dissent": result["dissent"],

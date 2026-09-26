@@ -34,6 +34,11 @@ class Claim:
     serving_model: str = None       # which local model (Body's registry) produced this
                                      # claim, for Model Fitness tracking (Section 6.7) --
                                      # None for a deterministic, non-model-backed claim
+    reputability_factor: float = None  # set only by synthesis_round (Section 4.1): the
+                                     # weakest-link grade weight across supporting_provenance,
+                                     # using grades AT TIME OF USE -- None if unweighted
+    weighted_confidence: float = None  # confidence * reputability_factor; `confidence`
+                                     # itself stays the issuing agent's own, untouched value
     claim_id: str = field(default_factory=next_claim_id)
 
     def to_dict(self) -> dict:

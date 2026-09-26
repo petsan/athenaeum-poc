@@ -594,6 +594,57 @@ wrong about what they were isolating, not the code.
 
 ---
 
+## 2026-09-25 — Evidence-weighted synthesis (§4.1): design choices
+
+**Q: Why add `weighted_confidence` alongside `confidence` instead of
+rescaling `confidence` in place?**
+
+§5.1 requires every confidence to be traceable to something. The agent's
+own number is traceable to its own computation; the weighted number is
+traceable to that plus the grades at time of use. Overwriting one with
+the other would erase the first trace. Keeping both also means every
+existing test and consumer that reads `confidence` sees exactly what it
+saw before.
+
+**Q: Why weakest link (min) across provenance rather than an average?**
+
+Every provenance list the agents emit today is conjunctive — World News's
+causal-precedence claim cites two dated events and is wrong if *either*
+date is wrong. Averaging would let one good source dilute a rejected one.
+If a future agent cites genuinely independent, disjunctive support, that
+agent's claims will need a different combination rule — this one is
+right for what exists, not a universal answer.
+
+**Q: Does weighting decide what gets committed?**
+
+No, deliberately. Commit/dissent is still decided purely by surviving
+cross-examination (§4.4). Weighting only orders committed claims, which
+is what the Research Answer's leading conclusion is chosen from. A claim
+resting on a rejected source is still committed, just never leading —
+removing it would be a second, unreviewed gate.
+
+**Q: What else changed as a consequence?**
+
+`build_research_answer` previously produced a `leading_conclusion` only
+when exactly one claim was committed — with two compatible claims there
+was no leading conclusion at all, which §4.1 doesn't allow. It now picks
+the highest-weighted one and keeps the rest as `supporting_conclusions`.
+Plural (§4.2) answers still have no leading conclusion.
+
+The "no reputability weighting" ablation (§9.7), previously recorded as
+indistinguishable from A1 (`ABLATION_NO_REPUTABILITY_WEIGHTING_FINDING`),
+is now a real function, `ablation_no_reputability_weighting()`, and a
+test proves it differs: with `computed:trial_division`'s track record
+rejected, A1 leads "should we believe 17 is prime?" with Philosophy's
+claim while the ablation still leads with Mathematics on raw confidence.
+
+**Not done here:** Model Fitness (`apply_fitness_to_confidence`) is still
+not applied at synthesis — it's a separate §6.7 weight, tracked with the
+model admission gate item in `docs/progress.md` §26. `GRADE_WEIGHT`'s
+numbers are an explicit placeholder, same status as the grading policy.
+
+---
+
 *See `docs/progress.md` §26 for the checklist this log's entries track
 against, and `docs/infra-topology.md` for the infrastructure-side design
 decisions made in the same planning conversation.*

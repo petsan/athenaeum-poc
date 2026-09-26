@@ -14,6 +14,7 @@ from .rounds import (
 from .claims import Claim
 from .agents import MasterOfPhilosophy
 from .content_integrity import detect_instruction_like_content
+from .output_types import build_research_answer
 from athenaeum_body.calibration_store import CalibrationStore, confidence_bucket
 
 
@@ -185,15 +186,18 @@ def b0_retrieval_only(question: str, question_id: str) -> dict:
     return {"baseline": "B0", "claims": [c.to_dict() for c in exp]}
 
 
-def a1_full_workflow(question: str, question_id: str) -> dict:
+def a1_full_workflow(question: str, question_id: str, grade_lookup=None) -> dict:
     """Section 9.7's A1: the complete framing -> exploration ->
-    cross-examination -> synthesis loop."""
+    cross-examination -> synthesis loop, evidence-weighted (4.1) when a
+    grade_lookup is given."""
     frame = framing_round(question, question_id)
     exp = exploration_round(frame, question_id)
     exam = cross_examination_round(exp, question_id)
-    result = synthesis_round(exp, exam)
-    return {"baseline": "A1", "committed": [c.to_dict() for c in result["committed"]],
-            "plural_answers": result["plural_answers"], "dissent": result["dissent"]}
+    result = synthesis_round(exp, exam, grade_lookup=grade_lookup)
+    committed = [c.to_dict() for c in result["committed"]]
+    return {"baseline": "A1", "committed": committed,
+            "plural_answers": result["plural_answers"], "dissent": result["dissent"],
+            "research": build_research_answer(committed, result["dissent"], result["plural_answers"])}
 
 
 def ablation_no_cross_examination(question: str, question_id: str) -> dict:
@@ -230,15 +234,20 @@ def ablation_naive_majority_vote(question: str, question_id: str) -> dict:
             "discarded": [c for c in pa["conclusions"] if c["claim_id"] != winner["claim_id"]]}
 
 
-ABLATION_NO_REPUTABILITY_WEIGHTING_FINDING = (
-    "Not distinguishable from A1 in this POC: synthesis_round (rounds.py) does not "
-    "currently use reputability grades to numerically reweight a claim's confidence at "
-    "commit time -- loop.py snapshots grades onto the answer (Section 6.3) and reputability "
-    "informs dispute resolution, but doesn't yet feed back into synthesis's own commit "
-    "decision. Per Section 9.7's own closing line, this is treated as a real finding about "
-    "the current architecture (a genuine gap between 6.7's design intent and today's wiring), "
-    "not a testing artifact to explain away -- logged in docs/brain-session-log.md."
-)
+def ablation_no_reputability_weighting(question: str, question_id: str) -> dict:
+    """Required ablation: reputability weighting removed -- synthesis runs
+    without a grade_lookup, so the leading conclusion is chosen on each
+    agent's raw self-reported confidence alone. (Until Section 4.1's
+    weighting was wired into synthesis_round, this ablation was
+    indistinguishable from A1 -- see docs/brain-session-log.md.)"""
+    frame = framing_round(question, question_id)
+    exp = exploration_round(frame, question_id)
+    exam = cross_examination_round(exp, question_id)
+    result = synthesis_round(exp, exam)
+    committed = [c.to_dict() for c in result["committed"]]
+    return {"baseline": "A1_no_reputability_weighting", "committed": committed,
+            "plural_answers": result["plural_answers"], "dissent": result["dissent"],
+            "research": build_research_answer(committed, result["dissent"], result["plural_answers"])}
 
 
 # ---------------------------------------------------------------------------

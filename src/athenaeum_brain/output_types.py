@@ -42,12 +42,24 @@ def build_research_answer(committed: list[dict], dissent: list[dict], plural_ans
     """Section 5.2/5.4: leading conclusion, alternatives, dissent, citations.
     When the underlying claims are jurisdictionally plural (Section 4.2),
     there is no single leading_conclusion by design -- plural_conclusions
-    carries the full labeled set instead, non-collapsed."""
-    leading = committed[0] if len(committed) == 1 and not plural_answers else None
+    carries the full labeled set instead, non-collapsed.
+
+    Otherwise (Section 4.1's ordinary case) the leading conclusion is the
+    committed claim with the highest evidence weight -- weighted_confidence
+    when synthesis set it, the agent's raw confidence when it didn't --
+    and every other committed claim is kept as supporting, never dropped."""
+    leading, supporting = None, []
+    if committed and not plural_answers:
+        def weight(c):
+            w = c.get("weighted_confidence")
+            return c.get("confidence", 0.0) if w is None else w
+        leading = max(committed, key=weight)  # first-seen wins ties
+        supporting = [c for c in committed if c is not leading]
     citations = sorted({src for c in committed for src in c.get("supporting_provenance", [])})
     return {
         "output_type": RESEARCH,
         "leading_conclusion": leading,
+        "supporting_conclusions": supporting,
         "plural_conclusions": plural_answers,
         "alternatives_considered": [d["claim"] for d in dissent],
         "dissent": dissent,

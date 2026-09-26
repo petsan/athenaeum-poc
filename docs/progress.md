@@ -250,6 +250,20 @@ Earlier sections each ended with their own "suggested next step," repeatedly sup
 - [x] **Task 23 (distributed worker dispatch)** — `distributed_worker.py` (Body, deliberately Brain-agnostic: no import of `athenaeum_brain` anywhere, matching `loop.py`'s own layering): `serve_worker()`/`remote_round_handler()`, stdlib-only HTTP, a drop-in `RoundHandler` so `SingleUnitRunner`/the scheduler need zero changes to run a distributed unit. Tested against a genuinely separate OS process (not a thread), with a real `terminate()` mid-deliberation proving Section 4.2's "loss of a worker mid-task simply requeues the unit" for real, not simulated. 4 new tests. See Section 34 and `docs/brain-session-log.md`.
 - [ ] Tasks 21/22 (GPU-vs-CPU output equivalence) remain genuinely blocked — this host has no GPU (confirmed via the node status API, Section 22).
 - [x] **Local Model Serving Layer now has a real backend.** `LlamaCppBackend` (`model_serving.py`) talks to the six live model-lab guests over HTTP (stdlib `urllib`); `model_lab_registry.py` wires all six into a `ModelRegistry`. `ModelServingLayer.request()` proven for real (CPU fallback path, `gpu_available=False` — the honest current topology, no GPU pool exists). `evaluation.py`'s B1 baseline (§9.7) is real for the first time — `b1_single_agent_baseline()` — no longer `B1_UNAVAILABLE`. No Master Agent is wired to use this for its own claims yet (still deterministic toy logic) — that's the next real step, not done here. See Section 36.
+- [x] **Evidence-weighted synthesis (§4.1).** `synthesis_round` now sets `reputability_factor`/`weighted_confidence` on committed claims from grades at time of use; the Research Answer's leading conclusion follows that weight; the §9.7 "no reputability weighting" ablation is real and provably distinct from A1. See Section 41.
+
+**Remaining Brain gaps (audited 2026-09-25 against `brain-design.md` §13's work breakdown — none are literal stubs, all are specified-but-unbuilt):**
+- [ ] Dispute resolution procedure (§6.4, task 9) — including Logic's circular-corroboration/independence check. Only `ReputabilityStore.log_dispute()` storage exists.
+- [ ] Reputability standard versioning (§6.5, task 10).
+- [ ] Forecast and Recommendation builders wired into `loop.py` (§5.4, tasks 13–14) — builders exist, no producer.
+- [ ] Importance rating (§7.1, task 16) and reopen-with-diff (§7.3, task 18).
+- [ ] Idle-evolution rounds (§3.6).
+- [ ] Cross-agent verification routing, e.g. Mathematics → Engineering sandbox (task 44).
+- [ ] Model admission gate (§6.7, task 47), and applying Model Fitness weight at synthesis.
+- [ ] Domain Fidelity re-grounding and escalation-to-checkpoint (§2.4.3, task 30).
+- [ ] Re-evaluation and consolidation audit sampling (§9.4–9.5, tasks 22–23).
+- [ ] Adversarial suite: 6 of §8's 15 failure modes covered (task 20); several remaining ones depend on the items above.
+
 - [ ] `execution_sandbox.enabled` stays `false` — not actionable right now (the CPU-time gap is a confirmed environment limitation on this specific kernel, not a bug to fix), but re-run `scripts/preflight_check.py` if this project is ever deployed to a *different* host, per `security-review-sandbox.md` Section 7.3/7.4.
 
 ## 27. Brain backlog resumed: Physics, Philosophy, Theology agents; infra topology plan
@@ -420,6 +434,16 @@ Per explicit request to run one adversarial prompt (an object-tracking scenario 
 **Secondary finding:** of the eight, `qwen-coder-1.5b` degenerated into verbatim repetition until it hit the token cap (400) rather than stopping — a real model-quality/stopping-criteria issue on that specific guest, not a harness bug (other guests on the same harness, same `n_predict`, stopped normally well under the cap).
 
 Not committed as a permanent fixture: no new file, no wiring into `evaluation.py`'s adversarial suite. If this kind of multi-model comparison becomes a recurring need, the natural next step is a small script wrapping this exact pattern (`curl` + `timings` block) rather than hand-typing it each time — not built here since it was a one-off request, matching this project's own "don't build speculative infrastructure" discipline.
+
+## 41. Evidence-weighted synthesis (§4.1), and the reputability ablation made real
+
+First item from a 2026-09-25 audit of remaining Brain work (now listed in §26). `synthesis_round` accepts an optional `grade_lookup` and, for every committed claim, sets `reputability_factor` (weakest-link `GRADE_WEIGHT` across its `supporting_provenance`; 0.0 for a claim citing nothing) and `weighted_confidence` (= `confidence` × factor). The agent's own `confidence` is never modified. Weighting never changes commit/dissent — only ordering. `loop.py` passes grades read *before* `_attach_grades_and_record_outcomes` records this deliberation's own outcomes, so the weight and `source_grades_at_use` come from the same time-of-use snapshot (tested with a source that crosses into `foundational` on this very deliberation).
+
+`build_research_answer` now picks the highest-weighted committed claim as `leading_conclusion` (raw confidence when unweighted) and keeps the rest in a new `supporting_conclusions` field — previously any answer with two compatible committed claims had no leading conclusion at all. Plural answers are unchanged.
+
+`evaluation.py`: `ABLATION_NO_REPUTABILITY_WEIGHTING_FINDING` (Section 32's "indistinguishable from A1") replaced by a real `ablation_no_reputability_weighting()`; `a1_full_workflow()` takes a `grade_lookup` and both return a `research` section. Proven distinct on a real question: with `computed:trial_division` rejected, A1 leads "should we believe 17 is prime?" with Philosophy, the ablation with Mathematics.
+
+**257 passed, 1 skipped** on LXC 104 (247 prior + 10 new in `tests/test_evidence_weighted_synthesis.py`; the skip is the real-GPU-worker test, worker offline). Design reasoning in `docs/brain-session-log.md`.
 
 ### Explicitly not on this list
 Any application-level work beyond what `deployment-playbook.md` promises to deliver (verified SSH access to a correctly-networked guest, not a deployed application).
