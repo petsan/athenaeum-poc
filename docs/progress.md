@@ -350,7 +350,7 @@ Same rules and stop conditions. Again, each item is a gap found while building, 
 |---|---|---|
 | S | **Feed calibration (§5.3, §9.3)** — the per-agent calibration store — "the accountability mechanism" — is never written outside tests. Idle re-examination is exactly when a claim's fate becomes known: record survived claims as verified and challenged/unsupported ones as overturned, per agent at the confidence it claimed; the Maintainer's audits then report `calibration_drift` per agent. | **done** — §65 |
 | T | **Grade weights into the versioned standard** — synthesis's `GRADE_WEIGHT` (§41) sits outside the reputability standard §43 versioned, so it can't evolve under the same review; move it into the standard's params with v0 = today's values. | **done** — §66 |
-| U | **Ingestion feeds the Belief Graph** — ingested sources and their `cites` become `source` nodes and `cites` edges, so dispute resolution and consolidation can read citation data from the graph instead of a hand-passed map. | open |
+| U | **Ingestion feeds the Belief Graph** — ingested sources and their `cites` become `source` nodes and `cites` edges, so dispute resolution and consolidation can read citation data from the graph instead of a hand-passed map. | **done** — §67 |
 | V | **Mobile client: async mode and history** — the client only knows the synchronous call; let it submit async, poll status, and show versions/diffs and maintenance activity. | open |
 | — | End-to-end test extended; README draft refreshed (local, still unpushed); plan batch 5. | open |
 
@@ -821,6 +821,14 @@ Synthesis's per-grade evidence weights (§41, `GRADE_WEIGHT`) sat outside the re
 Stated explicitly: a **weights-only amendment regrades nothing and is not material** under §7.2's fourth trigger, whose wording is about a change that "would alter the grade of a source the answer relied on" (tested). If weight changes should reopen answers too, that's a design extension, not something to infer.
 
 **Full live suite: 515 passed, 1 skipped.** 516 collected (507 prior + 9 new in `tests/test_grade_weights_standard.py`).
+
+## 67. Ingestion feeds the Belief Graph — Phase U
+
+Source-to-source citations (§42's independence check, §10.2's *independent* sources) only ever reached the Brain as a `cites` dict a caller passed by hand. Given a Belief Graph, `ingest`/`seed_load` now record each accepted source as a `source:<id>` node (license, content hash) with a `cites` edge to every source it cites; a cited source not yet ingested gets a bare node, filled in by its own ingest. It is write-once, so re-ingesting is a no-op, and a rejected source leaves no trace. `belief_graph.citations(graph)` reads the map back and deliberately excludes claim→source `cites` edges: those are provenance, not citation between sources.
+
+`IdleContext` has a new `belief_graph` field and a new `citation_map()`: the hand-supplied `cites` merged with the graph's, deduplicated. Consolidation's promotion check, Logic-chaired dispute resolution and the Maintainer's consolidation audit all read it. The Maintainer hands its own graph to the idle context unless one was set explicitly. Tested end to end: two ingested sources promote a claim to Tier C after three cycles, but when the graph says one cites the other, the same claim stays in Tier B, with only one independent line of evidence.
+
+**Full live suite: 524 passed, 1 skipped.** 525 collected (516 prior + 9 new in `tests/test_ingestion_graph.py`).
 
 ### Explicitly not on this list
 Any application-level work beyond what `deployment-playbook.md` promises to deliver (verified SSH access to a correctly-networked guest, not a deployed application).

@@ -39,6 +39,7 @@ from athenaeum_body.consolidation_store import ConsolidationStore
 from athenaeum_body.domain_fidelity_store import DomainFidelityStore
 from athenaeum_body.human_checkpoint_store import HumanCheckpointStore
 from athenaeum_body.calibration_store import CalibrationStore
+from athenaeum_body.belief_graph_store import BeliefGraphStore
 from athenaeum_body.scheduler.work_unit import WorkUnit, RoundResult
 from .claims import Claim, next_claim_id
 from .rounds import cross_examination_round, reputability_factor
@@ -46,6 +47,7 @@ from .consolidation import claim_key, record_survival, should_promote_to_c, comp
 from .dispute_resolution import resolve_dispute
 from .domain_fidelity import compute_score, needs_review
 from .fidelity_remediation import remediate
+from .belief_graph import citations
 
 SUBMITTER = "idle-evolution"  # recorded as the proposer of standard amendments
 
@@ -57,12 +59,23 @@ class IdleContext:
     consolidation: ConsolidationStore | None = None
     fidelity: DomainFidelityStore | None = None
     checkpoints: HumanCheckpointStore | None = None
-    cites: dict = field(default_factory=dict)
+    cites: dict = field(default_factory=dict)          # hand-supplied citations, merged with the graph's
+    belief_graph: BeliefGraphStore | None = None      # ingestion records source citations here
     # Section 10.2's N and M (brain-design.md Open Question 7: configurable,
     # values unset by the design -- these are placeholders)
     consolidation_min_cycles: int = 5
     consolidation_min_sources: int = 2
     calibration: CalibrationStore | None = None  # Section 5.3: fed with each claim's latest fate
+
+    def citation_map(self) -> dict:
+        """`cites` merged with what ingestion recorded in the Belief Graph
+        (source -cites-> source edges), deduplicated, hand-supplied first."""
+        merged = {k: list(v) for k, v in self.cites.items()}
+        if self.belief_graph is not None:
+            for src, cited in citations(self.belief_graph).items():
+                have = merged.setdefault(src, [])
+                have.extend(c for c in cited if c not in have)
+        return merged
 
 
 # --- round 0 ---------------------------------------------------------------
@@ -189,7 +202,7 @@ def commit(ctx: IdleContext, cycle_id: str, findings: list[dict], plan: dict) ->
                 # moment a claim meets 10.2's promotion criteria.
                 if entry.get("tier") != "C" and should_promote_to_c(
                         entry, min_cycles=ctx.consolidation_min_cycles,
-                        min_sources=ctx.consolidation_min_sources, cites=ctx.cites)["eligible"]:
+                        min_sources=ctx.consolidation_min_sources, cites=ctx.citation_map())["eligible"]:
                     compact(ctx.consolidation, f["claim_key"])
                     compacted.append(f["claim_key"])
             elif f["status"] in ("challenged", "unsupported"):
@@ -215,7 +228,7 @@ def commit(ctx: IdleContext, cycle_id: str, findings: list[dict], plan: dict) ->
     for key in plan["disputes"]:
         f = by_key[key]
         sides = {"claim": [Claim(**f["claim"])], "challenge": [Claim(**c) for c in f["challenges"]]}
-        record = resolve_dispute(key, sides, reputability=ctx.reputability, cites=ctx.cites,
+        record = resolve_dispute(key, sides, reputability=ctx.reputability, cites=ctx.citation_map(),
                                  question_id=cycle_id, dispute_id=f"{cycle_id}:{key}")
         rulings[key] = record["ruling"]
 

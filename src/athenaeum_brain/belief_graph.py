@@ -116,3 +116,15 @@ def newly_relevant_claims(graph: BeliefGraphStore, question_id: str) -> list[dic
             found[e.target_id] = {"claim": e.target_id.split(":", 1)[1], "subject": claim.data["subject"],
                                   "from_question": answer.data["question_id"]}
     return list(found.values())
+
+
+def citations(graph: BeliefGraphStore) -> dict[str, list[str]]:
+    """The citation map ingestion recorded (source -cites-> source), in the
+    `{source_id: [cited ids]}` shape dispute_resolution.check_independence
+    and consolidation's independence count read. claim -cites-> source
+    edges are provenance, not citation between sources, and are excluded."""
+    found: dict[str, list[str]] = {}
+    for e in graph.edges(edge_type="cites"):
+        if e.source_id.startswith("source:") and e.target_id.startswith("source:"):
+            found.setdefault(e.source_id.split(":", 1)[1], []).append(e.target_id.split(":", 1)[1])
+    return found

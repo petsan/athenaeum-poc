@@ -25,6 +25,7 @@ import urllib.robotparser
 from dataclasses import dataclass, field
 from .schemas import ProvenanceEntry
 from .storage.content_addressed import ContentAddressedStore
+from .belief_graph_store import BeliefGraphStore
 
 
 @dataclass
@@ -121,17 +122,35 @@ def parse_and_normalize(source: FixtureSource, cas: ContentAddressedStore) -> Pr
     )
 
 
-def ingest(source: FixtureSource, cas: ContentAddressedStore) -> ProvenanceEntry:
+def ingest(source: FixtureSource, cas: ContentAddressedStore, graph: BeliefGraphStore | None = None) -> ProvenanceEntry:
     """The full mechanical pipeline: check, then parse. Raises
     IngestionRejected rather than silently skipping, so a caller always
-    knows whether ingestion happened."""
+    knows whether ingestion happened. With a Belief Graph, the accepted
+    source is recorded as a `source:<id>` node (license, content hash) with
+    a `cites` edge to each source it cites -- the graph is then where
+    dispute resolution and consolidation read citation data from."""
     check = fetch_and_check(source)
     if not check["accepted"]:
         raise IngestionRejected(check["reason"])
-    return parse_and_normalize(source, cas)
+    entry = parse_and_normalize(source, cas)
+    if graph is not None:
+        record_source(graph, entry)
+    return entry
 
 
-def seed_load(sources: list[FixtureSource], cas: ContentAddressedStore) -> list[ProvenanceEntry]:
+def record_source(graph: BeliefGraphStore, entry: ProvenanceEntry) -> None:
+    """Idempotent: nodes and edges are write-once. A cited source that
+    hasn't been ingested yet gets a bare node, filled in by its own ingest."""
+    node_id = f"source:{entry.id}"
+    graph.add_node(node_id, "source", {"license": entry.metadata.get("license"),
+                                       "content_hash": entry.content_hash})
+    for cited in entry.metadata.get("cites", []):
+        graph.add_node(f"source:{cited}", "source", {})
+        graph.add_edge(node_id, f"source:{cited}", "cites")
+
+
+def seed_load(sources: list[FixtureSource], cas: ContentAddressedStore,
+              graph: BeliefGraphStore | None = None) -> list[ProvenanceEntry]:
     """Section 9, step 4: one-time foundational corpus load. Deliberately
     a separate entry point from `ingest()` used by ongoing ingestion, even
     though the underlying logic is identical -- keeps the one-shot seed
@@ -139,7 +158,7 @@ def seed_load(sources: list[FixtureSource], cas: ContentAddressedStore) -> list[
     entries = []
     for s in sources:
         try:
-            entries.append(ingest(s, cas))
+            entries.append(ingest(s, cas, graph))
         except IngestionRejected:
             continue  # a rejected seed source is skipped, not fatal to the batch
     return entries

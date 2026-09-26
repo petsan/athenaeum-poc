@@ -83,6 +83,8 @@ class Maintainer:
         })
         self.events: list[dict] = []        # what happened, in order -- for callers and tests
         self.recovered: list[str] = []
+        if self.idle.belief_graph is None:
+            self.idle.belief_graph = self.belief_graph  # idle cycles read ingested citations from it
         self._recover()
 
     # counters and registry, persisted in the checkpoint
@@ -241,7 +243,7 @@ class Maintainer:
                                seed=self.cycles, store=self.audits)
             if self.idle.consolidation is not None:
                 consolidation_audit(self.idle.consolidation, audit_id=f"cons-{cycle_id}", seed=self.cycles,
-                                    cites=self.idle.cites, store=self.audits)
+                                    cites=self.idle.citation_map(), store=self.audits)
             audited = True
         drifting = []
         if self.idle.calibration is not None:
