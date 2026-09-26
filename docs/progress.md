@@ -376,7 +376,7 @@ Same rules and stop conditions. Each item was confirmed against the running code
 
 | Phase | Scope | Status |
 |---|---|---|
-| AA | **API input validation and error handling** — reproduced on LXC 104: `POST /api/questions` with a non-string `question` crashes the handler, so the client gets no response. It also leaves a `queued` ledger entry nothing will ever run. An empty question is deliberated, a 200 KB question is accepted, and the request body is read with no size limit. Validate (a non-empty string within a length limit; a bounded body), and answer every failure with a JSON error. If a synchronous deliberation fails, suspend the question with its error instead of leaving it `queued`. | open |
+| AA | **API input validation and error handling** — reproduced on LXC 104: `POST /api/questions` with a non-string `question` crashes the handler, so the client gets no response. It also leaves a `queued` ledger entry nothing will ever run. An empty question is deliberated, a 200 KB question is accepted, and the request body is read with no size limit. Validate (a non-empty string within a length limit; a bounded body), and answer every failure with a JSON error. If a synchronous deliberation fails, suspend the question with its error instead of leaving it `queued`. | **done** — §75, known-bugs #33 |
 | AB | **Measure storage growth** — every store write appends a full-state checkpoint (append-only by design, §5.3), so storage grows with writes × state size. Measure bytes per answered question and per idle cycle on the API wiring, find the dominant writers, and remove only *redundant* writes (a checkpoint of unchanged state). Whether old snapshots may ever be pruned is owner decision 8, not a mechanical fix. | open |
 | AC | **Refresh the narrated demo** (`demo_brain.py`) for batches 4–5: calibration, ingestion into the graph, a grade change reaching every dependent answer, a failing step set aside visibly. Mind known-bugs #16. | open |
 | — | End-to-end test extended; README draft refreshed (local); plan batch 7. | open |
@@ -984,6 +984,19 @@ Tested:
 `README.draft.md` is refreshed for batch 5, still local and unpushed. Batch 6 is planned above. Its first phase comes from a reproduced API crash on a non-string question.
 
 **Full live suite: 554 passed, 1 skipped, 1 failed.** The failure is the known-flaky `qwen2.5-1.5b` factual assertion (known-bugs.md open limitations, owner decision 2): the model answered "Saturn". It passed 3 of 3 immediate re-runs, and nothing else failed. 556 collected (555 prior + 1 new end-to-end test).
+
+## 75. API input validation and error handling — Phase AA
+
+known-bugs.md #33: a non-string question crashed the request handler (connection dropped, no response) and stranded a `queued` ledger entry. Empty and 200 KB questions were accepted, and the body size was unbounded. Now:
+- **Validation first:** `parse_question_request` accepts only a non-empty string, stripped of surrounding whitespace, of at most `MAX_QUESTION_CHARS` (2000, a placeholder). Each refusal names the problem (400), and nothing is written for it, on the sync and async paths alike.
+- **Bounded body:** over `MAX_BODY_BYTES` (64 KiB, a placeholder) is a 413 answered without reading the body. A missing, invalid or negative `Content-Length` is a 400.
+- **A failed synchronous deliberation** is `suspended` with its error in the Maintainer's `failed` registry (new `Maintainer.record_failure`, shared with Phase W). It answers a JSON 500 carrying the question id, and the server carries on.
+- **A last-resort guard** on every handler turns an unexpected exception into a JSON 500, never a dropped connection.
+- The client's input has `maxlength=2000` to match.
+
+Tested with raw requests, including a `Content-Length` promising more than is ever sent: a server that tried to read it would hang, and this one answers 413 at once.
+
+**Full live suite: 569 passed, 1 skipped.** 570 collected (556 prior + 14 new in `tests/test_api_validation.py`).
 
 ### Explicitly not on this list
 Any application-level work beyond what `deployment-playbook.md` promises to deliver (verified SSH access to a correctly-networked guest, not a deployed application).

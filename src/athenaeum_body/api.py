@@ -54,6 +54,41 @@ from athenaeum_brain.maintenance import Maintainer  # noqa: E402
 CLIENT_DIR = Path(__file__).resolve().parents[2] / "client"
 
 
+MAX_BODY_BYTES = 64 * 1024      # placeholder limits, generous for a question
+MAX_QUESTION_CHARS = 2000
+
+
+class BadRequest(ValueError):
+    pass
+
+
+class DeliberationFailed(Exception):
+    def __init__(self, question_id: str, error: str):
+        super().__init__(error)
+        self.question_id, self.error = question_id, error
+
+
+def parse_question_request(raw: bytes) -> tuple[str, bool]:
+    """(question, async) from a POST /api/questions body, or BadRequest
+    saying exactly what is wrong. The question is stripped of surrounding
+    whitespace and must be a non-empty string of at most MAX_QUESTION_CHARS."""
+    try:
+        body = json.loads(raw or b"{}")
+    except ValueError:
+        raise BadRequest('expected JSON body: {"question": "..."}')
+    if not isinstance(body, dict) or "question" not in body:
+        raise BadRequest('expected JSON body: {"question": "..."}')
+    question = body["question"]
+    if not isinstance(question, str):
+        raise BadRequest(f"question must be a string, not {type(question).__name__}")
+    question = question.strip()
+    if not question:
+        raise BadRequest("question is empty")
+    if len(question) > MAX_QUESTION_CHARS:
+        raise BadRequest(f"question is {len(question)} characters; the limit is {MAX_QUESTION_CHARS}")
+    return question, body.get("async") is True
+
+
 class App(tuple):
     """(submit_question, list_questions, get_question, health) -- the shape
     callers have always unpacked -- plus the async path as attributes:
@@ -95,10 +130,16 @@ def build_app(data_dir: Path) -> App:
             ledger.submit(QuestionLedgerEntry(id=qid, importance=0.5))
             unit_log = CheckpointLog(cas=cas, index_path=data_dir / f"unit-{qid}.txt")
             runner = SingleUnitRunner(unit_log, shared_state={})
-            unit = make_deliberation_unit(question, qid, reputability=reputability,
-                                          verification=verification, belief_graph=graph)
-            while unit.status != "completed":
-                runner.run_round(unit)
+            try:
+                unit = make_deliberation_unit(question, qid, reputability=reputability,
+                                              verification=verification, belief_graph=graph)
+                while unit.status != "completed":
+                    runner.run_round(unit)
+            except Exception as e:
+                # never leave it 'queued' with nothing to run it (known-bugs #33)
+                ledger.set_status(qid, "suspended")
+                maintainer.record_failure(qid, {"kind": "question", "question": question}, e)
+                raise DeliberationFailed(qid, maintainer.failed[qid]["last_error"]) from e
             answer = unit_log.read_latest()["shared_state"]["answer"]
             ledger.append_version(qid, answer)
             # Section 7.1: replace the 0.5 placeholder with a computed rating.
@@ -225,6 +266,21 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self):
+        self._guarded(self._get)
+
+    def do_POST(self):
+        self._guarded(self._post)
+
+    def _guarded(self, handle) -> None:
+        """Every request gets a JSON answer: an unexpected exception is a
+        500, never a dropped connection (known-bugs #33)."""
+        try:
+            handle()
+        except Exception as e:
+            self.close_connection = True
+            self._json(500, {"error": f"internal error: {type(e).__name__}"})
+
+    def _get(self):
         path = urlparse(self.path).path
         if path == "/api/health":
             self._json(200, self.health())
@@ -246,22 +302,35 @@ class Handler(BaseHTTPRequestHandler):
         else:
             self._static()
 
-    def do_POST(self):
+    def _post(self):
         path = urlparse(self.path).path
-        if path == "/api/questions":
-            length = int(self.headers.get("Content-Length", 0))
-            try:
-                body = json.loads(self.rfile.read(length) or b"{}")
-                question = body["question"]
-            except Exception:
-                self._json(400, {"error": "expected JSON body: {\"question\": \"...\"}"})
-                return
-            if body.get("async") is True:
-                self._json(202, self.submit_async(question))
-            else:
-                self._json(200, self.submit_question(question))
-        else:
+        if path != "/api/questions":
             self._json(404, {"error": "not found"})
+            return
+        try:
+            length = int(self.headers.get("Content-Length", 0))
+        except ValueError:
+            length = -1
+        if length < 0:
+            self.close_connection = True
+            self._json(400, {"error": "invalid Content-Length"})
+            return
+        if length > MAX_BODY_BYTES:
+            self.close_connection = True  # the body is never read
+            self._json(413, {"error": f"request body is {length} bytes; the limit is {MAX_BODY_BYTES}"})
+            return
+        try:
+            question, is_async = parse_question_request(self.rfile.read(length))
+        except BadRequest as e:
+            self._json(400, {"error": str(e)})
+            return
+        if is_async:
+            self._json(202, self.submit_async(question))
+            return
+        try:
+            self._json(200, self.submit_question(question))
+        except DeliberationFailed as e:
+            self._json(500, {"error": f"deliberation failed: {e.error}", "id": e.question_id})
 
     def log_message(self, fmt, *args):
         pass  # quiet by default; remove to debug

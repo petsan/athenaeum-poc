@@ -98,6 +98,18 @@ These aren't bugs in the sense of "code that was wrong" — they're incorrect as
 **Fix:** The joined path is `resolve()`d, and anything not `is_relative_to(CLIENT_DIR.resolve())` is a 404. Pinned by `tests/test_api_review.py`, which sends raw request lines: plain, percent-encoded and mixed traversals get a 404, and the client pages are still served.
 **Lesson:** Any path built from request input must be resolved and checked against its root *after* resolving. And test servers with raw requests: well-behaved clients normalize away exactly the inputs an attacker would send.
 
+### 33. A non-string question crashed the API handler and stranded a `queued` question
+**What happened:** `POST /api/questions` checked only that `question` existed. With `{"question": 5}` or a list, the synchronous path registered the question in the ledger and then crashed mid-deliberation. The handler raised, `http.server` closed the connection with no response, and the ledger kept a `queued` entry that nothing would ever run. Also: an empty question was deliberated, a 200 KB question was accepted, and the body was read with whatever `Content-Length` the client claimed, with no bound. Reproduced on LXC 104, 2026-09-26, while planning batch 6.
+**Root cause:** Input was trusted past the JSON parse. The ledger write came before any work that could fail, with nothing to undo or mark it if that work did. And the handler had no last-resort error response.
+**Fix (batch 6, Phase AA):**
+- `api.parse_question_request` requires a non-empty string of at most `MAX_QUESTION_CHARS` (2000), stripped, and says exactly what is wrong (400). The async path is validated the same way, so nothing is written for a bad request.
+- A body over `MAX_BODY_BYTES` (64 KiB) is refused with 413 before it is read; an invalid `Content-Length` is a 400.
+- A synchronous deliberation that fails marks its question `suspended` and records the error through `Maintainer.record_failure` (the same `failed` registry as Phase W). The response is a JSON 500 with the question id.
+- Every handler runs under a guard that answers an unexpected exception with a JSON 500 instead of dropping the connection.
+
+Pinned by `tests/test_api_validation.py` (raw requests).
+**Lesson:** Validate at the boundary, before the first durable write. Whenever work that can fail follows a durable write, make failure a recorded state, not an absence. And every request handler needs a last-resort response.
+
 ---
 
 ## Test-authoring bugs (not library bugs, but worth the same scrutiny)

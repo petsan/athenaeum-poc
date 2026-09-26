@@ -278,6 +278,14 @@ class Maintainer:
         self._save()
         return {**event, "kind": "unit_failed", "retrying": False}
 
+    def record_failure(self, unit_id: str, info: dict, error: Exception) -> None:
+        """Records work that failed outside the scheduler -- the API's
+        synchronous path -- the same way a given-up unit is recorded, so
+        every failure is reported in one place."""
+        self._m.setdefault("failed", {})[unit_id] = {**info, "failures": 1,
+                                                     "last_error": f"{type(error).__name__}: {error}"}
+        self._save()
+
     @property
     def failed(self) -> dict:
         """Units given up after repeated round failures: {unit_id: info with last_error}."""
