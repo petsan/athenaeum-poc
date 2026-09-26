@@ -475,3 +475,44 @@ def test_lifecycle_over_http_with_bounded_checkpoints(tmp_path, monkeypatch):
     assert graph_entries == versions
     saved = CheckpointLog(cas=cas, index_path=data / "maintainer.txt").read_latest()
     assert list(saved["shared_state"]) == ["maintenance"] and saved["units"] == {}
+
+
+# ---------------------------------------------------------------------------
+# Batch 7 (AD-AE): a long-running shape -- many units through one Maintainer
+# with a small event window, and a reopen noticed through the summary view,
+# the way the client polls.
+# ---------------------------------------------------------------------------
+
+def test_long_running_shape_through_the_summary_view(tmp_path, monkeypatch):
+    from athenaeum_body.api import build_app
+
+    monkeypatch.setattr(model_backed_reasoning, "ask_model", lambda *a, **k: None)
+    app = build_app(tmp_path)
+    _, list_questions, get_question, _ = app
+    m = app.maintainer
+    m.policy.event_history, m.policy.idle_sample_size, m.policy.importance_threshold = 4, 1, 0.0
+
+    # Four answers: a fifth use of the primality source would corroborate it up
+    # to 'foundational', and that upgrade alone would (correctly) reopen them.
+    produced = []
+    for i, n in enumerate((101, 103, 107, 109), start=1):
+        m.submit_question(f"q-{i}", f"is {n} prime?")
+        produced += m.run()
+    assert len(produced) > 4 and m.events == produced[-4:]             # Phase AD
+    assert len(app.maintenance_status()["recent_events"]) == 4
+
+    before = {s["id"]: s["versions"] for s in list_questions("summary")}   # Phase AE
+    assert set(before.values()) == {1}
+    rep, src = m.idle.reputability, "computed:trial_division"
+    grade = rep.current_grade(src)["grade"]
+    while rep.current_grade(src)["grade"] == grade:
+        rep.record_outcome(src, "source", "challenged")
+    for _ in range(5):
+        rep.record_outcome(src, "source", "challenged")
+    m.submit_question("q-5", "is 131 prime?")
+    m.run()
+    after = {s["id"]: s["versions"] for s in list_questions("summary")}
+    changed = sorted(q for q in before if after[q] != before[q])
+    assert changed == [f"q-{i}" for i in range(1, 5)]          # every reopen visible as a count change
+    assert all(len(get_question(q)["versions"]) == 2 for q in changed)   # ...and the detail has the new version
+    assert "versions" in list_questions("summary")[0] and isinstance(list_questions("summary")[0]["versions"], int)

@@ -324,7 +324,7 @@ Same rules and stop conditions as batch 1. Ordered so each phase builds on the l
 | N | **Async API** — submit → poll over the ledger's `queued/active/completed` lifecycle (api.py's own stated limitation), plus read endpoints for versions and diffs. | **done** — §57 |
 | — | End-to-end test extended over J–N, then plan batch 3. | **done** — `test_full_lifecycle_through_the_maintainer` (§58) |
 
-**Owner decisions accumulated so far (not in any batch — each needs a call from the owner):** ~~(1) the OLMo 3 guest's memory problem, known-bugs.md #24~~ (resolved §59 once guest changes were permitted); (2) the flaky `qwen2.5-1.5b` factual assertion; (3) what Engineering's reasoning style is while the sandbox is off (its `executable` rounding claims vs. the fidelity fingerprint); (4) which models to admit before the API passes a fitness store (§48); (5) whether §11.5's importance threshold should narrow when human input triggers a checkpoint (§45); (6) adopting `README.draft.md`; (7) how a reviewer approves a checkpoint in the deployed system. The API has no authentication, so approval stays a Python call until the owner picks an auth approach (batch 5, Phase Z). The same decision covers an ingestion endpoint (Phase Y). (8) How the ledger and graph should be stored long-term. Every write snapshots the whole store, which is still quadratic after Phase AB's 70% cut: roughly 6–7 GB of ledger by 1,000 questions (§76). The options are per-question logs, delta checkpoints, or pruning superseded snapshots, and the last conflicts with append-only as written.
+**Owner decisions accumulated so far (not in any batch — each needs a call from the owner):** ~~(1) the OLMo 3 guest's memory problem, known-bugs.md #24~~ (resolved §59 once guest changes were permitted); (2) the flaky `qwen2.5-1.5b` factual assertion; (3) what Engineering's reasoning style is while the sandbox is off (its `executable` rounding claims vs. the fidelity fingerprint); (4) which models to admit before the API passes a fitness store (§48); (5) whether §11.5's importance threshold should narrow when human input triggers a checkpoint (§45); (6) adopting `README.draft.md`; (7) how a reviewer approves a checkpoint in the deployed system. The API has no authentication, so approval stays a Python call until the owner picks an auth approach (batch 5, Phase Z). The same decision covers an ingestion endpoint (Phase Y). (8) How the ledger and graph should be stored long-term. Every write snapshots the whole store, which is still quadratic after Phase AB's 70% cut: roughly 6–7 GB of ledger by 1,000 questions (§76). The options are per-question logs, delta checkpoints, or pruning superseded snapshots, and the last conflicts with append-only as written. (9) Whether a grade *upgrade* driven by routine use should reopen answers. Each deliberation citing a source records a corroboration, so the primality source becomes `foundational` on its fifth use. §7.2's grade trigger, now at full reach (Phase X), then reopens every earlier answer that used it. This is correct under the current threshold, which counts any one-step change as material, but it is churn with no new information (§81).
 
 **Batch 2 (J–N) complete 2026-09-26**, end-to-end extended (Section 58).
 
@@ -391,7 +391,19 @@ Same rules and stop conditions. Both items were confirmed in the code while clos
 |---|---|---|
 | AD | **Bound the Maintainer's in-memory event history** — `Maintainer.events` is appended to on every completed unit and never trimmed. The API's worker lives as long as the process, so it is a slow memory leak, even though `/api/maintenance` only ever shows the last 10. Keep a bounded window (a placeholder size), without breaking `run()`, which returns the events produced during that call. | **done** — §79 |
 | AE | **Question listing that doesn't ship every answer on every poll** — the client polls `GET /api/questions` every 2–15 s, and it returns every question with every full answer version, so the response grows with the whole history. Add a summary view (`?view=summary`: id, status, question, importance, version count, error), keeping the default response unchanged for existing callers. The client should poll the summary and fetch a question's full entry only when its card changed. | **done** — §80 |
-| — | End-to-end test extended; README draft refreshed (local); plan batch 8. | open |
+| — | End-to-end test extended; README draft refreshed (local); plan batch 8. | **done** — §81 |
+
+**Batch 7 (AD–AE) complete 2026-09-26.**
+
+### Batch 8 (self-planned 2026-09-26)
+
+Same rules and stop conditions.
+
+| Phase | Scope | Status |
+|---|---|---|
+| AF | **Reads don't wait behind deliberation** — measured on LXC 104 with a model call slowed to 2 s: a summary poll that takes 1 ms idle took 1.7 s during an async deliberation. The API's one lock is held for every worker round, model calls included, and for the whole of a synchronous deliberation. Real model calls take tens of seconds, so the client would freeze. Serve the read endpoints from a snapshot refreshed under the lock after each write, so a read never waits for a round. | open |
+| AG | **Health that says whether work is moving** — `/api/health` reports resources only. Add the worker's state (started, alive), the time of the last completed round, and the queue length, so a stuck or slow deployment is visible from the client. | open |
+| — | End-to-end test extended; README draft refreshed (local); plan batch 9. | open |
 
 - [ ] `execution_sandbox.enabled` stays `false` — not actionable right now (the CPU-time gap is a confirmed environment limitation on this specific kernel, not a bug to fix), but re-run `scripts/preflight_check.py` if this project is ever deployed to a *different* host, per `security-review-sandbox.md` Section 7.3/7.4.
 
@@ -1078,6 +1090,18 @@ The client polled `GET /api/questions` every 2–15 s, and every response carrie
 Tests: `tests/test_api_listing.py` (summary shape and size, default unchanged, unknown view refused), plus the client smoke test.
 
 **Full live suite: 584 passed, 1 skipped.** 585 collected (582 prior + 3 new in `tests/test_api_listing.py`).
+
+## 81. End-to-end test over batch 7
+
+`test_long_running_shape_through_the_summary_view` runs on `build_app`'s wiring with an event window of 4:
+- `run()` returns everything while memory keeps the last four, and `/api/maintenance` shows four;
+- a downgrade of the primality source then reopens all four prime answers, and each reopen shows up in the **summary** as a version-count change, the signal the client polls for, with the new version in the detail.
+
+**An observation for the owner (decision 9), found while writing it:** the first draft used six prime questions and found answers already reopened *before* the downgrade. The cause, verified: each deliberation citing `computed:trial_division` records a corroboration, so on its fifth use the source moves from `provisionally_accepted` to `foundational`. Phase X's full-reach trigger then reopens every earlier answer that relied on it. That is correct under today's rule, where any one-step change counts as material, but it is churn with no new information. The test now stays under that threshold, with a comment saying why. Whether upgrades from routine use should count as material is not mine to change.
+
+`README.draft.md` is refreshed for batch 7, still local. Batch 8 is planned above. Its first phase comes from a measured 1.7 s read stall behind a 2 s model call.
+
+**Full live suite: 585 passed, 1 skipped.** 586 collected (585 prior + 1 new end-to-end test).
 
 ### Explicitly not on this list
 Any application-level work beyond what `deployment-playbook.md` promises to deliver (verified SSH access to a correctly-networked guest, not a deployed application).
