@@ -379,7 +379,19 @@ Same rules and stop conditions. Each item was confirmed against the running code
 | AA | **API input validation and error handling** — reproduced on LXC 104: `POST /api/questions` with a non-string `question` crashes the handler, so the client gets no response. It also leaves a `queued` ledger entry nothing will ever run. An empty question is deliberated, a 200 KB question is accepted, and the request body is read with no size limit. Validate (a non-empty string within a length limit; a bounded body), and answer every failure with a JSON error. If a synchronous deliberation fails, suspend the question with its error instead of leaving it `queued`. | **done** — §75, known-bugs #33 |
 | AB | **Measure storage growth** — every store write appends a full-state checkpoint (append-only by design, §5.3), so storage grows with writes × state size. Measure bytes per answered question and per idle cycle on the API wiring, find the dominant writers, and remove only *redundant* writes (a checkpoint of unchanged state). Whether old snapshots may ever be pruned is owner decision 8, not a mechanical fix. | **done** — §76, known-bugs #34 |
 | AC | **Refresh the narrated demo** (`demo_brain.py`) for batches 4–5: calibration, ingestion into the graph, a grade change reaching every dependent answer, a failing step set aside visibly. Mind known-bugs #16. | **done** — §77 |
-| — | End-to-end test extended; README draft refreshed (local); plan batch 7. | open |
+| — | End-to-end test extended; README draft refreshed (local); plan batch 7. | **done** — §78 |
+
+**Batch 6 (AA–AC) complete 2026-09-26.**
+
+### Batch 7 (self-planned 2026-09-26)
+
+Same rules and stop conditions. Both items were confirmed in the code while closing batch 6; both only show up in a long-running deployment.
+
+| Phase | Scope | Status |
+|---|---|---|
+| AD | **Bound the Maintainer's in-memory event history** — `Maintainer.events` is appended to on every completed unit and never trimmed. The API's worker lives as long as the process, so it is a slow memory leak, even though `/api/maintenance` only ever shows the last 10. Keep a bounded window (a placeholder size), without breaking `run()`, which returns the events produced during that call. | open |
+| AE | **Question listing that doesn't ship every answer on every poll** — the client polls `GET /api/questions` every 2–15 s, and it returns every question with every full answer version, so the response grows with the whole history. Add a summary view (`?view=summary`: id, status, question, importance, version count, error), keeping the default response unchanged for existing callers. The client should poll the summary and fetch a question's full entry only when its card changed. | open |
+| — | End-to-end test extended; README draft refreshed (local); plan batch 8. | open |
 
 - [ ] `execution_sandbox.enabled` stays `false` — not actionable right now (the CPU-time gap is a confirmed environment limitation on this specific kernel, not a bug to fix), but re-run `scripts/preflight_check.py` if this project is ever deployed to a *different* host, per `security-review-sandbox.md` Section 7.3/7.4.
 
@@ -1037,6 +1049,17 @@ Tests (`tests/test_checkpoint_batching.py`):
 The final banner was moved, not duplicated (known-bugs #16). `tests/test_demo_brain.py` still asserts it prints exactly once, at the very end, and now also pins each new step's key outcome.
 
 **Full live suite: 578 passed, 1 skipped** with the new demo, and the demo test re-run on its own after gaining the new assertions: 1 passed. 579 collected, no new tests.
+
+## 78. End-to-end test over batch 6
+
+`test_lifecycle_over_http_with_bounded_checkpoints` runs against a real server built by `make_handler`, using raw requests:
+- a non-string question (400), an oversized body (413) and a path traversal (404) are refused, and the ledger is still empty afterwards;
+- three async questions, one with surrounding whitespace, flow through the background worker to `completed`, with an idle cycle and no error events;
+- read straight from disk, the Belief Graph holds exactly one checkpoint per recorded answer version, and the Maintainer's saved state at rest is only its registry, with no runner records (Phase AB).
+
+`README.draft.md` is refreshed for batch 6, still local. Batch 7 is planned above.
+
+**Full live suite: 579 passed, 1 skipped.** 580 collected (579 prior + 1 new end-to-end test).
 
 ### Explicitly not on this list
 Any application-level work beyond what `deployment-playbook.md` promises to deliver (verified SSH access to a correctly-networked guest, not a deployed application).

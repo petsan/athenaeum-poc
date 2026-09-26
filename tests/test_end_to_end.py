@@ -412,3 +412,66 @@ def test_lifecycle_on_the_api_wiring(tmp_path, monkeypatch):
 
     # and the synchronous path still works alongside, on the same stores
     assert submit("is 37 prime?")["answer"]["committed"][0]["statement"] == "37 is prime"
+
+
+# ---------------------------------------------------------------------------
+# Batch 6 (AA-AB), over real HTTP: bad input is refused before anything is
+# written, good questions flow through the background Maintainer, and what
+# lands on disk has the Phase AB shape.
+# ---------------------------------------------------------------------------
+
+def test_lifecycle_over_http_with_bounded_checkpoints(tmp_path, monkeypatch):
+    import json
+    import socket
+    import threading
+    import time
+    from http.server import ThreadingHTTPServer
+    from athenaeum_body.api import make_handler
+
+    monkeypatch.setattr(model_backed_reasoning, "ask_model", lambda *a, **k: None)
+    data = tmp_path / "data"
+    server = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(data))
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+
+    def request(method, path, body=b"", length=None):
+        head = (f"{method} {path} HTTP/1.1\r\nHost: x\r\nConnection: close\r\n"
+                f"Content-Type: application/json\r\nContent-Length: {len(body) if length is None else length}\r\n\r\n")
+        with socket.create_connection(server.server_address, timeout=10) as s:
+            s.sendall(head.encode() + body)
+            raw = b""
+            while chunk := s.recv(65536):
+                raw += chunk
+        head, _, payload = raw.partition(b"\r\n\r\n")
+        return int(head.split()[1]), json.loads(payload)
+
+    try:
+        # Phase AA: refused before anything is written -- and #32's traversal stays closed
+        assert request("POST", "/api/questions", json.dumps({"question": 5}).encode())[0] == 400
+        assert request("POST", "/api/questions", b"{}", length=10_000_000)[0] == 413
+        assert request("GET", "/../pyproject.toml")[0] == 404
+        assert request("GET", "/api/questions")[1] == []
+
+        ids = [request("POST", "/api/questions", json.dumps({"question": q, "async": True}).encode())[1]["id"]
+               for q in ("is 17 prime?", "  how should we round 2.5?  ", "is 21 prime?")]
+        deadline = time.time() + 60
+        while time.time() < deadline:
+            questions = request("GET", "/api/questions")[1]
+            maintenance = request("GET", "/api/maintenance")[1]
+            if (all(q["status"] == "completed" for q in questions) and maintenance["idle_cycles"] >= 1
+                    and maintenance["queued_units"] == 0):
+                break
+            time.sleep(0.1)
+        assert [q["id"] for q in questions] == ids and all(q["status"] == "completed" for q in questions)
+        assert questions[1]["question"] == "how should we round 2.5?"   # stored trimmed
+        assert not any(e["kind"] in ("error", "unit_error", "unit_failed") for e in maintenance["recent_events"])
+    finally:
+        server.shutdown()
+
+    # Phase AB, read straight from disk: one graph checkpoint per recorded answer,
+    # and the Maintainer's state at rest carries nothing but its own registry
+    cas = ContentAddressedStore(data / "cas")
+    graph_entries = len(CheckpointLog(cas=cas, index_path=data / "belief-graph.txt")._read_index())
+    versions = sum(len(q["versions"]) for q in questions)
+    assert graph_entries == versions
+    saved = CheckpointLog(cas=cas, index_path=data / "maintainer.txt").read_latest()
+    assert list(saved["shared_state"]) == ["maintenance"] and saved["units"] == {}
