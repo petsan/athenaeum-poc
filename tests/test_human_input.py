@@ -169,3 +169,48 @@ def test_clear_checkpoint_unknown_decision_raises(tmp_path):
     trigger_checkpoint_if_needed(checkpoints, "q1", sub, {"material": True, "reasons": ["x"]})
     with pytest.raises(HumanInputError):
         clear_checkpoint(checkpoints, "q1", reviewer_id="bob", reviewer_role="reviewer", decision="veto")
+
+
+# --- owner decision 5 (2026-09-26): the importance clause of 11.5 ------------
+
+MATERIAL = {"material": True, "reasons": ["targets 17"]}
+
+
+def test_low_importance_material_input_does_not_wait_at_a_checkpoint(tmp_path):
+    checkpoints = make_checkpoints(tmp_path)
+    assert trigger_checkpoint_if_needed(checkpoints, "q1", base_submission(declared_scope="17"), MATERIAL,
+                                        importance=0.2) is None
+    assert checkpoints.get("q1") is None
+
+
+def test_input_at_or_above_the_threshold_checkpoints_and_says_why(tmp_path):
+    from athenaeum_brain.reevaluation import IMPORTANCE_THRESHOLD
+    checkpoints = make_checkpoints(tmp_path)
+    cp = trigger_checkpoint_if_needed(checkpoints, "q1", base_submission(declared_scope="17"), MATERIAL,
+                                      importance=IMPORTANCE_THRESHOLD)
+    assert cp["status"] == "pending_human_checkpoint"
+    assert f"at or above the {IMPORTANCE_THRESHOLD} threshold" in cp["reason"]
+
+
+@pytest.mark.parametrize("flag, why", [("changes_leading_conclusion", "leading conclusion"),
+                                       ("overturns_tier_c", "Tier C")])
+def test_the_other_two_clauses_checkpoint_regardless_of_importance(tmp_path, flag, why):
+    checkpoints = make_checkpoints(tmp_path)
+    cp = trigger_checkpoint_if_needed(checkpoints, "q1", base_submission(declared_scope="17"), MATERIAL,
+                                      importance=0.0, **{flag: True})
+    assert cp["status"] == "pending_human_checkpoint" and why in cp["reason"]
+
+
+def test_unknown_importance_stays_conservative(tmp_path):
+    checkpoints = make_checkpoints(tmp_path)
+    assert trigger_checkpoint_if_needed(checkpoints, "q1", base_submission(declared_scope="17"), MATERIAL) is not None
+
+
+def test_the_threshold_is_the_one_re_evaluation_uses():
+    from athenaeum_brain.reevaluation import IMPORTANCE_THRESHOLD
+    from athenaeum_brain.maintenance import MaintenancePolicy
+    import inspect
+    from athenaeum_brain.reopening import reopen_if_material
+    assert MaintenancePolicy().importance_threshold == IMPORTANCE_THRESHOLD
+    assert inspect.signature(reopen_if_material).parameters["importance_threshold"].default == IMPORTANCE_THRESHOLD
+    assert inspect.signature(trigger_checkpoint_if_needed).parameters["threshold"].default == IMPORTANCE_THRESHOLD

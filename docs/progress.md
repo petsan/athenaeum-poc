@@ -1267,6 +1267,27 @@ Tests (`tests/test_model_admission_api.py`):
 
 **Full live suite: 609 passed, 1 skipped.** 610 collected (607 prior + 3 new).
 
+## 91. Human input is checkpointed by importance — Phase AN (decision 5)
+
+`human_input.trigger_checkpoint_if_needed` used to checkpoint every piece of material human input, because importance ratings didn't exist when it was written. It now takes the question's `importance`:
+- **Below the threshold:** material human input doesn't wait at a checkpoint. It remains an ordinary claim, cross-examined like any other.
+- **At or above it:** it checkpoints, and the reason says so.
+- **§11.5's other two clauses** (the input would change a leading conclusion, or overturn a Tier C item) aren't importance-gated in the design, so callers flag them and they **always** checkpoint. The decision was about the importance clause; these two weren't in question, and I kept them as the design states rather than letting the threshold swallow them.
+- **Unknown importance stays conservative**, which is the previous behaviour, so existing callers and tests are unchanged.
+
+**One threshold.** `reevaluation.IMPORTANCE_THRESHOLD` (0.3, a placeholder) is now the single source for the reopen gate (`reopen_if_material`, `feed_reevaluation`, `MaintenancePolicy`) and for this checkpoint gate. The two are "configured alongside" each other by being the same value (tested).
+
+**Worth knowing:** nothing in the deployed path submits human input yet; the API has no human-input endpoint. The rule is in effect wherever human input is handled, which today is Python callers and tests.
+
+Tests (added to `tests/test_human_input.py`):
+- low importance doesn't checkpoint;
+- the threshold itself does, with the reason stated;
+- the leading-conclusion and Tier C clauses checkpoint at importance 0;
+- unknown importance checkpoints;
+- all three gates share one threshold.
+
+**Full live suite: 615 passed, 1 skipped.** 616 collected (610 prior + 6 new).
+
 ### Batch 10 (planned 2026-09-26, implementing the owner's decisions)
 
 The owner decided 2–5 and 7–10 on 2026-09-26, each as recommended in `docs/owner-decisions.md`; 6 waits on reading `README.draft.md`. Each phase implements one or two decisions. Where a decision changes an existing test's meaning, that change is now owner-approved and is called out in the phase's write-up.
@@ -1276,7 +1297,7 @@ The owner decided 2–5 and 7–10 on 2026-09-26, each as recommended in `docs/o
 | AK | 2, 9 | The qwen routing test asserts a non-empty answer from the right backend and model only. Grade upgrades stop being material under §7.2: only downgrades reopen, and upgrades are picked up at the next reopen for any other reason. | **done** — §88 |
 | AL | 3 | Engineering's rounding claims become `formal`. Its fidelity fingerprint becomes "names an implementation standard" (IEEE-754, formats, protocols), without depending on the sandbox. The Mathematics-vs-Engineering plural answer is kept. | **done** — §89 |
 | AM | 4 | Admit OLMo 3 7B with a written rationale, and wire a `ModelFitnessStore` into the API. Model claims start at 0.5 per agent and move with outcomes. | **done** — §90 |
-| AN | 5 | Human input triggers a checkpoint only at importance ≥ the re-evaluation threshold, configured alongside it. | open |
+| AN | 5 | Human input triggers a checkpoint only at importance ≥ the re-evaluation threshold, configured alongside it. | **done** — §91 |
 | AO | 10 | During idle re-examination a model may challenge a model-backed claim. The challenge is dissent, and counts toward reputability, fitness and calibration only once the challenging model is admitted and `established`. | open |
 | AP | 7 | Per-reviewer tokens from a local config file (never in the repo) on new write endpoints: approve, reject or request more deliberation on a checkpoint, and submit ingestion. The reviewer id comes from the token, so §11's role and conflict-of-interest checks apply, and ingestion URLs are checked against a curator allow-list. | open |
 | AQ | 8 | One checkpoint log per question for the ledger, plus an index log, with a one-time migration of existing data. Re-measure with `scripts/measure_storage.py`. | open |

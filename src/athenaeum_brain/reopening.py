@@ -24,7 +24,7 @@ from .belief_graph import dependents as graph_dependents, newly_relevant_claims
 from .consolidation import claim_key, expand
 from .loop import make_deliberation_unit
 from .output_types import FORECAST, RESEARCH, evidence_weight, resolve_forecast
-from .reevaluation import is_material, materiality_inputs, forecast_is_material, frame_staleness
+from .reevaluation import is_material, materiality_inputs, forecast_is_material, frame_staleness, IMPORTANCE_THRESHOLD
 
 # Section 7.1's inputs and how much each counts. Explicitly a placeholder
 # policy, like GRADE_WEIGHT: which inputs matter is the design's, the
@@ -183,7 +183,7 @@ def reopen_question(ledger: QuestionLedger, question_id: str, *, reasons: list[s
 
 
 def reopen_if_material(ledger: QuestionLedger, question_id: str, *, reputability, unit_log: CheckpointLog,
-                       importance_threshold: float = 0.3, grade_threshold: int = 1,
+                       importance_threshold: float = IMPORTANCE_THRESHOLD, grade_threshold: int = 1,
                        forecast_outcome: bool | None = None, consolidation=None,
                        additional_reasons: list[str] = (),
                        belief_graph: BeliefGraphStore | None = None, model_fitness=None) -> dict:

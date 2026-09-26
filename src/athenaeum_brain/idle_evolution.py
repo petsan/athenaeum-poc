@@ -48,6 +48,7 @@ from .dispute_resolution import resolve_dispute
 from .domain_fidelity import compute_score, needs_review
 from .fidelity_remediation import remediate
 from .belief_graph import citations, questions_relying_on_source
+from .reevaluation import IMPORTANCE_THRESHOLD
 
 SUBMITTER = "idle-evolution"  # recorded as the proposer of standard amendments
 
@@ -347,7 +348,7 @@ def apply_amendment_if_approved(ctx: IdleContext, cycle_id: str, proposal: dict)
     return {"adopted": True, **result}
 
 
-def feed_reevaluation(ctx: IdleContext, idle_result: dict, *, unit_log_for, importance_threshold: float = 0.3,
+def feed_reevaluation(ctx: IdleContext, idle_result: dict, *, unit_log_for, importance_threshold: float = IMPORTANCE_THRESHOLD,
                       belief_graph=None, model_fitness=None) -> dict:
     """Hands each question the cycle implicated to reopen_if_material, with
     the cycle's findings as additional material reasons (7.2). The usual

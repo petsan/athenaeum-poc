@@ -9,6 +9,11 @@ from athenaeum_body.reputability_store import GRADE_ORDER
 
 SEVERE_GRADES = {"contested", "rejected"}
 
+# Section 7.1/11.5: the one importance threshold (a placeholder). Questions
+# rated below it are not reopened for material changes (7.3), and human
+# input on them does not wait at a checkpoint (11.5, owner decision 5).
+IMPORTANCE_THRESHOLD = 0.3
+
 
 def frame_staleness(answer: dict) -> dict:
     """Section 7.2's third trigger (and Section 8's "stale framing" row): the

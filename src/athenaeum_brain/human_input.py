@@ -12,6 +12,7 @@ from __future__ import annotations
 from athenaeum_body.reputability_store import ReputabilityStore
 from athenaeum_body.human_checkpoint_store import HumanCheckpointStore
 from .claims import Claim
+from .reevaluation import IMPORTANCE_THRESHOLD
 
 ROLES = ("owner", "reviewer", "member", "service")
 _LOW_WEIGHT_CONFIDENCE_CAP = 0.3
@@ -94,21 +95,37 @@ def human_input_is_material(answer: dict, submission: dict, survived_cross_exami
 
 
 def trigger_checkpoint_if_needed(checkpoints: HumanCheckpointStore, question_id: str,
-                                  submission: dict, materiality: dict) -> dict | None:
+                                  submission: dict, materiality: dict, *, importance: float | None = None,
+                                  threshold: float = IMPORTANCE_THRESHOLD,
+                                  changes_leading_conclusion: bool = False,
+                                  overturns_tier_c: bool = False) -> dict | None:
     """Section 11.5: any re-deliberation triggered by human input that
     would change a leading conclusion, overturn a Tier C item, or touch an
     importance-thresholded question produces pending_human_checkpoint
-    rather than going straight to current. Here: any MATERIAL human input
-    triggers the checkpoint -- this POC doesn't yet have the importance-
-    rating machinery (Section 7.1) to distinguish "material but routine"
-    from "material and high-importance", so it takes the conservative
-    reading (checkpoint on any materiality) rather than guessing a
-    threshold; ordinary, non-material human input never reaches this
-    function's caller in the first place."""
+    rather than going straight to current.
+
+    Owner decision 5 (2026-09-26) puts the importance clause into effect.
+    Material human input on a question rated below `threshold` (the same
+    threshold re-evaluation uses) does NOT wait at a checkpoint; it stays
+    an ordinary claim, cross-examined like any other. The other two
+    clauses are not importance-gated in the design, so input that would
+    change a leading conclusion or overturn a Tier C item always
+    checkpoints. With no importance given, this stays conservative and
+    checkpoints, as it always did."""
     if not materiality["material"]:
         return None
+    reasons = list(materiality["reasons"])
+    if changes_leading_conclusion:
+        reasons.append("would change the leading conclusion")
+    if overturns_tier_c:
+        reasons.append("would overturn a Tier C (consolidated) claim")
+    must = changes_leading_conclusion or overturns_tier_c
+    if not must and importance is not None:
+        if importance < threshold:
+            return None
+        reasons.append(f"question importance {importance} is at or above the {threshold} threshold")
     return checkpoints.set_pending(
-        question_id, reason="; ".join(materiality["reasons"]),
+        question_id, reason="; ".join(reasons),
         triggering_claim_id=submission["claim"].claim_id, submitter_id=submission["submitter_id"],
     )
 

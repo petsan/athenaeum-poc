@@ -59,6 +59,7 @@ from .idle_evolution import (
 from .reopening import rate_and_store_importance
 from .audits import reevaluation_audit, consolidation_audit
 from .evaluation import calibration_drift
+from .reevaluation import IMPORTANCE_THRESHOLD
 
 
 @dataclass
@@ -66,7 +67,7 @@ class MaintenancePolicy:
     idle_every_questions: int = 3
     audit_every_cycles: int = 5
     idle_sample_size: int = 20
-    importance_threshold: float = 0.3
+    importance_threshold: float = IMPORTANCE_THRESHOLD   # shared with human input (11.5)
     max_round_failures: int = 3   # attempts at a failing round before its unit is given up
     event_history: int = 200      # recent events kept in memory (Maintainer.events)
 
