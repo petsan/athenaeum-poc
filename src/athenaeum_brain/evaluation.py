@@ -504,9 +504,9 @@ def check_integrity_gates(answer: dict) -> dict:
 def _empirical_category_error(statement: str) -> str | None:
     """Reuses Philosophy's own normative-word list rather than a second,
     independently-drifting copy of it."""
-    stmt = statement.lower()
+    from .agents import mentions
     for word in MasterOfPhilosophy._normative_words:
-        if word in stmt:
+        if mentions(statement, (word,)):  # whole words: 'mustard' isn't 'must' (known-bugs.md #28)
             return f"empirical-typed statement contains normative word {word!r}"
     return None
 

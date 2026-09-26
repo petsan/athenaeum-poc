@@ -49,6 +49,20 @@ def _strip_leading_article(s: str) -> str:
     return s[4:] if s.startswith("the ") else s
 
 
+_INFLECTIONS = r"(?:s|es|ed|d|ing)?"
+
+
+def mentions(text: str, keywords) -> bool:
+    """Whole-word keyword matching with common inflections ('primes',
+    'rounded', 'forces', 'causes'). Replaces plain substring tests, which
+    routed Logic on 'b-all', Mathematics on 'a-round' and 'sev-en', World
+    News on 'be-cause' and 'to-war-d', Engineering on 'la-test', and fired
+    Philosophy's category-error check on 'must-ard' (known-bugs.md #28).
+    Multi-word keywords ('lead to') match as whole phrases."""
+    q = text.lower()
+    return any(re.search(rf"\b{re.escape(k)}{_INFLECTIONS}\b", q) for k in keywords)
+
+
 def all_agents() -> list:
     """Fresh instances of every registered Master Agent, in registration
     (i.e. declaration) order -- deterministic, so routing/framing output
@@ -73,7 +87,7 @@ class MasterOfMathematics:
     domain_keywords = ("prime", "number", "divisible", "sum", "even", "odd", "round")
 
     def in_jurisdiction(self, question: str) -> bool:
-        return any(k in question.lower() for k in self.domain_keywords)
+        return mentions(question, self.domain_keywords)
 
     def explore(self, question: str, question_id: str) -> list[Claim]:
         claims = self._explore_deterministic(question, question_id)
@@ -95,7 +109,7 @@ class MasterOfMathematics:
         # Primality is the one property computed here, so it is only claimed
         # when the question asks about primality -- "is 4 even?" used to get
         # the irrelevant claim "4 is not prime".
-        candidates = self._BARE_INTEGER.findall(question.lower()) if "prime" in question.lower() else []
+        candidates = self._BARE_INTEGER.findall(question.lower()) if mentions(question, ("prime",)) else []
         for token in dict.fromkeys(candidates):
             n = int(token)
             prime = _is_prime(n)
@@ -107,7 +121,7 @@ class MasterOfMathematics:
                 jurisdiction_check=True,
                 supporting_provenance=["computed:trial_division"],
             ))
-        if "round" in question.lower():
+        if mentions(question, ("round",)):
             for token in question.replace("?", "").split():
                 try:
                     from decimal import Decimal, ROUND_HALF_UP
@@ -160,10 +174,10 @@ class MasterOfLogic:
     """Domain: validity of argument form, never first-order domain content
     (Section 2.2). Chairs synthesis/dispute resolution (Section 4)."""
     name = "Logic"
-    domain_keywords = ("all", "every", "therefore", "if", "then", "valid")
+    domain_keywords = ("all", "every", "therefore", "if", "then", "valid", "validity")
 
     def in_jurisdiction(self, question: str) -> bool:
-        return any(k in question.lower() for k in self.domain_keywords)
+        return mentions(question, self.domain_keywords)
 
     def explore(self, question: str, question_id: str) -> list[Claim]:
         # Logic doesn't assert first-order claims (Section 2.2) -- it only
@@ -216,10 +230,10 @@ class MasterOfEngineering:
     round-half-up convention, used to exercise Section 4.2's jurisdictional
     conflict path."""
     name = "Engineering"
-    domain_keywords = ("round", "implement", "execute", "verify", "test")
+    domain_keywords = ("round", "implement", "implementation", "execute", "execution", "verify", "verified", "verification", "test")
 
     def in_jurisdiction(self, question: str) -> bool:
-        return any(k in question.lower() for k in self.domain_keywords)
+        return mentions(question, self.domain_keywords)
 
     def explore(self, question: str, question_id: str) -> list[Claim]:
         claims = self._explore_deterministic(question, question_id)
@@ -236,7 +250,7 @@ class MasterOfEngineering:
         return claims
 
     def _explore_deterministic(self, question: str, question_id: str) -> list[Claim]:
-        if "round" not in question.lower():
+        if not mentions(question, ("round",)):
             return []
         claims = []
         from decimal import Decimal, ROUND_HALF_EVEN
@@ -326,11 +340,22 @@ class MasterOfPhysics:
     re-deriving another claim's stated fall time and challenging on
     disagreement, the same re-derivation pattern Mathematics uses."""
     name = "Physics"
-    domain_keywords = ("fall", "falling", "drop", "gravity", "velocity", "acceleration", "force")
+    # Motion verbs are everyday words ("the fall of the Berlin Wall", "drop the
+    # subject"), so on their own they only put a question in Physics's
+    # jurisdiction when there is physical context too: a stated height or a
+    # physical object. The other keywords are unambiguous (known-bugs.md #28).
+    _MOTION_VERBS = ("fall", "falling", "fell", "drop", "dropped", "dropping")
+    _PHYSICS_TERMS = ("gravity", "velocity", "acceleration", "force", "momentum", "mass")
+    _PHYSICAL_OBJECTS = ("object", "ball", "stone", "rock", "apple", "feather", "body", "projectile",
+                         "weight", "height", "hammer")
+    domain_keywords = _MOTION_VERBS + _PHYSICS_TERMS
     _G = 9.8  # m/s^2, standard gravity approximation
 
     def in_jurisdiction(self, question: str) -> bool:
-        return any(k in question.lower() for k in self.domain_keywords)
+        if mentions(question, self._PHYSICS_TERMS):
+            return True
+        return mentions(question, self._MOTION_VERBS) and (
+            bool(self._heights(question)) or mentions(question, self._PHYSICAL_OBJECTS))
 
     def explore(self, question: str, question_id: str) -> list[Claim]:
         claims = self._explore_deterministic(question, question_id)
@@ -362,7 +387,7 @@ class MasterOfPhysics:
         return [h for h in dict.fromkeys(found) if float(h) > 0]
 
     def _explore_deterministic(self, question: str, question_id: str) -> list[Claim]:
-        if not any(k in question.lower() for k in ("fall", "falling", "drop")):
+        if not mentions(question, self._MOTION_VERBS):
             return []
         claims = []
         for height in self._heights(question):
@@ -496,7 +521,7 @@ class MasterOfPhilosophy:
     _normative_words = ("should", "ought", "must")
 
     def in_jurisdiction(self, question: str) -> bool:
-        return any(k in question.lower() for k in self.domain_keywords)
+        return mentions(question, self.domain_keywords)
 
     def explore(self, question: str, question_id: str) -> list[Claim]:
         claims = self._explore_deterministic(question, question_id)
@@ -509,7 +534,7 @@ class MasterOfPhilosophy:
 
     def _explore_deterministic(self, question: str, question_id: str) -> list[Claim]:
         q = question.lower()
-        if not any(w in q for w in self._normative_words):
+        if not mentions(q, self._normative_words):
             return []
         # The statement names its question rather than saying "this
         # question": a claim must mean the same thing outside the
@@ -533,7 +558,7 @@ class MasterOfPhilosophy:
         if claim.issuing_agent == self.name or claim.claim_type != "empirical":
             return None
         stmt = claim.statement.lower()
-        if not any(w in stmt for w in self._normative_words):
+        if not mentions(stmt, self._normative_words):
             return None
         return Claim(
             question_id=question_id, round=2, issuing_agent=self.name,
@@ -558,7 +583,7 @@ class MasterOfTheology:
     near-empirical confidence is flagged, jointly implementing what
     Section 6.4 assigns to Logic/Philosophy/Theology together."""
     name = "Theology"
-    domain_keywords = ("tradition", "doctrine", "scripture", "faith", "religion")
+    domain_keywords = ("tradition", "traditional", "doctrine", "scripture", "faith", "religion", "religious")
     _TRADITIONS = {
         "stoicism": "the Stoics hold that virtue is the only true good, and that external things are indifferent to a life well-lived",
         "buddhism": "Buddhism's Four Noble Truths hold that suffering arises from craving/attachment, and that its cessation is attainable",
@@ -568,7 +593,7 @@ class MasterOfTheology:
 
     def in_jurisdiction(self, question: str) -> bool:
         q = question.lower()
-        return any(k in q for k in self.domain_keywords) or any(t in q for t in self._TRADITIONS)
+        return mentions(q, self.domain_keywords) or mentions(q, self._TRADITIONS)
 
     def explore(self, question: str, question_id: str) -> list[Claim]:
         claims = self._explore_deterministic(question, question_id)
@@ -588,7 +613,7 @@ class MasterOfTheology:
         q = question.lower()
         claims = []
         for tradition, position in self._TRADITIONS.items():
-            if tradition in q:
+            if mentions(q, (tradition,)):
                 claims.append(Claim(
                     question_id=question_id, round=1, issuing_agent=self.name,
                     subject=tradition,
@@ -668,7 +693,7 @@ class MasterOfWorldNews:
 
     def in_jurisdiction(self, question: str) -> bool:
         q = question.lower()
-        return any(k in q for k in self.domain_keywords) or bool(self._find_events(question))
+        return mentions(q, self.domain_keywords) or bool(self._find_events(question))
 
     def explore(self, question: str, question_id: str) -> list[Claim]:
         claims = self._explore_deterministic(question, question_id)
@@ -687,7 +712,7 @@ class MasterOfWorldNews:
         event_a, event_b = events
         date_a, date_b = self._EVENTS[event_a], self._EVENTS[event_b]
         claims = []
-        if any(k in q for k in ("before", "after", "when", "order", "timeline")):
+        if mentions(q, ("before", "after", "when", "order", "timeline")):
             order = "before" if date_a < date_b else "after"
             claims.append(Claim(
                 question_id=question_id, round=1, issuing_agent=self.name,
@@ -698,8 +723,8 @@ class MasterOfWorldNews:
                 jurisdiction_check=True,
                 supporting_provenance=[f"dated_event:{event_a}", f"dated_event:{event_b}"],
             ))
-        if any(k in q for k in ("cause", "caused", "lead to", "led to", "contribute to",
-                                 "contributed to", "result in", "resulted in")):
+        if mentions(q, ("cause", "caused", "lead to", "led to", "contribute to",
+                        "contributed to", "result in", "resulted in")):
             valid = date_a <= date_b
             statement = (
                 f"'{event_a}' ({date_a}) precedes '{event_b}' ({date_b}), so a causal/contributing "

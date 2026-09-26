@@ -334,7 +334,7 @@ Same rules and stop conditions. Each item is a real gap found while building bat
 
 | Phase | Scope | Status |
 |---|---|---|
-| O | **Whole-word jurisdiction matching** — every agent matches its keywords as *substrings* (`"all"` routes Logic for "does a b**all** fall"; `"if"` matches "d**if**ferent"), which is also the root of the "fall of the Berlin Wall" over-reach limitation. Match whole words; add a physical-context requirement for Physics's motion verbs. | open |
+| O | **Whole-word jurisdiction matching** — every agent matches its keywords as *substrings* (`"all"` routes Logic for "does a b**all** fall"; `"if"` matches "d**if**ferent"), which is also the root of the "fall of the Berlin Wall" over-reach limitation. Match whole words; add a physical-context requirement for Physics's motion verbs. | **done** — §60, known-bugs #28 |
 | P | **Automatic compaction and de-compaction in idle evolution** — §10.3 says compaction is *performed by* an idle-evolution process, but idle cycles only record survival; §10.5 requires expanding a compacted claim before resolving a challenge to it, which idle disputes don't do yet. | open |
 | Q | **Maintainer restart recovery** — its queue is in memory (§56's stated limitation), so a restart strands queued or mid-way questions. Persist the unit registry in the Maintainer's own checkpoint and resubmit on start; deliberations resume from their last completed round. | open |
 | R | **Refresh the narrated demo** (`demo_brain.py`) to show batches 1–2 end to end; mind known-bugs #16 (the final-print trap). | open |
@@ -745,6 +745,16 @@ With guest changes permitted, the OLMo 3 7B guest's memory growth was traced to 
 **Second finding (known-bugs.md #27):** §38 and the setup script said `--no-jinja` had been added to *every* guest; in fact only 116 had it — the other six were never re-provisioned from the updated template. The first `sed`, keyed on `--no-jinja`, silently changed only 116; checking the live units caught it. All seven now match the template exactly.
 
 **Full live suite, no offline mode, nothing ignored: 461 passed, 1 skipped** (the skip is the real-GPU-worker test, worker offline) in 4 m 56 s — the first fully green live run since the guest degraded, including all 15 live-OLMo tests in `test_model_backed_reasoning.py` and every live model-serving test. This retroactively confirms phases E–N, which had only been verified offline.
+
+## 60. Whole-word jurisdiction matching (known-bugs.md #28) — Phase O
+
+All seven agents matched their jurisdiction keywords as substrings, and several internal gates did the same: Logic was routed "does a b**all** fall?", Mathematics/Engineering "a**round**", Mathematics "s**even**", World News "be**cause**" and "to**war**d", Engineering "la**test**", and Philosophy's is-ought check (plus the §9.8 integrity gate reusing its words) fired on "**must**ard". A single `agents.mentions(text, keywords)` — whole words with common inflections, phrases as phrases — now backs every agent's `in_jurisdiction`, every "does the question mention X" gate, Philosophy's normative-word checks and the integrity gate; keyword lists gained the irregular inflections the suffix rule can't reach (`dropped`, `implementation`, `religious`, …).
+
+Physics's everyday motion verbs ("fall", "drop") now route only with physical context — a stated height or a physical object — while its unambiguous terms (gravity, force, momentum, …) route alone. That **closes the open "keyword routing over-reaches" limitation**: "did the fall of the berlin wall lead to the collapse of the soviet union?" routes to World News only (tested).
+
+One existing expectation changed, and it was the right one to change: the batch-2 end-to-end test expected a Physics fidelity record that existed only because the Berlin Wall question wrongly routed Physics. It now asserts the opposite (Physics not routed) and checks that every agent the idle cycle *actually* scored has a fingerprint.
+
+**Full live suite: 487 passed, 1 skipped** (GPU worker offline). 488 collected (462 prior + 26 new in `tests/test_jurisdiction_matching.py`).
 
 ### Explicitly not on this list
 Any application-level work beyond what `deployment-playbook.md` promises to deliver (verified SSH access to a correctly-networked guest, not a deployed application).

@@ -207,6 +207,7 @@ def test_full_lifecycle_through_the_maintainer(system):
     assert [c["statement"] for c in latest["p17"]["committed"]] == ["17 is prime"]
     assert not any("prime" in c["statement"] for c in latest["even"]["committed"])
     assert not any("1989m" in c["statement"] for c in latest["fall"]["committed"])
+    assert "Physics" not in latest["fall"]["frame"]["routed_agents"]  # #28: no physical context
 
     # Belief Graph: the shared claim links the two primality questions (Phase L)
     assert dependents(graph, "p17") == ["believe"]
@@ -218,11 +219,12 @@ def test_full_lifecycle_through_the_maintainer(system):
     result = reopen_if_material(s.ledger, "round", reputability=s.rep, unit_log=s.fresh(), belief_graph=graph)
     assert result["reopened"] and any("newly relevant" in c for c in result["answer"]["diff"]["cause"])
 
-    # fingerprints now cover every agent the idle cycle scored (Phase J)
+    # every agent the idle cycle scored has a fingerprint (Phase J)
     from athenaeum_brain.domain_fidelity import FINGERPRINT_CHECKS
-    for agent in ("Mathematics", "Physics", "Philosophy"):
-        history = s.fid.history_for(agent)
-        assert history and agent in FINGERPRINT_CHECKS
+    from athenaeum_brain.agents import all_agents
+    scored = [a.name for a in all_agents() if s.fid.history_for(a.name)]
+    assert {"Mathematics", "Philosophy"} <= set(scored)
+    assert all(agent in FINGERPRINT_CHECKS for agent in scored)
 
     # audits ran on their cadence; nothing left over in the scheduler's state
     assert s.audits.history("reevaluation")
