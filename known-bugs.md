@@ -222,6 +222,7 @@ Real, reproduced behaviours that are wrong or weak but deliberately not fixed in
 **Root cause:** Treating "add a new step" as "paste new content in front of the last line" without first checking what the last line already was.
 **Fix:** Both times, fixed by locating the existing final print and folding it into the edit rather than leaving a duplicate.
 **Lesson:** This is a **repeated** mistake, which is the whole point of this file existing — catching a bug once doesn't prevent it from happening again in a *different* file edit later, if the underlying habit that caused it isn't changed. Before appending to any script that has a "final output" line, `grep` for that line first and treat it as something to move, not something to leave in place while inserting before it.
+**Now guarded by a test (2026-09-26):** `tests/test_demo_brain.py` runs `demo_brain.py` end to end and asserts a clean exit and exactly one final banner at the very end — added when the demo was extended by five steps (batch 3, Phase R), so a third occurrence fails the suite instead of relying on the habit.
 
 ---
 

@@ -337,7 +337,7 @@ Same rules and stop conditions. Each item is a real gap found while building bat
 | O | **Whole-word jurisdiction matching** — every agent matches its keywords as *substrings* (`"all"` routes Logic for "does a b**all** fall"; `"if"` matches "d**if**ferent"), which is also the root of the "fall of the Berlin Wall" over-reach limitation. Match whole words; add a physical-context requirement for Physics's motion verbs. | **done** — §60, known-bugs #28 |
 | P | **Automatic compaction and de-compaction in idle evolution** — §10.3 says compaction is *performed by* an idle-evolution process, but idle cycles only record survival; §10.5 requires expanding a compacted claim before resolving a challenge to it, which idle disputes don't do yet. | **done** — §61, known-bugs #29 |
 | Q | **Maintainer restart recovery** — its queue is in memory (§56's stated limitation), so a restart strands queued or mid-way questions. Persist the unit registry in the Maintainer's own checkpoint and resubmit on start; deliberations resume from their last completed round. | **done** — §62 |
-| R | **Refresh the narrated demo** (`demo_brain.py`) to show batches 1–2 end to end; mind known-bugs #16 (the final-print trap). | open |
+| R | **Refresh the narrated demo** (`demo_brain.py`) to show batches 1–2 end to end; mind known-bugs #16 (the final-print trap). | **done** — §63 |
 | — | End-to-end test extended, then plan batch 4. | open |
 
 - [ ] `execution_sandbox.enabled` stays `false` — not actionable right now (the CPU-time gap is a confirmed environment limitation on this specific kernel, not a bug to fix), but re-run `scripts/preflight_check.py` if this project is ever deployed to a *different* host, per `security-review-sandbox.md` Section 7.3/7.4.
@@ -775,6 +775,14 @@ Delivery semantics are deliberate and stated in `_complete`: **question answers 
 Tested by throwing a Maintainer away mid-run (the crash) and building a new one over the same files: interleaved questions resume and each is answered exactly once; a finished-but-unrecorded question is recorded on restart; an answer recorded just before the crash isn't recorded again; a half-run idle cycle resumes without starting a second one; counters and pending amendments survive.
 
 **Full live suite: 498 passed, 1 skipped, 1 failed** — the failure is the known-flaky `qwen2.5-1.5b` factual assertion (known-bugs.md open limitations, owner decision 2), which then failed 1 in 6 immediate re-runs; nothing else failed. 500 collected (494 prior + 6 new in `tests/test_maintenance_recovery.py`).
+
+## 63. The narrated demo shows batches 1–3 — Phase R
+
+`demo_brain.py` gains five steps after its original seven, each on deterministic questions so it never depends on the model guests: **(8)** evidence weighting flipping the leading conclusion when a source's track record is rejected, against the no-weighting ablation; **(9)** a real Forecast (probability 0.9, with its air-resistance sensitivity) and a Recommendation that lists both rounding conventions with the objective each serves and chooses neither; **(10)** a dispute where circular citation leaves one side with a single line of evidence; **(11)** the Maintainer answering three interleaved questions, being thrown away mid-way, and a new one recovering all three, answering each once, running an idle cycle, and linking two questions through the Belief Graph; **(12)** the adversarial suite, 16/16 across all 15 §8 failure modes. Run it with `python demo_brain.py`.
+
+Known-bugs #16 (the final-banner trap, hit twice before) was respected — the existing banner was moved after the new steps, not left in place — and is now **guarded by a test**: `tests/test_demo_brain.py` runs the whole demo and asserts a clean exit, exactly one final banner at the very end, and 16/16.
+
+**Full live suite: 500 passed, 1 skipped** (GPU worker offline) — fully green, the flaky assertion passing this time. 501 collected.
 
 ### Explicitly not on this list
 Any application-level work beyond what `deployment-playbook.md` promises to deliver (verified SSH access to a correctly-networked guest, not a deployed application).

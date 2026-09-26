@@ -173,4 +173,81 @@ review = needs_review(df_store, "Mathematics", drop_threshold=0.15)
 print("drifted score:", drifted_score)
 print("review needed?", review)
 
+# --- Added 2026-09-26: batches 1-3 (docs/progress.md §41-§62) ----------------
+from athenaeum_body.reputability_store import ReputabilityStore
+from athenaeum_body.ledger import QuestionLedger
+from athenaeum_body.belief_graph_store import BeliefGraphStore
+from athenaeum_brain.evaluation import a1_full_workflow, ablation_no_reputability_weighting, run_adversarial_suite
+from athenaeum_brain.claims import Claim
+from athenaeum_brain.dispute_resolution import resolve_dispute
+from athenaeum_brain.idle_evolution import IdleContext
+from athenaeum_brain.maintenance import Maintainer, MaintenancePolicy
+from athenaeum_brain.belief_graph import dependents
+
+DATA5 = DATA / "batches"
+log5 = lambda name: CheckpointLog(cas=ContentAddressedStore(DATA5 / "cas"), index_path=DATA5 / f"{name}.txt")
+
+step("8. Evidence-weighted synthesis: a source's track record decides what leads (Section 4.1)")
+rep5 = ReputabilityStore(log5("rep"))
+for _ in range(3):
+    rep5.record_outcome("computed:trial_division", "source", "challenged")
+question = "should we believe 17 is prime?"
+weighted = a1_full_workflow(question, "w1", grade_lookup=lambda s: rep5.current_grade(s)["grade"])
+unweighted = ablation_no_reputability_weighting(question, "w2")
+print("with trial division's track record rejected, the leading conclusion is:")
+print("  weighted:  ", weighted["research"]["leading_conclusion"]["issuing_agent"])
+print("  unweighted:", unweighted["research"]["leading_conclusion"]["issuing_agent"])
+print("(the agents' own confidences are untouched -- only the evidence weight moved)")
+
+step("9. Forecasts and recommendations, each with its own semantics (Section 5.4)")
+log, runner = fresh_runner()
+unit = make_deliberation_unit("will an object dropped from 20m land within 3 seconds?", "f1")
+while unit.status != "completed":
+    runner.run_round(unit)
+forecast = log.read_latest()["shared_state"]["answer"]["output_answer"]["sections"]["forecast"]
+print("forecast:", forecast["statement"], "-- probability", forecast["probability"])
+print("sensitivity:", forecast["sensitivity"])
+log, runner = fresh_runner()
+unit = make_deliberation_unit("should we round 2.5 up or down?", "r1")
+while unit.status != "completed":
+    runner.run_round(unit)
+rec = log.read_latest()["shared_state"]["answer"]["output_answer"]["sections"]["recommendation"]
+print("recommendation:", rec["chosen_option"])
+for option in rec["alternatives_considered"]:
+    print(f"  option: {option['option']} -- serves: {option['serves_objective']}")
+
+step("10. Dispute resolution catches circular corroboration (Section 6.4)")
+def claim(statement, sources):
+    return Claim(question_id="d", round=1, issuing_agent="Physics", statement=statement, claim_type="empirical",
+                 confidence=0.8, defeat_condition="a measurement", jurisdiction_check=True,
+                 supporting_provenance=sources)
+ruling = resolve_dispute("topic:X", {"affirms": [claim("X is true", ["blog:1", "blog:2"])],
+                                     "denies": [claim("X is false", ["journal:a", "archive:b"])]},
+                         reputability=rep5, cites={"blog:1": ["blog:2"], "blog:2": ["blog:1"]})
+print("ruling:", ruling["ruling"])
+print("rationale:", ruling["rationale"])
+
+step("11. The system maintaining itself -- and surviving a restart (Sections 3.6, 7, 10)")
+ledger5 = QuestionLedger(log5("ledger"))
+graph5 = BeliefGraphStore(log5("graph"))
+make_maintainer = lambda: Maintainer(idle=IdleContext(ledger=ledger5, reputability=ReputabilityStore(log5("rep2"))),
+                                     log_for=log5, belief_graph=graph5, policy=MaintenancePolicy(idle_every_questions=3))
+m = make_maintainer()
+for qid, q in {"m1": "is 17 prime?", "m2": "should we believe 17 is prime?", "m3": "how should we round 2.5?"}.items():
+    m.submit_question(qid, q)
+for _ in range(4):
+    m.tick()
+print("...the process dies with three questions part-way through...")
+del m
+m = make_maintainer()
+print("a new process recovered:", sorted(m.recovered))
+for event in m.run():
+    print(" ", event["kind"], event.get("question_id") or event.get("cycle_id"))
+print("each answer is its own:", [ledger5.get(q).versions[0]["question"] for q in ("m1", "m2", "m3")])
+print("the Belief Graph links questions that rest on the same claim: m1 ->", dependents(graph5, "m1"))
+
+step("12. Adversarial suite: a real check for every failure mode in the design (Section 8)")
+suite = run_adversarial_suite()
+print(f"{suite['passed']}/{suite['total']} passed")
+
 print("\n=== brain demo complete ===")
