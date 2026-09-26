@@ -1,6 +1,6 @@
 # Open owner decisions — briefs
 
-Each brief covers one call that is the owner's to make. **Decisions 2–5 and 7–10 were made on 2026-09-26 (marked "Decided" below); 6 awaits the owner reading the draft.** It gives the evidence gathered so far, the realistic options, what each costs, and a recommendation. None of the decided items is implemented yet (see batch 10 in `docs/progress.md`); the numbers match `docs/progress.md`'s owner-decision list. Written 2026-09-26, at the end of batch 9.
+Each brief covers one call that is the owner's to make. **Decisions 2–10 were made on 2026-09-26 (marked "Decided" below); 11 is open.** It gives the evidence gathered so far, the realistic options, what each costs, and a recommendation. None of the decided items is implemented yet (see batch 10 in `docs/progress.md`); the numbers match `docs/progress.md`'s owner-decision list. Written 2026-09-26, at the end of batch 9.
 
 ---
 
@@ -70,6 +70,7 @@ Each brief covers one call that is the owner's to make. **Decisions 2–5 and 7�
 **Options.** (a) adopt it as the README body after reading it; (b) adopt with edits; (c) keep the current body.
 
 **Recommendation:** read it and choose (a) or (b). It was written for a reader evaluating the work, which matches the stated purpose of the repository.
+**Decided (owner, 2026-09-26): (a), keeping the history.** The refreshed draft became the README body under the unchanged notice, with both the SVG and the Mermaid diagram. The previous body is kept verbatim in `docs/readme-history.md`.
 
 ---
 
