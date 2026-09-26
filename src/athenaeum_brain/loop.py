@@ -9,8 +9,10 @@ from athenaeum_body.scheduler.work_unit import WorkUnit, RoundResult
 from athenaeum_body.reputability_store import ReputabilityStore
 from athenaeum_body.model_fitness_store import ModelFitnessStore
 from athenaeum_body.domain_fidelity_store import DomainFidelityStore
+from athenaeum_body.belief_graph_store import BeliefGraphStore
 from .model_backed_reasoning import fallback_suppressed
 from .fidelity_remediation import regrounding_agents
+from .belief_graph import record_answer
 from .model_fitness import fitness_factor, is_model_backed
 from .rounds import framing_round, exploration_round, cross_examination_round, synthesis_round
 from .claims import Claim
@@ -69,9 +71,15 @@ def _attach_fitness_and_record_outcomes(result: dict, store: ModelFitnessStore) 
 def make_deliberation_handler(question: str, question_id: str, reputability: ReputabilityStore = None,
                               reopen_context: dict = None, verification: dict = None,
                               model_fitness: ModelFitnessStore = None,
-                              fidelity: DomainFidelityStore = None):
+                              fidelity: DomainFidelityStore = None,
+                              belief_graph: BeliefGraphStore = None):
     """Returns a round_handler(state, round_index) -> RoundResult usable
     directly as a WorkUnit.round_handler in athenaeum_body's scheduler.
+
+    belief_graph: when given, the answer is recorded as a version node with
+    its relies_on / dissents / cites edges (belief_graph.record_answer);
+    the version is the reopen's prior_version + 1, else 0. Recording is
+    idempotent, so a resumed final round can't duplicate anything.
 
     fidelity (Section 2.4.3): when given, agents under re-grounding or
     escalation have their model fallback suppressed for this deliberation's
@@ -169,6 +177,9 @@ def make_deliberation_handler(question: str, question_id: str, reputability: Rep
                 answer = _attach_grades_and_record_outcomes(answer, reputability)
             if model_fitness is not None:
                 answer = _attach_fitness_and_record_outcomes(answer, model_fitness)
+            if belief_graph is not None:
+                version = reopen_context["prior_version"] + 1 if reopen_context else 0
+                record_answer(belief_graph, question_id, answer, version)
             return RoundResult(proposed_writes={"answer": answer}, done=True)
         raise ValueError(f"no round {round_index} in the deliberation loop")
 
@@ -179,12 +190,13 @@ def make_deliberation_unit(question: str, question_id: str, priority: int = 0,
                             reputability: ReputabilityStore = None, reopen_context: dict = None,
                             unit_id: str = None, verification: dict = None,
                             model_fitness: ModelFitnessStore = None,
-                            fidelity: DomainFidelityStore = None) -> WorkUnit:
+                            fidelity: DomainFidelityStore = None,
+                            belief_graph: BeliefGraphStore = None) -> WorkUnit:
     """unit_id defaults to question_id; a reopen passes a distinct one so
     the new run's checkpoints never collide with the original's."""
     return WorkUnit(
         id=unit_id or question_id,
         priority=priority,
         round_handler=make_deliberation_handler(question, question_id, reputability, reopen_context,
-                                                verification, model_fitness, fidelity),
+                                                verification, model_fitness, fidelity, belief_graph),
     )

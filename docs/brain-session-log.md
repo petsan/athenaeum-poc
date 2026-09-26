@@ -1089,6 +1089,35 @@ asserting anything falsifiable and isn't challenged.
 
 ---
 
+## 2026-09-26 — Belief Graph (Phase L): design choices
+
+**Q: Why key claim nodes by agent + statement instead of claim id?**
+
+Claim ids are unique per deliberation; the point of a graph is to see
+that two questions rest on the *same* claim. `claim_key` is already the
+system's notion of "the same claim again" (consolidation, reopen diffs),
+so using it for node identity makes a shared claim a shared node, and
+dependency a plain edge walk.
+
+**Q: Why a sequence number instead of timestamps?**
+
+"Was this committed after that answer?" is the question §7.2's second
+trigger asks. A store-wide counter answers it exactly, independent of
+clocks, process restarts or two writes landing in the same millisecond.
+
+**Q: Why read "the framing round would route to the same question" as
+"same normalized subject"?**
+
+The honest mechanical content of "newly relevant" in this POC is the
+`subject` field: it's what agents already set to say what a claim is
+about, and synthesis already normalizes it to group conflicting claims.
+A claim about 2.50 committed later by another question is plainly
+relevant to an answer about 2.5. Anything looser — topical similarity,
+paraphrase — is semantic, and the design itself defers that to the
+model-serving layer.
+
+---
+
 *See `docs/progress.md` §26 for the checklist this log's entries track
 against, and `docs/infra-topology.md` for the infrastructure-side design
 decisions made in the same planning conversation.*

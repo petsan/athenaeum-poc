@@ -319,7 +319,7 @@ Same rules and stop conditions as batch 1. Ordered so each phase builds on the l
 |---|---|---|
 | J | **Fingerprints for Physics, Philosophy, Theology** (§2.4.1 names them: Physics — explicit defeat condition present; Philosophy — assumption/premise surfacing; Theology — `traditional` typing attached). Closes the §49 gap where those agents' drift could be flagged but never confirmed. | **done** — §53 |
 | K | **Mathematics bare-integer parsing** — primality only for integers the question actually asks about (same bug class as known-bugs #21); moves the open limitation into a fixed bug. | **done** — §54, known-bugs #25 |
-| L | **Belief Graph store** (schemas.md already specifies node/edge shapes): answers → claims → sources as real edges, written by the loop. `count_dependents` switches from its shared-claim proxy to real edges, and §7.2's second trigger ("a newly corroborated/challenged claim the framing round would route to the same question") becomes implementable. | open |
+| L | **Belief Graph store** (schemas.md already specifies node/edge shapes): answers → claims → sources as real edges, written by the loop. `count_dependents` switches from its shared-claim proxy to real edges, and §7.2's second trigger ("a newly corroborated/challenged claim the framing round would route to the same question") becomes implementable. | **done** — §55 |
 | M | **Maintenance cadence** — a driver that runs idle cycles as low-priority units on the existing `MultiUnitScheduler` alongside questions, audits every N cycles, feeds re-evaluation, and applies approved amendments; the system then evolves without a human calling each function. | open |
 | N | **Async API** — submit → poll over the ledger's `queued/active/completed` lifecycle (api.py's own stated limitation), plus read endpoints for versions and diffs. | open |
 | — | End-to-end test extended over J–N, then plan batch 3. | open |
@@ -679,6 +679,17 @@ One test-authoring slip on the way, a recurrence of known-bugs.md #11 (a test qu
 Mathematics used to claim "N is (not) prime" for every bare integer in any question it was routed to ("is 4 even?" committed "4 is not prime"; the 1 in "…in 1 second" became a primality claim). Now primality — the only property it computes — is claimed only when the question asks about primality, and only for whole numbers that aren't decimals or unit-bearing quantities (`4.9m`, `1 second`, `20 kg`), each once. Questions about other properties fall through to the model fallback instead of receiving an irrelevant confidence-1.0 claim. Moved from known-bugs.md's open-limitations list to fixed bug #25; `tests/test_math_parsing.py` pins eleven shapes.
 
 **Verified offline** (OLMo 3 guest still degraded): **421 passed, 1 skipped, 3 failed**, the same three `olmo3-7b` timeouts. 440 collected (429 prior + 11 new).
+
+## 55. The Belief Graph, graph-based dependents, and §7.2's second trigger — Phase L
+
+`BeliefGraphStore` (Body, new) stores `BeliefGraphNode`/`BeliefGraphEdge` exactly as `schemas.py` already defined them: write-once, with a store-wide `seq` on every node and edge so "added after X" never trusts wall-clock time. `athenaeum_brain/belief_graph.py` (new) decides what's recorded: each deliberation, when the loop is given a graph, writes `question → answer(vN) → claim → source` with `relies_on` / `dissents` / `cites` edges. Claim nodes are keyed by the canonical `claim_key`, so the same claim reached from two questions is literally one node — that is what makes dependency visible. A reopened answer is recorded as the next version.
+
+- **Dependents (§7.1)** — `belief_graph.dependents()` walks real `relies_on` edges; `count_dependents` / `rate_and_store_importance` use it when given a graph and fall back to the ledger scan otherwise (tested to agree).
+- **§7.2's second trigger, read narrowly** — `newly_relevant_claims()`: since this question's latest answer, another question committed a claim about the *same normalized subject* (so `2.5` and `2.50` match) that this answer doesn't rely on. `reopen_if_material(belief_graph=)` adds these as material reasons; once the question is reopened, those claims are no longer new (tested). Broader semantic relevance needs a model, as `rounds._normalize_subject` already states — this is the mechanical subset the existing `subject` field supports.
+
+Graph writes happen in the loop's final round and are idempotent by id, so a resumed round can't duplicate anything. Not yet wired into the API or idle evolution (the API has no graph store yet; batch 2's Phase M, the maintenance cadence, is the natural place).
+
+**Verified offline** (OLMo 3 guest still degraded — 64–85 s per 4-token call): **431 passed, 1 skipped, 2 failed** — two of the usual three `olmo3-7b` timeouts; the third (the elastic-worker CPU-fallback test) happened to complete within its timeout this run, which is luck, not recovery. 449 collected (440 prior + 9 new in `tests/test_belief_graph.py`).
 
 ### Explicitly not on this list
 Any application-level work beyond what `deployment-playbook.md` promises to deliver (verified SSH access to a correctly-networked guest, not a deployed application).

@@ -19,6 +19,8 @@ from __future__ import annotations
 from athenaeum_body.ledger import QuestionLedger
 from athenaeum_body.storage.checkpoint import CheckpointLog
 from athenaeum_body.scheduler.runner import SingleUnitRunner
+from athenaeum_body.belief_graph_store import BeliefGraphStore
+from .belief_graph import dependents as graph_dependents, newly_relevant_claims
 from .consolidation import claim_key, expand
 from .loop import make_deliberation_unit
 from .output_types import FORECAST, RESEARCH, evidence_weight, resolve_forecast
@@ -53,12 +55,15 @@ def importance_rating(frame: dict, *, dependents: int = 0, requested_priority: f
     return {"importance": round(importance, 4), "components": components}
 
 
-def count_dependents(ledger: QuestionLedger, question_id: str) -> int:
+def count_dependents(ledger: QuestionLedger, question_id: str, graph: BeliefGraphStore | None = None) -> int:
     """How many OTHER questions' latest answers commit at least one of the
     same claims (by claim_key) this question's latest answer commits --
-    if those claims change, those questions are implicated too. A proxy:
-    the POC has no Belief Graph dependency edges yet, so shared committed
-    claims are the closest real signal available."""
+    if those claims change, those questions are implicated too. With a
+    Belief Graph, answered from its real relies_on edges
+    (belief_graph.dependents); without one, from the ledger directly, which
+    gives the same answer for questions the graph has recorded."""
+    if graph is not None:
+        return len(graph_dependents(graph, question_id))
     state = ledger._state()["questions"]
     mine = state[question_id]["versions"]
     if not mine:
@@ -74,12 +79,13 @@ def count_dependents(ledger: QuestionLedger, question_id: str) -> int:
 
 
 def rate_and_store_importance(ledger: QuestionLedger, question_id: str, *,
-                              requested_priority: float | None = None) -> dict:
+                              requested_priority: float | None = None,
+                              graph: BeliefGraphStore | None = None) -> dict:
     """Computes importance from the question's latest answer's own frame
     and its current dependents, and stores it (7.1: revisable)."""
     entry = ledger.get(question_id)
     latest = entry.versions[-1]
-    rating = importance_rating(latest["frame"], dependents=count_dependents(ledger, question_id),
+    rating = importance_rating(latest["frame"], dependents=count_dependents(ledger, question_id, graph),
                                requested_priority=requested_priority)
     ledger.update_importance(question_id, rating["importance"])
     return rating
@@ -133,10 +139,11 @@ def answer_diff(prior: dict, new: dict) -> dict:
 
 def reopen_question(ledger: QuestionLedger, question_id: str, *, reasons: list[str],
                     unit_log: CheckpointLog, reputability=None, consolidation=None,
-                    extra_context: dict | None = None) -> dict:
+                    extra_context: dict | None = None, belief_graph: BeliefGraphStore | None = None) -> dict:
     """Section 7.3. `unit_log` holds the re-run's own round checkpoints
     (kill/resume works exactly as for any deliberation). Returns the new
-    answer, already appended to the ledger with its `diff`."""
+    answer, already appended to the ledger with its `diff` (and, with a
+    Belief Graph, recorded there as the next version)."""
     entry = ledger.get(question_id)
     if entry is None or not entry.versions:
         raise KeyError(f"no answered question {question_id!r} to reopen")
@@ -164,7 +171,8 @@ def reopen_question(ledger: QuestionLedger, question_id: str, *, reasons: list[s
     }
     runner = SingleUnitRunner(unit_log, shared_state={})
     unit = make_deliberation_unit(prior["question"], question_id, reputability=reputability,
-                                  reopen_context=context, unit_id=f"{question_id}-v{prior_version + 1}")
+                                  reopen_context=context, unit_id=f"{question_id}-v{prior_version + 1}",
+                                  belief_graph=belief_graph)
     while unit.status != "completed":
         runner.run_round(unit)
     new = unit_log.read_latest()["shared_state"]["answer"]
@@ -176,7 +184,8 @@ def reopen_question(ledger: QuestionLedger, question_id: str, *, reasons: list[s
 def reopen_if_material(ledger: QuestionLedger, question_id: str, *, reputability, unit_log: CheckpointLog,
                        importance_threshold: float = 0.3, grade_threshold: int = 1,
                        forecast_outcome: bool | None = None, consolidation=None,
-                       additional_reasons: list[str] = ()) -> dict:
+                       additional_reasons: list[str] = (),
+                       belief_graph: BeliefGraphStore | None = None) -> dict:
     """Section 7.3's trigger: reopen when materiality (7.2) fires for a
     sufficiently important question. A forecast resolution is the one
     exception to the importance gate -- always material, unconditionally.
@@ -186,13 +195,20 @@ def reopen_if_material(ledger: QuestionLedger, question_id: str, *, reputability
     additional_reasons: material findings from outside the grade-based
     rules -- e.g. idle evolution (3.6) finding that a claim this answer
     relied on is now challenged, 7.2's "newly challenged claim" trigger.
-    They are subject to the same importance gate."""
+    They are subject to the same importance gate.
+
+    belief_graph: enables 7.2's second trigger -- a claim about the same
+    subject committed by another question since this answer
+    (belief_graph.newly_relevant_claims)."""
     entry = ledger.get(question_id)
     prior = entry.versions[-1]
     current, under_prior = materiality_inputs(prior, reputability)
     materiality = is_material(prior, current, threshold=grade_threshold, prior_standard_grades=under_prior)
     reasons = (list(materiality["reasons"]) + frame_staleness(prior)["reasons"]  # 7.2 trigger 3
                + list(additional_reasons))
+    if belief_graph is not None:  # 7.2 trigger 2
+        reasons += [f"newly relevant claim '{c['claim']}' (subject {c['subject']}, from {c['from_question']})"
+                    for c in newly_relevant_claims(belief_graph, question_id)]
     extra = {}
 
     forecast = prior.get("output_answer", {}).get("sections", {}).get(FORECAST)
@@ -212,5 +228,6 @@ def reopen_if_material(ledger: QuestionLedger, question_id: str, *, reputability
                                              f"is below the {importance_threshold} threshold",
                 "materiality_reasons": reasons, "importance": entry.importance}
     answer = reopen_question(ledger, question_id, reasons=reasons, unit_log=unit_log,
-                             reputability=reputability, consolidation=consolidation, extra_context=extra)
+                             reputability=reputability, consolidation=consolidation, extra_context=extra,
+                             belief_graph=belief_graph)
     return {"reopened": True, "answer": answer, "importance": entry.importance}
