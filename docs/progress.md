@@ -403,7 +403,19 @@ Same rules and stop conditions.
 |---|---|---|
 | AF | **Reads don't wait behind deliberation** — measured on LXC 104 with a model call slowed to 2 s: a summary poll that takes 1 ms idle took 1.7 s during an async deliberation. The API's one lock is held for every worker round, model calls included, and for the whole of a synchronous deliberation. Real model calls take tens of seconds, so the client would freeze. Serve the read endpoints from a snapshot refreshed under the lock after each write, so a read never waits for a round. | **done** — §82 |
 | AG | **Health that says whether work is moving** — `/api/health` reports resources only. Add the worker's state (started, alive), the time of the last completed round, and the queue length, so a stuck or slow deployment is visible from the client. | **done** — §83 |
-| — | End-to-end test extended; README draft refreshed (local); plan batch 9. | open |
+| — | End-to-end test extended; README draft refreshed (local); plan batch 9. | **done** — §84 |
+
+**Batch 8 (AF–AG) complete 2026-09-26.**
+
+### Batch 9 (self-planned 2026-09-26)
+
+Same rules and stop conditions. Most remaining substantive work now waits on owner decisions 2–9, so this batch validates what exists against real conditions and prepares those decisions, rather than inventing scope.
+
+| Phase | Scope | Status |
+|---|---|---|
+| AH | **Live deployment smoke** — every end-to-end test stubs the model. Start the real API process (`python -m athenaeum_body.api`) on LXC 104 against the live model-lab guests, drive it over HTTP with a script (`scripts/live_smoke.py`): async questions including a model-only one, sync alongside, polls, health. Record real latencies, including how long polls take while a real model call runs (Phase AF under real conditions). Report, don't gate: live-model output isn't deterministic. | open |
+| AI | **Decision briefs** — one document (`docs/owner-decisions.md`) laying out each open owner decision with the evidence gathered, the options, their costs, and a recommendation, so each can be settled in minutes. Documentation only; nothing is decided. | open |
+| — | Final full live run; handoff notes. | open |
 
 - [ ] `execution_sandbox.enabled` stays `false` — not actionable right now (the CPU-time gap is a confirmed environment limitation on this specific kernel, not a bug to fix), but re-run `scripts/preflight_check.py` if this project is ever deployed to a *different* host, per `security-review-sandbox.md` Section 7.3/7.4.
 
@@ -1133,6 +1145,17 @@ The client re-checks health on every poll, not just at load. Its status line say
 Tests: `tests/test_api_health.py` (before any work; during a held model call, answered in under a second with the worker alive and work queued; after, with the queue empty and rounds counted) and the client smoke test (the not-started and stalled wordings).
 
 **Full live suite: 589 passed, 1 skipped.** 590 collected (588 prior + 2 new in `tests/test_api_health.py`).
+
+## 84. End-to-end test over batch 8
+
+`test_the_api_stays_responsive_behind_a_slow_model`, over real HTTP:
+- an async question's model call is held open, and a synchronous question is submitted behind it, where it waits for the lock;
+- meanwhile the summary, maintenance and health endpoints each answer in under a second, and health truthfully reports the worker alive with work queued;
+- once the call returns, the synchronous answer arrives ("17 is prime"), both questions complete, the queue drains, and health shows the rounds that ran.
+
+`README.draft.md` is refreshed, still local. Batch 9 is planned above. It validates against the live models and prepares the owner decisions rather than adding scope.
+
+**Full live suite: 590 passed, 1 skipped.** 591 collected (590 prior + 1 new end-to-end test).
 
 ### Explicitly not on this list
 Any application-level work beyond what `deployment-playbook.md` promises to deliver (verified SSH access to a correctly-networked guest, not a deployed application).

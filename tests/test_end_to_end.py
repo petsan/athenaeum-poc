@@ -516,3 +516,67 @@ def test_long_running_shape_through_the_summary_view(tmp_path, monkeypatch):
     assert changed == [f"q-{i}" for i in range(1, 5)]          # every reopen visible as a count change
     assert all(len(get_question(q)["versions"]) == 2 for q in changed)   # ...and the detail has the new version
     assert "versions" in list_questions("summary")[0] and isinstance(list_questions("summary")[0]["versions"], int)
+
+
+# ---------------------------------------------------------------------------
+# Batch 8 (AF-AG), over real HTTP: while a model call is held open inside an
+# async round, and a synchronous question waits behind it, reads and health
+# stay immediate and truthful; everything completes once the call returns.
+# ---------------------------------------------------------------------------
+
+def test_the_api_stays_responsive_behind_a_slow_model(tmp_path, monkeypatch):
+    import json
+    import threading
+    import time
+    import urllib.request
+    from http.server import ThreadingHTTPServer
+    from athenaeum_body.api import make_handler
+
+    entered, release = threading.Event(), threading.Event()
+
+    def slow_model(*a, **k):
+        entered.set()
+        release.wait(timeout=30)
+        return "gravity holds the moon in orbit"
+    monkeypatch.setattr(model_backed_reasoning, "ask_model", slow_model)
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(tmp_path / "data"))
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    base = f"http://127.0.0.1:{server.server_address[1]}"
+
+    def call(path, payload=None):
+        data = json.dumps(payload).encode() if payload is not None else None
+        req = urllib.request.Request(base + path, data=data, method="POST" if data else "GET",
+                                     headers={"Content-Type": "application/json"})
+        start = time.time()
+        with urllib.request.urlopen(req, timeout=30) as r:
+            return time.time() - start, json.loads(r.read())
+
+    try:
+        call("/api/questions", {"question": "what force holds the moon in orbit?", "async": True})
+        assert entered.wait(timeout=10)
+        sync_result = {}
+        sync = threading.Thread(target=lambda: sync_result.update(call("/api/questions", {"question": "is 17 prime?"})[1]))
+        sync.start()                                   # waits for the lock behind the held round
+        time.sleep(0.2)
+        for path in ("/api/questions?view=summary", "/api/maintenance", "/api/health"):
+            elapsed, body = call(path)
+            assert elapsed < 1.0, path
+        assert body["worker"]["alive"] and body["queued_units"] >= 1 and sync.is_alive()
+
+        release.set()
+        sync.join(timeout=20)
+        assert sync_result["answer"]["committed"][0]["statement"] == "17 is prime"
+        deadline = time.time() + 30
+        while True:
+            _, summary = call("/api/questions?view=summary")
+            _, health = call("/api/health")
+            if all(q["status"] == "completed" for q in summary) and health["queued_units"] == 0:
+                break
+            assert time.time() < deadline, (summary, health)
+            time.sleep(0.05)
+        assert [q["id"] for q in summary] == ["q-1", "q-2"]
+        assert health["worker"]["rounds_run"] > 0
+    finally:
+        release.set()
+        server.shutdown()
