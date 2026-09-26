@@ -94,6 +94,7 @@ These aren't bugs in the sense of "code that was wrong" — they're incorrect as
 **What happened:** A synthesis test called `framing_round("17", "q1")` — but the Mathematics agent's jurisdiction check looks for domain keywords like "prime" in the question text, and the bare string `"17"` didn't contain any, so no agent was routed at all and the test's assumptions about the result were wrong from the start.
 **Fix:** Use `"is 17 prime?"`, matching what a real caller would send.
 **Lesson:** When testing routing/dispatch logic, use realistic inputs that would actually trigger the routing — a minimal-looking test input can silently bypass the exact logic the test claims to exercise.
+**Recurred 2026-09-26** (`tests/test_fingerprints.py`): a test meant to exercise Philosophy's model fallback asked "what is the meaning of virtue?" — no Philosophy keyword (`should/ought/must/good/right/wrong/value`), so Philosophy was never routed and produced nothing. Fixed with "is courage good?". Habit: before asserting on an agent's output, check the question against that agent's `domain_keywords`.
 
 ### 12. Test had an agent incorrectly cross-examining its own claim
 **What happened:** A test called `MasterOfMathematics().cross_examine(claim, ...)` where `claim.issuing_agent == "Mathematics"` — but `cross_examine` correctly, deliberately returns `None` immediately when an agent is asked to examine its own claim (Section 3.3's design: agents don't cross-talk with themselves). The test's assumption was wrong, not the code.

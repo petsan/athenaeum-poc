@@ -4,6 +4,16 @@ from dataclasses import dataclass, field, asdict
 from typing import Any, Dict, List
 import uuid
 
+# Defeat conditions that name nothing that could ever happen (Section 2.2).
+# Shared by Physics's falsifiability challenge and its Domain Fidelity
+# fingerprint so the two can't drift apart.
+VACUOUS_DEFEAT_CONDITIONS = {"", "none", "n/a", "na", "-", "nothing", "no defeat condition",
+                             "cannot be falsified", "unfalsifiable", "not applicable"}
+
+
+def is_vacuous_defeat(defeat_condition: str | None) -> bool:
+    return (defeat_condition or "").strip().lower().rstrip(".") in VACUOUS_DEFEAT_CONDITIONS
+
 
 def next_claim_id() -> str:
     """Globally unique, not a per-process counter: claims from different

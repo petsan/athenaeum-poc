@@ -7,14 +7,34 @@ drifting in STYLE, which is exactly what this catches.
 """
 from __future__ import annotations
 from athenaeum_body.domain_fidelity_store import DomainFidelityStore
+from .claims import is_vacuous_defeat
+from .model_backed_reasoning import GENERIC_DEFEAT_CONDITION
+
+
+def _explicit_defeat_condition(c: dict) -> bool:
+    """Physics (2.4.1): 'the presence rate of an explicit defeat condition'.
+    Explicit means it names something observable -- not vacuous, and not the
+    boilerplate every raw model completion carries."""
+    defeat = c.get("defeat_condition")
+    return not is_vacuous_defeat(defeat) and defeat != GENERIC_DEFEAT_CONDITION
+
 
 # Section 2.4.1: per-agent style markers -- what "reasoning like this
-# domain" mechanically looks like for each agent already implemented.
+# domain" mechanically looks like for each agent already implemented. Each
+# is chosen to separate an agent's own method from a general-purpose model
+# answering in its place, since that is what drift looks like here.
 FINGERPRINT_CHECKS = {
     "Mathematics": lambda c: any(p.startswith("computed:") for p in c.get("supporting_provenance", [])),
     "Engineering": lambda c: c.get("claim_type") == "executable",
     "Logic": lambda c: c.get("claim_type") == "procedural",  # Logic must NEVER assert first-order claims
     "WorldNews": lambda c: any(p.startswith("dated_event:") for p in c.get("supporting_provenance", [])),
+    # Added 2026-09-26 (Phase J) from 2.4.1's own list:
+    "Physics": _explicit_defeat_condition,
+    # "assumption-surfacing": the claim names the reasoning principle or
+    # premise it rests on (e.g. reasoning:is-ought_gap), not a bare verdict.
+    "Philosophy": lambda c: any(p.startswith("reasoning:") for p in c.get("supporting_provenance", [])),
+    # "the rate at which claim_type: traditional is correctly attached".
+    "Theology": lambda c: c.get("claim_type") == "traditional",
 }
 # Not every registered agent needs an entry here -- fingerprint_deviation()
 # below returns 0.0 (neutral, not broken) for one that's missing, so a

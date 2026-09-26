@@ -28,7 +28,7 @@ unregistered fingerprint check just means fingerprint_deviation() returns
 before anyone gets around to adding one)."""
 from __future__ import annotations
 import re
-from .claims import Claim
+from .claims import Claim, is_vacuous_defeat
 from .model_backed_reasoning import model_backed_claim
 
 _REGISTRY: list[type] = []
@@ -432,10 +432,6 @@ class MasterOfPhysics:
             },
         )
 
-    # Defeat conditions that name nothing that could ever happen.
-    _VACUOUS_DEFEAT = {"", "none", "n/a", "na", "-", "nothing", "no defeat condition",
-                       "cannot be falsified", "unfalsifiable", "not applicable"}
-
     def cross_examine(self, claim: Claim, question_id: str) -> Claim | None:
         if claim.issuing_agent == self.name or claim.claim_type != "empirical":
             return None
@@ -443,7 +439,7 @@ class MasterOfPhysics:
         # physical/empirical"): an empirical claim must say what observation
         # would defeat it. One that can't be falsified isn't asserted as
         # empirical; it's sent to Philosophy's jurisdiction instead.
-        if (claim.defeat_condition or "").strip().lower().rstrip(".") in self._VACUOUS_DEFEAT:
+        if is_vacuous_defeat(claim.defeat_condition):
             return Claim(
                 question_id=question_id, round=2, issuing_agent=self.name,
                 statement=(f"claim '{claim.statement}' is typed empirical but states no condition under which "

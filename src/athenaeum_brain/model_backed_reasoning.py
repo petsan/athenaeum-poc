@@ -35,6 +35,12 @@ DEFAULT_MODEL = "olmo3-7b"  # was olmo2-1b until 2026-09-23 -- OLMo 2 1B
 # exist, up to 32B); swapped once that was verified live against
 # Hugging Face, same resource footprint as the existing mistral-7b guest.
 FALLBACK_CONFIDENCE = 0.6
+# A raw completion can't state what would falsify its own content, so every
+# fallback claim carries this same procedural defeat condition. Domain
+# Fidelity's Physics fingerprint (Section 2.4.1: "presence of an explicit
+# defeat condition") treats it as NOT explicit.
+GENERIC_DEFEAT_CONDITION = ("a cross-examination challenge, or a conflicting mechanically-verified "
+                            "claim from another agent")
 
 # Section 2.4.3 re-grounding: agents whose model fallback is switched off
 # for now, so they can only assert what their own grounded, deterministic
@@ -138,7 +144,7 @@ def model_backed_claim(*, agent_name: str, question: str, question_id: str,
         question_id=question_id, round=1, issuing_agent=agent_name,
         statement=response.strip(),
         claim_type=claim_type, confidence=confidence,
-        defeat_condition="a cross-examination challenge, or a conflicting mechanically-verified claim from another agent",
+        defeat_condition=GENERIC_DEFEAT_CONDITION,
         jurisdiction_check=True,
         supporting_provenance=[f"llm:{model_name}"],
         serving_model=model_name,

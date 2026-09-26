@@ -158,9 +158,8 @@ def test_regrounding_agent_asserts_only_what_it_can_ground(world, stub_model):
     normal = _deliberate(world, "q1", world["fid"])
     assert [c["issuing_agent"] for c in normal["committed"]] == ["Physics"]  # the model fallback
 
-    # Physics has no fingerprint check yet (domain_fidelity.FINGERPRINT_CHECKS),
-    # so the state machine can't confirm drift for it; set the stage directly
-    # to test what re-grounding DOES, independent of how it's entered.
+    # Set the stage directly to test what re-grounding DOES, independent of
+    # how it's entered (entry is covered above and in test_fingerprints.py).
     world["fid"].set_remediation("Physics", {"stage": "regrounding", "until_reading": 99, "history": []})
 
     grounded = _deliberate(world, "q2", world["fid"])

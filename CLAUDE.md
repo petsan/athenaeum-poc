@@ -80,8 +80,8 @@ These aren't aspirational — every one of them is here because violating it (or
   invariant enforced in `config.py` itself (`disallow_paid_apis`), not
   just a policy.
 - Before marking any task "done," run the actual test suite
-  (`pytest -q`, currently 419 collected; last fully-green live run was 362 passed + 1 skipped on
-  2026-09-26 before the OLMo 3 guest degraded — see `docs/progress.md` §48–52 for the offline runs since) and update `docs/progress.md` — don't
+  (`pytest -q`, currently 429 collected; last fully-green live run was 362 passed + 1 skipped on
+  2026-09-26 before the OLMo 3 guest degraded — see `docs/progress.md` §48–53 for the offline runs since) and update `docs/progress.md` — don't
   let the checkpoint file go stale. If the model-lab guests are down or
   degraded (known-bugs.md #24), verify non-model changes with
   `ATHENAEUM_OFFLINE_MODELS=1 pytest -q --ignore=tests/test_model_backed_reasoning.py`
@@ -89,13 +89,15 @@ These aren't aspirational — every one of them is here because violating it (or
 
 ## Current status (see `docs/progress.md` for full detail)
 
-- **Start here next session:** `docs/progress.md` §26 → "Next-session plan
-  (written 2026-09-25)" — ordered milestones (§6.5 standard versioning done 2026-09-26 as §43; next: Forecast/Recommendation producers,
-  item 2), the owner's requested working method (small
-  milestone → tests → full suite on LXC 104 → docs → check in → commit only
-  when approved), and the exact sync/test mechanics. 2026-09-25 added
-  evidence-weighted synthesis (§41) and dispute resolution (§42). The repo
-  now carries a proprietary source-available `LICENSE` (Piorun, Inc.) —
+- **Start here next session:** `docs/progress.md` §26 — the batch tables
+  ("Approved autonomous batch" = batch 1, A–I, done; "Batch 2" = J–N, in
+  progress) and the list of **pending owner decisions** under batch 2
+  (most urgent: the OLMo 3 guest, known-bugs.md #24). The owner approved
+  unattended batches on 2026-09-26: commit and push at the end of every
+  phase, keep all docs current, stop only on the listed stop conditions.
+  Sync/test mechanics are in §26's "Next-session plan". 2026-09-25/26
+  added §41–§53 (evidence weighting through fingerprints). The repo
+  carries a proprietary source-available `LICENSE` (Piorun, Inc.) —
   don't alter it or the README notice without the owner's explicit approval.
 - Body: storage/checkpoint/scheduler/concurrency/ingestion (now including
   a real `fetch_url()` network fetch, not just `FixtureSource`)/model-
