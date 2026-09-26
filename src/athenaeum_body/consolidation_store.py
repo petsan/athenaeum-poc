@@ -23,6 +23,10 @@ class ConsolidationStore:
     def get(self, key: str) -> dict | None:
         return self._state()["entries"].get(key)
 
+    def entries(self) -> dict:
+        """Every tracked entry by key (Section 9.5's audit samples from these)."""
+        return dict(self._state()["entries"])
+
     def upsert(self, key: str, entry: dict) -> None:
         state = self._state()
         state["entries"][key] = entry

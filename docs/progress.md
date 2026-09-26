@@ -262,7 +262,7 @@ Earlier sections each ended with their own "suggested next step," repeatedly sup
 - [x] ~~Model admission gate (§6.7, task 47), and applying Model Fitness weight at synthesis.~~ Done 2026-09-26 (Phase E) — see Section 48.
 - [ ] **Owner action: OLMo 3 7B guest (VMID 116) is swap-thrashing** — `llama-server` at 98% of its 10 GB limit, ~45× slower, all live-OLMo tests timing out. Restart it / `--mlock` or `--no-mmap` / more RAM. Diagnosis and options in `known-bugs.md` #24. (Found 2026-09-26.)
 - [x] ~~Domain Fidelity re-grounding and escalation-to-checkpoint (§2.4.3, task 30).~~ Done 2026-09-26 (Phase F) — see Section 49.
-- [ ] Re-evaluation and consolidation audit sampling (§9.4–9.5, tasks 22–23).
+- [x] ~~Re-evaluation and consolidation audit sampling (§9.4–9.5, tasks 22–23).~~ Done 2026-09-26 (Phase G) — see Section 50.
 - [ ] Adversarial suite: 7 of §8's 15 failure modes covered (task 20; `circular_corroboration` added in Section 42); several remaining ones depend on the items above.
 
 ### Next-session plan (written 2026-09-25, end of session)
@@ -286,7 +286,7 @@ Earlier sections each ended with their own "suggested next step," repeatedly sup
 5. ~~**Task 44 cross-agent verification routing.**~~ — **done 2026-09-26 as Phase D, Section 47.** Mathematics's formalizable claims (primality) routed to `MasterOfEngineering.verify_claim` so a sandbox run corroborates/challenges them. Sandbox stays behind its existing config gate.
 6. ~~**§6.7 model admission gate + fitness at synthesis.**~~ — **done 2026-09-26 as Phase E, Section 48.** Provisional status for a newly admitted model; apply `model_fitness.apply_fitness_to_confidence` alongside `reputability_factor` for claims with `serving_model` (keep raw `confidence` untouched, same as §41).
 7. ~~**§2.4.3 Domain Fidelity re-grounding/escalation**~~ — **done 2026-09-26 as Phase F, Section 49.** On `needs_review`, re-ground against the agent's baseline cases; escalate to a human checkpoint after repeated failure (reuse `human_checkpoint_store`).
-8. **§9.4–9.5 audit sampling** for re-evaluation and consolidation fidelity.
+8. ~~**§9.4–9.5 audit sampling** for re-evaluation and consolidation fidelity.~~ — **done 2026-09-26 as Phase G, Section 50.**
 9. **Remaining adversarial cases**, added as their mechanisms land: retroactive history rewriting (after 1), stale framing (after 3/4), silent authority creep (Logic never issues a first-order claim; checkable now), unfalsifiable-claims-as-physics, overconfidence drift (calibration store), lossy compaction, silent style drift, unjustified human-input skew, uncommitted canonical writes (checkable now). Aim to add the two "checkable now" ones opportunistically in milestone 1's session if it's small.
 
 **Infra items above in this section are untouched this session** (backup timer `OnBootSec` decision, auto-update mechanism) — still the owner's call, not Brain work.
@@ -303,7 +303,7 @@ The owner approved this batch to run unattended, in whatever order works best, *
 | D | Cross-agent verification routing (task 44) — plan item 5; respects the existing sandbox gate | **done** — §47 |
 | E | Model admission gate + fitness weighting at synthesis (§6.7) — plan item 6 | **done** — §48 (live-OLMo tests unverifiable this run, see §48) |
 | F | Domain Fidelity re-grounding/escalation (§2.4.3) — plan item 7 | **done** — §49 (offline-verified) |
-| G | Audit sampling (§9.4–9.5) — plan item 8 | open |
+| G | Audit sampling (§9.4–9.5) — plan item 8 | **done** — §50 (offline-verified) |
 | H | Adversarial suite toward 15/15 (§8, §9.2) — plan item 9 | open |
 | I | *(optional)* README body refresh — **draft only; never pushed without the owner's review.** The top notice and LICENSE are never touched. | open |
 
@@ -600,6 +600,17 @@ Every transition is appended to the agent's remediation history (new `DomainFide
 **Known gap:** only Mathematics, Engineering, Logic and WorldNews have fingerprint checks (`domain_fidelity.FINGERPRINT_CHECKS`), so drift in Physics, Philosophy or Theology can be flagged by overreach but never *confirmed* on style — those agents always clear at review. Adding their markers (§2.4.1 names them: defeat-condition rate for Physics, assumption-surfacing for Philosophy, `traditional` typing for Theology) is logged as a follow-up.
 
 **Verified offline** (OLMo 3 guest still degraded, known-bugs.md #24 — probed again: ~65 s for a 4-token completion): `ATHENAEUM_OFFLINE_MODELS=1`, `test_model_backed_reasoning.py` set aside → **366 passed, 1 skipped, 3 failed**, the same three `olmo3-7b` timeouts as §48. 385 collected (373 prior + 12 new in `tests/test_fidelity_remediation.py`).
+
+## 50. Re-evaluation and consolidation audits (§9.4, §9.5) — Phase G
+
+`src/athenaeum_brain/audits.py` (new) plus a small append-only `AuditStore` (Body, idempotent per `audit_id`) and `ConsolidationStore.entries()`. Both audits are seeded samples, so any audit can be reproduced exactly; both narrow rather than replace human judgment where the design asks for it (§9.4 says "manually check").
+
+- **`reevaluation_audit`** (§9.4 — does the materiality test thrash or stagnate?). Each sampled reopened version is classified from its own diff: `no_change` (nothing moved at all — a **thrash suspect**), `weights_only` (support shifted, conclusions didn't — consistent with a grade-driven trigger), or `leading_changed` (routed to `for_human_review`: only a person can say whether it's better reasoning or just different). The report gives the thrash-suspect rate. Separately it scans the whole ledger for **stagnation**: every answer that is material *right now* (§7.2, including the standard-change rule) but hasn't been reopened — tested going away once the question is reopened.
+- **`consolidation_audit`** (§9.5 — is compaction losing meaning?). Each sampled Tier C node is expanded from the cold archive and checked against it: statement, confidence, sources and cycle count must match, and §10.2's promotion criteria must actually hold for the archived trace (enough cycles, enough *independent* sources — with citation data, circular sources fail — and no declining confidence trend). `compact()` itself doesn't gate on those criteria, so this is where a premature or unjustified promotion gets caught. A trace that fails its content-hash check is reported as `archive_corrupt`, never trusted.
+
+Neither audit is scheduled yet — they're callable functions; running them from an idle cycle every N cycles is a small follow-up once there's a cadence policy.
+
+**Verified offline** (OLMo 3 guest still degraded — ~69 s per 4-token call): **383 passed, 1 skipped, 3 failed**, the same three `olmo3-7b` timeouts. 402 collected (385 prior + 17 new in `tests/test_audits.py`).
 
 ### Explicitly not on this list
 Any application-level work beyond what `deployment-playbook.md` promises to deliver (verified SSH access to a correctly-networked guest, not a deployed application).

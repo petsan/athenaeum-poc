@@ -1021,6 +1021,36 @@ Overreach has its own visibility (Logic's jurisdiction challenges).
 
 ---
 
+## 2026-09-26 — Evaluation audits (§9.4–9.5, Phase G): design choices
+
+**Q: §9.4 says "manually check". What is automated, then?**
+
+The part that doesn't need judgment. A reopen whose diff shows nothing
+moved at all is a thrash suspect by construction; one where only support
+shifted is consistent with the trigger that fired. A reopen that changed
+the leading conclusion is exactly the case §9.4 wants a person to look
+at ("better reasoning, or just different?"), so it's routed to
+`for_human_review` rather than scored. Stagnation — the other failure
+mode §9.4 names — is invisible from reopens alone, so the audit also
+scans for answers that are material now and were never reopened.
+
+**Q: Why re-check promotion criteria in the consolidation audit?**
+
+`compact()` archives and compacts whatever it's given; the §10.2
+criteria live in `should_promote_to_c`, a separate call. Nothing forces a
+caller to ask before compacting, so an audit that compares the compact
+node to its trace but never asks "should this have been promoted at all?"
+would miss the most consequential consolidation error. Applying the
+criteria to the archived trace checks both.
+
+**Q: Why seeded samples?**
+
+So a finding can be reproduced: the same seed over the same state picks
+the same items, which matters when someone follows up on an audit days
+later.
+
+---
+
 *See `docs/progress.md` §26 for the checklist this log's entries track
 against, and `docs/infra-topology.md` for the infrastructure-side design
 decisions made in the same planning conversation.*
