@@ -256,7 +256,7 @@ Earlier sections each ended with their own "suggested next step," repeatedly sup
 - [x] ~~Dispute resolution procedure (§6.4, task 9) — including Logic's circular-corroboration/independence check. Only `ReputabilityStore.log_dispute()` storage exists.~~ Done 2026-09-25, `dispute_resolution.py` — see Section 42.
 - [x] ~~Reputability standard versioning (§6.5, task 10).~~ Done 2026-09-26 — see Section 43.
 - [x] ~~Forecast and Recommendation builders wired into `loop.py` (§5.4, tasks 13–14) — builders exist, no producer.~~ Done 2026-09-26 (Phase A) — see Section 44.
-- [ ] Importance rating (§7.1, task 16) and reopen-with-diff (§7.3, task 18).
+- [x] ~~Importance rating (§7.1, task 16) and reopen-with-diff (§7.3, task 18).~~ Done 2026-09-26 (Phase B) — see Section 45.
 - [ ] Idle-evolution rounds (§3.6).
 - [ ] Cross-agent verification routing, e.g. Mathematics → Engineering sandbox (task 44).
 - [ ] Model admission gate (§6.7, task 47), and applying Model Fitness weight at synthesis.
@@ -280,7 +280,7 @@ Earlier sections each ended with their own "suggested next step," repeatedly sup
 **Ordered milestones (each is one check-in):**
 1. ~~**§6.5 Reputability standard versioning**~~ — **done 2026-09-26, Section 43** (next up is item 2). Move `_grade_from_tally` into a versioned policy registry (v0 = today's rule, labelled as the seed standard of §6.1). Every `grade_versions` entry records the `standard_version` that produced it. `ReputabilityStore.adopt_standard(policy, rationale)` makes version N+1 govern new decisions only — never rewrites old grade entries. Extend `reevaluation.is_material` with §7.2's fourth trigger (a change of standard version that would alter the grade of a source the answer relied on). Tests: old grades keep their version tag, new outcomes use the new version, and materiality fires only when the re-grade actually differs.
 2. ~~**Forecast/Recommendation producers (§5.4, tasks 13–14).**~~ — **done 2026-09-26 as Phase A, Section 44.** The builders exist in `output_types.py`; nothing produces their inputs. Add an optional structured payload on `Claim` (e.g. `forecast: {statement, probability, resolution_criterion, resolution_date}`) and have `loop.py` build the section when the frame asks for it *and* a committed claim carries one — otherwise the section explicitly says no agent produced one (honest, not silently omitted). Find one agent that can produce a genuine forecast deterministically before reaching for the model fallback.
-3. **§7.1 importance rating + §7.3 reopen-with-diff.** Importance from framing (domains routed, output types) plus dependency count. Reopen = re-run the loop with the prior answer as context, `QuestionLedger.append_version`, and an explicit diff (committed claims added/removed, leading-conclusion change, weighted-confidence deltas, cause). Uses `consolidation.expand` first if the prior answer was compacted.
+3. ~~**§7.1 importance rating + §7.3 reopen-with-diff.**~~ — **done 2026-09-26 as Phase B, Section 45.** Importance from framing (domains routed, output types) plus dependency count. Reopen = re-run the loop with the prior answer as context, `QuestionLedger.append_version`, and an explicit diff (committed claims added/removed, leading-conclusion change, weighted-confidence deltas, cause). Uses `consolidation.expand` first if the prior answer was compacted.
 4. **§3.6 Idle-evolution round.** A work-unit type that samples existing committed claims and re-runs cross-examination against current grades; is the natural caller for `resolve_dispute` (§42), consolidation `record_survival`, and `domain_fidelity.needs_review`. Feeds materiality from item 3.
 5. **Task 44 cross-agent verification routing.** Mathematics's formalizable claims (primality) routed to `MasterOfEngineering.verify_claim` so a sandbox run corroborates/challenges them. Sandbox stays behind its existing config gate.
 6. **§6.7 model admission gate + fitness at synthesis.** Provisional status for a newly admitted model; apply `model_fitness.apply_fitness_to_confidence` alongside `reputability_factor` for claims with `serving_model` (keep raw `confidence` untouched, same as §41).
@@ -297,7 +297,7 @@ The owner approved this batch to run unattended, in whatever order works best, *
 | Phase | Scope | Status |
 |---|---|---|
 | A | Forecast/Recommendation producers (§5.4) — plan item 2 | **done** — §44 |
-| B | Importance rating + reopen-with-diff (§7.1, §7.3) — plan item 3 | open |
+| B | Importance rating + reopen-with-diff (§7.1, §7.3) — plan item 3 | **done** — §45 |
 | C | Idle-evolution round (§3.6) — plan item 4; standard amendments only *proposed* to the human checkpoint, never auto-adopted | open |
 | D | Cross-agent verification routing (task 44) — plan item 5; respects the existing sandbox gate | open |
 | E | Model admission gate + fitness weighting at synthesis (§6.7) — plan item 6 | open |
@@ -526,6 +526,21 @@ One existing expectation changed: `test_content_integrity.py` pinned `current_gr
 `schemas.md` brought current (it had drifted): Claim table gains `argument`, `output_type_relevance`, `reputability_factor`, `weighted_confidence`, `forecast`, `recommendation_option`, and an accurate `serving_model` note; Provenance `metadata.cites`; Reputability Grade's stored `decided_under`/`cause` and `current_grade()` projection; new Reputability Standard table.
 
 **310 passed, 1 skipped** on LXC 104 (286 prior + 24 new in `tests/test_output_producers.py`, parametrized). Design reasoning in `docs/brain-session-log.md`.
+
+## 45. Importance rating (§7.1) and reopen-with-diff (§7.3) — Phase B
+
+`src/athenaeum_brain/reopening.py` (new):
+- **`importance_rating(frame, dependents=, requested_priority=)`** returns an explained 0–1 rating: breadth of domains (Logic excluded — it chairs everything, so it says nothing about breadth; saturates at three), multiple output types, dependents (saturating, 2 → 0.5), and an explicit requester priority. Weights are an explicitly-labelled placeholder (`IMPORTANCE_WEIGHTS`). **`count_dependents`** counts other questions whose latest answer commits one of the same claims — a stated proxy, since no Belief Graph dependency edges exist yet. **`rate_and_store_importance`** stores it via the new `QuestionLedger.update_importance` (bounds-checked; §7.1 "revisable"). The HTTP API now stores this computed rating instead of its hardcoded `0.5`.
+- **`reopen_question`** re-runs the full four-round deliberation with the prior answer attached as input context only (every round still re-derives from scratch), first expanding any of the prior answer's Tier C claims from cold archive (§10.5), then appends a new ledger version carrying an explicit **`diff`**: claims added/removed, evidence-weight changes with direction, what happened to the leading conclusion (unchanged + confidence direction / changed / appeared / disappeared), plural-answer counts, and the cause. The prior version is never touched (tested byte-equal); reopen context never nests.
+- **`reopen_if_material`** is the trigger policy: materiality (§7.2, including milestone 3's standard-change rule) *and* importance at or above a threshold — except a **resolved forecast, which reopens regardless of importance** (§5.4/§7.2), with the outcome passed in explicitly rather than looked up (§9.9).
+
+Supporting changes: every answer now records its own `question` and `frame` (answers written before this can't be reopened, and say so); `make_deliberation_unit` accepts `reopen_context` and a distinct `unit_id`; `consolidation.claim_key(claim)` (agent + statement) is the one canonical key for "the same claim again", used by reopening and, next, by idle evolution; `output_types.evidence_weight` made public. `schemas.md` gains a Deliberation Answer table.
+
+**Real bug found and fixed (known-bugs.md #22):** Philosophy's is-ought claim began "this question asks…", so its claims about *different* questions had identical text — `count_dependents` linked unrelated questions, and consolidation would have counted every normative question as the same claim surviving again. The statement now names its question; a scan found no other deictic statement templates.
+
+**Follow-up noted, not done:** `human_input.trigger_checkpoint_if_needed` still checkpoints on *any* material human input because importance didn't exist when it was written; §11.5's "importance-thresholded question" clause can now use `importance_rating`, but changing that alters an existing, tested governance behaviour, so it's left for an explicit decision.
+
+**327 passed, 1 skipped** on LXC 104 (310 prior + 17 new in `tests/test_reopening.py`). Design reasoning in `docs/brain-session-log.md`.
 
 ### Explicitly not on this list
 Any application-level work beyond what `deployment-playbook.md` promises to deliver (verified SSH access to a correctly-networked guest, not a deployed application).

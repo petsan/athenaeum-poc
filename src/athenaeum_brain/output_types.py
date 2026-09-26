@@ -38,7 +38,7 @@ def classify_output_type(question: str) -> list[str]:
     return types
 
 
-def _evidence_weight(c: dict) -> float:
+def evidence_weight(c: dict) -> float:
     """weighted_confidence when synthesis set it (Section 4.1), otherwise
     the issuing agent's raw confidence."""
     w = c.get("weighted_confidence")
@@ -64,7 +64,7 @@ def build_research_answer(committed: list[dict], dissent: list[dict], plural_ans
     and every other committed claim is kept as supporting, never dropped."""
     leading, supporting = None, []
     if committed and not plural_answers:
-        leading = max(committed, key=_evidence_weight)  # first-seen wins ties
+        leading = max(committed, key=evidence_weight)  # first-seen wins ties
         supporting = [c for c in committed if c is not leading]
     citations = sorted({src for c in committed for src in c.get("supporting_provenance", [])})
     return {
@@ -160,7 +160,7 @@ def forecast_section_from_claims(committed: list[dict]) -> dict:
         return unavailable_section(
             FORECAST, "no committed claim carried a forecast's required structure "
                       "(resolution criterion, source, deadline, sensitivity)")
-    carriers.sort(key=_evidence_weight, reverse=True)
+    carriers.sort(key=evidence_weight, reverse=True)
     lead, rest = carriers[0], carriers[1:]
     section = build_forecast_answer(**lead["forecast"])
     section.update({

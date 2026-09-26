@@ -486,12 +486,17 @@ class MasterOfPhilosophy:
         q = question.lower()
         if not any(w in q for w in self._normative_words):
             return []
+        # The statement names its question rather than saying "this
+        # question": a claim must mean the same thing outside the
+        # deliberation that produced it, or claim_key() would treat the
+        # is-ought claims about two different questions as one claim
+        # (known-bugs.md #22).
         return [Claim(
             question_id=question_id, round=1, issuing_agent=self.name,
             statement=(
-                "this question asks for a normative ('ought') conclusion; deriving one validly "
-                "requires at least one explicit normative premise (the is-ought gap), which the "
-                "question as framed does not supply"
+                f"the question '{question.strip()}' asks for a normative ('ought') conclusion; "
+                "deriving one validly requires at least one explicit normative premise "
+                "(the is-ought gap), which the question as framed does not supply"
             ),
             claim_type="normative", confidence=0.9,
             defeat_condition="an explicit normative premise is supplied in the question or its framing",

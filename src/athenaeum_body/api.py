@@ -32,6 +32,7 @@ from .reputability_store import ReputabilityStore
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from athenaeum_brain.loop import make_deliberation_unit  # noqa: E402
+from athenaeum_brain.reopening import rate_and_store_importance  # noqa: E402
 
 CLIENT_DIR = Path(__file__).resolve().parents[2] / "client"
 
@@ -56,7 +57,9 @@ def build_app(data_dir: Path):
                 runner.run_round(unit)
             answer = unit_log.read_latest()["shared_state"]["answer"]
             ledger.append_version(qid, answer)
-            return {"id": qid, "question": question, "answer": answer}
+            # Section 7.1: replace the 0.5 placeholder with a computed rating.
+            importance = rate_and_store_importance(ledger, qid)["importance"]
+            return {"id": qid, "question": question, "answer": answer, "importance": importance}
 
     def list_questions() -> list:
         with lock:

@@ -37,9 +37,15 @@ def _attach_grades_and_record_outcomes(result: dict, reputability: ReputabilityS
     return result
 
 
-def make_deliberation_handler(question: str, question_id: str, reputability: ReputabilityStore = None):
+def make_deliberation_handler(question: str, question_id: str, reputability: ReputabilityStore = None,
+                              reopen_context: dict = None):
     """Returns a round_handler(state, round_index) -> RoundResult usable
-    directly as a WorkUnit.round_handler in athenaeum_body's scheduler."""
+    directly as a WorkUnit.round_handler in athenaeum_body's scheduler.
+
+    reopen_context (Section 7.3): the prior answer and why it was reopened.
+    It is attached to the new answer as input context only -- every round
+    still re-derives from scratch, so the prior answer is never a starting
+    point to rubber-stamp."""
 
     def handler(state: dict, round_index: int) -> RoundResult:
         if round_index == 0:
@@ -71,10 +77,17 @@ def make_deliberation_handler(question: str, question_id: str, reputability: Rep
             grade_lookup = (lambda src: reputability.current_grade(src)["grade"]) if reputability else None
             result = synthesis_round(claims, exam, grade_lookup=grade_lookup)
             answer = {
+                # The question and its frame ride on the answer so a later
+                # reopen (reopening.py, Section 7.3) and importance rating
+                # (7.1) never depend on a caller remembering them.
+                "question": question,
+                "frame": state["frame"],
                 "committed": [c.to_dict() for c in result["committed"]],
                 "dissent": result["dissent"],
                 "plural_answers": result["plural_answers"],
             }
+            if reopen_context is not None:
+                answer["reopen_context"] = reopen_context
             # Section 5.4: one section per output type the framing round
             # classified this question as. Forecast and Recommendation are
             # built only from committed claims carrying that structure;
@@ -99,9 +112,12 @@ def make_deliberation_handler(question: str, question_id: str, reputability: Rep
 
 
 def make_deliberation_unit(question: str, question_id: str, priority: int = 0,
-                            reputability: ReputabilityStore = None) -> WorkUnit:
+                            reputability: ReputabilityStore = None, reopen_context: dict = None,
+                            unit_id: str = None) -> WorkUnit:
+    """unit_id defaults to question_id; a reopen passes a distinct one so
+    the new run's checkpoints never collide with the original's."""
     return WorkUnit(
-        id=question_id,
+        id=unit_id or question_id,
         priority=priority,
-        round_handler=make_deliberation_handler(question, question_id, reputability),
+        round_handler=make_deliberation_handler(question, question_id, reputability, reopen_context),
     )

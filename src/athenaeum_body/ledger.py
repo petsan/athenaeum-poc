@@ -37,4 +37,15 @@ class QuestionLedger:
         q["status"] = "completed"
         self.log.write_checkpoint(state, label="question_ledger")
 
+    def update_importance(self, question_id: str, importance: float) -> None:
+        """Section 7.1: importance is assigned at submission and revisable.
+        The value itself is the Brain's judgment (reopening.importance_rating);
+        this only stores it. Earlier values stay recoverable from the
+        checkpoint log's own append-only history."""
+        if not 0.0 <= importance <= 1.0:
+            raise ValueError(f"importance must be in [0, 1], got {importance}")
+        state = self._state()
+        state["questions"][question_id]["importance"] = importance
+        self.log.write_checkpoint(state, label="question_ledger")
+
     # deliberately no delete() -- retention is a hard invariant (Section 8)

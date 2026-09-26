@@ -9,6 +9,15 @@ from athenaeum_body.consolidation_store import ConsolidationStore
 from .dispute_resolution import check_independence
 
 
+def claim_key(claim: dict) -> str:
+    """The canonical consolidation key for a claim: its issuing agent and
+    exact statement. Claim ids differ on every deliberation, so they can't
+    identify "the same claim surviving again"; agent + statement can, and
+    is what lets a reopened answer (reopening.py) find its own claims'
+    Tier C entries to expand, and idle-evolution record their survival."""
+    return f"{claim['issuing_agent']}::{claim['statement']}"
+
+
 def record_survival(store: ConsolidationStore, key: str, claim: dict) -> dict:
     """Section 10.1-10.2: every time a claim survives another round of
     cross-examination unchanged (an idle-evolution re-challenge cycle, or

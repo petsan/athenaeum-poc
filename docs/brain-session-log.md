@@ -800,6 +800,49 @@ weaknesses are logged as open limitations rather than fixed in passing.
 
 ---
 
+## 2026-09-26 — Importance and reopening (§7.1, §7.3, Phase B): design choices
+
+**Q: Why is importance computed from the frame rather than asked for?**
+
+§7.1 says importance is "a computed/estimated value, not purely
+user-declared", and that the framing round contributes by identifying
+how many domains a question implicates. The rating therefore combines
+breadth, output-type count, dependents and an optional requester
+priority, and returns its components so a reader can see why a question
+rated as it did. Logic is excluded from breadth because it chairs every
+deliberation it is routed to.
+
+**Q: What counts as a "dependent" when there's no Belief Graph?**
+
+Another question whose latest answer commits one of the same claims. If
+that claim is later contested, both answers are implicated, which is the
+property §7.1 cares about. It is labelled as a proxy until real
+dependency edges exist.
+
+**Q: Why does a reopen re-run everything instead of patching the old
+answer?**
+
+§7.3: agents are expected to re-derive, not rubber-stamp. The prior
+answer is attached as context and the diff is computed afterwards by
+comparing the two, so nothing in the new answer is copied from the old
+one. The prior version stays byte-identical in the ledger.
+
+**Q: Why can a resolved forecast skip the importance threshold?**
+
+§5.4 and §7.2 both say a forecast's resolution is always material,
+unconditionally — forecast accuracy is only knowable in hindsight, so
+it has to be checked every time. The outcome is a parameter, never
+looked up, so the system can't have seen it early (§9.9).
+
+**Real bug on the way (known-bugs.md #22):** the first dependency test
+expected zero shared claims between two unrelated normative questions
+and got one — Philosophy's "this question asks for a normative
+conclusion…" statement was word-for-word identical across questions.
+Fixed at the source by making the statement name its question, since
+consolidation compares claims across questions the same way.
+
+---
+
 *See `docs/progress.md` §26 for the checklist this log's entries track
 against, and `docs/infra-topology.md` for the infrastructure-side design
 decisions made in the same planning conversation.*

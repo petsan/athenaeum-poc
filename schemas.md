@@ -49,9 +49,22 @@ As implemented in `reputability_store.py` (Section 6.5, 2026-09-26): each stored
 |---|---|---|---|
 | `id` | str | yes | |
 | `status` | str | yes | `queued\|active\|suspended\|completed\|archived` |
-| `importance` | float | yes | 0–1, computed per Section 7.1 |
+| `importance` | float | yes | 0–1, computed per Section 7.1 by `reopening.importance_rating` (breadth of non-Logic domains, multiple output types, dependents, requester priority); revisable via `QuestionLedger.update_importance` |
 | `created_at` | float | yes | |
-| `versions` | list[dict] | yes | append-only, never overwritten |
+| `versions` | list[dict] | yes | append-only, never overwritten; each is a Deliberation Answer (below) |
+
+## Deliberation Answer (one ledger version) — produced by `athenaeum_brain/loop.py`
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `question` | str | yes | the question text, so a reopen never depends on the caller remembering it (answers written before 2026-09-26 lack it and cannot be reopened) |
+| `frame` | dict | yes | the framing round's output: `question`, `routed_agents`, `output_types` |
+| `committed` | list[Claim] | yes | claims that survived cross-examination (Section 4.4) |
+| `dissent` | list[dict] | yes | `{claim, challenges}` for each challenged claim |
+| `plural_answers` | list[dict] | yes | jurisdictional conflicts, never collapsed (Section 4.2) |
+| `output_answer` | dict | yes | `{output_types, sections}` — one section per classified type; Forecast/Recommendation sections are `{available: false, reason}` when no committed claim supports them |
+| `source_grades_at_use` | dict | no | present when a ReputabilityStore was used: `{source_id: {grade, version, standard_version}}` snapshot (Section 6.3) |
+| `reopen_context` | dict | no | on a reopened version: `prior_version`, `reasons`, `prior_answer` (without its own `reopen_context`), `expanded_traces`, optional `forecast_resolution` |
+| `diff` | dict | no | on a reopened version (Section 7.3): `added`, `removed`, `weight_changes`, `leading_conclusion`, `plural_answers`, `cause` |
 
 ## Claim (Brain, Section 3.5) — implemented in `athenaeum_brain/claims.py`
 | Field | Type | Required | Notes |

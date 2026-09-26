@@ -121,6 +121,12 @@ These aren't bugs in the sense of "code that was wrong" — they're incorrect as
 **Fix:** A number is a height only when it carries a length unit (`20m`, `20 meters`, not `20 m/s`) or directly follows "from" with no other unit; the "from" match requires the whole number, so `19.6m` can't also yield `19`. Seven parametrized cases in `tests/test_output_producers.py` pin each shape.
 **Lesson:** When extracting a quantity from free text, require the thing that makes it *that* quantity (its unit, or its grammatical role) — "it's numeric" is never enough. Every other numeric parser in `agents.py` has the same weakness (see the open limitation below for Mathematics).
 
+### 22. Philosophy's is-ought claim said "this question", so claims about different questions looked identical
+**What happened:** Every normative question got the same Philosophy claim text: *"this question asks for a normative ('ought') conclusion; …"*. Phase B's `count_dependents` (claims shared across questions, keyed by `consolidation.claim_key` = agent + statement) reported that "how should we round 2.5?" and "should we believe 17 is prime?" depend on each other — they share no real claim. Found 2026-09-26 by a test that expected zero dependents; the test was right.
+**Root cause:** A deictic statement ("this question") only means something inside the deliberation that produced it. Once claims are compared or accumulated across deliberations — dependency counting, and consolidation's survival cycles, which would have counted every normative question as the *same* claim surviving again and pushed it toward Tier C — identical text about different subjects collides.
+**Fix:** The statement now names its question (`the question '…' asks for a normative conclusion; …`). A scan of every statement template in `agents.py` found no other deictic wording (only defeat conditions use "this", which are never compared across deliberations).
+**Lesson:** A claim's statement must be self-contained — meaningful with no knowledge of the question it came from — because the Belief Graph, consolidation and dependency tracking all compare claims across questions. Review any new statement template for "this", "here", "the question" before it ships.
+
 ---
 
 ## Open known limitations (found, not yet fixed)
@@ -184,6 +190,7 @@ Before writing similar code again in this project:
 - **Any new content-addressed or checkpoint code:** re-read entries 8–9. Be explicit about what's hashed vs. stored vs. derived, and make sure "verified" checks everything a caller would assume it checks.
 - **Any new API/serialization boundary:** re-read entry 10. Check the actual runtime type after a round-trip.
 - **Any new test:** re-read entries 11–14 before assuming a failing test means the implementation is wrong (entry 12 has recurred once already).
+- **Any new claim statement template:** re-read entry 22 — statements must be self-contained, never "this question".
 - **Any new parser that pulls numbers or quantities out of question text:** re-read entry 21 and the open limitations list — require a unit or grammatical role, never just "it's numeric".
 - **Any new demo/narrated script:** re-read entry 16 before appending to it.
 - **Any security or reliability claim in a design doc:** re-read entry 15 before writing "both X and Y share a cause" — prove it, don't infer it.
