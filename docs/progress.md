@@ -1214,6 +1214,21 @@ One earlier re-run, before the script recorded these timings, polled only once, 
 
 **Where to start next session:** [`docs/owner-decisions.md`](owner-decisions.md). Nearly all remaining substantive work waits on decisions 2–10, each briefed with evidence, options, costs and a recommendation. Settling 3 (Engineering's style), 4 (admitting OLMo 3 and wiring fitness), 8 (ledger storage) and 9 (upgrade churn) would unblock the most. `README.draft.md` (decision 6) is current as of batch 8 and still local only.
 
+### Batch 10 (planned 2026-09-26, implementing the owner's decisions)
+
+The owner decided 2–5 and 7–10 on 2026-09-26, each as recommended in `docs/owner-decisions.md`; 6 waits on reading `README.draft.md`. Each phase implements one or two decisions. Where a decision changes an existing test's meaning, that change is now owner-approved and is called out in the phase's write-up.
+
+| Phase | Decision(s) | Scope | Status |
+|---|---|---|---|
+| AK | 2, 9 | The qwen routing test asserts a non-empty answer from the right backend and model only. Grade upgrades stop being material under §7.2: only downgrades reopen, and upgrades are picked up at the next reopen for any other reason. | open |
+| AL | 3 | Engineering's rounding claims become `formal`. Its fidelity fingerprint becomes "names an implementation standard" (IEEE-754, formats, protocols), without depending on the sandbox. The Mathematics-vs-Engineering plural answer is kept. | open |
+| AM | 4 | Admit OLMo 3 7B with a written rationale, and wire a `ModelFitnessStore` into the API. Model claims start at 0.5 per agent and move with outcomes. | open |
+| AN | 5 | Human input triggers a checkpoint only at importance ≥ the re-evaluation threshold, configured alongside it. | open |
+| AO | 10 | During idle re-examination a model may challenge a model-backed claim. The challenge is dissent, and counts toward reputability, fitness and calibration only once the challenging model is admitted and `established`. | open |
+| AP | 7 | Per-reviewer tokens from a local config file (never in the repo) on new write endpoints: approve, reject or request more deliberation on a checkpoint, and submit ingestion. The reviewer id comes from the token, so §11's role and conflict-of-interest checks apply, and ingestion URLs are checked against a curator allow-list. | open |
+| AQ | 8 | One checkpoint log per question for the ledger, plus an index log, with a one-time migration of existing data. Re-measure with `scripts/measure_storage.py`. | open |
+| — | — | End-to-end test extended; live smoke; README draft refreshed. | open |
+
 **Standing constraints, unchanged:** the LICENSE and the README notice are never altered without the owner's approval; `execution_sandbox` stays off; no paid services; every staged diff is scanned for secrets; commits use the repo-local identity; the 80% resource cap applies; Proxmox guests may be changed as needed during development.
 
 ### Explicitly not on this list

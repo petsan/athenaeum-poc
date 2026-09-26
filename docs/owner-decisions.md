@@ -1,6 +1,6 @@
 # Open owner decisions — briefs
 
-Each brief covers one call that is the owner's to make. It gives the evidence gathered so far, the realistic options, what each costs, and a recommendation. Nothing here has been decided or implemented; the numbers match `docs/progress.md`'s owner-decision list. Written 2026-09-26, at the end of batch 9.
+Each brief covers one call that is the owner's to make. **Decisions 2–5 and 7–10 were made on 2026-09-26 (marked "Decided" below); 6 awaits the owner reading the draft.** It gives the evidence gathered so far, the realistic options, what each costs, and a recommendation. None of the decided items is implemented yet (see batch 10 in `docs/progress.md`); the numbers match `docs/progress.md`'s owner-decision list. Written 2026-09-26, at the end of batch 9.
 
 ---
 
@@ -15,6 +15,8 @@ Each brief covers one call that is the owner's to make. It gives the evidence ga
 
 **Recommendation: (a).** Model quality isn't what this test measures. If a factual probe is wanted, it belongs in a separate, non-gating quality report (the live smoke, `scripts/live_smoke.py`, is the natural home).
 
+**Decided (owner, 2026-09-26): (a).** Assert a non-empty answer from the right backend and model only.
+
 ---
 
 ## 3. Engineering's reasoning style while the sandbox is off
@@ -27,6 +29,8 @@ Each brief covers one call that is the owner's to make. It gives the evidence ga
 - **(c)** Keep the mislabel, documented. Cost: an `executable` claim that nothing executed, the exact failure mode §8 warns about.
 
 **Recommendation: (a).** It makes the claim type true and keeps the plural answer. It also gives Engineering a style that stays meaningful whether or not a sandbox exists.
+
+**Decided (owner, 2026-09-26): (a).** Retype the rounding claims `formal`; Engineering's fingerprint becomes "names an implementation standard".
 
 ---
 
@@ -41,6 +45,8 @@ Each brief covers one call that is the owner's to make. It gives the evidence ga
 
 **Recommendation: (a)**, for OLMo 3 7B only. Leave the smaller model-lab models unadmitted until each has a stated reason to be asked.
 
+**Decided (owner, 2026-09-26): (a).** Admit OLMo 3 7B, with a written rationale, and wire a `ModelFitnessStore` into the API.
+
 ---
 
 ## 5. Should human input trigger a checkpoint only above an importance threshold?
@@ -52,6 +58,8 @@ Each brief covers one call that is the owner's to make. It gives the evidence ga
 - **(b)** Keep checkpointing everything. Cost: reviewer load grows with every human contribution, however minor, and §11.5's wording is not followed.
 
 **Recommendation: (a)**, with the threshold stated in config next to the re-evaluation one, so the two can be tuned together.
+
+**Decided (owner, 2026-09-26): (a).** Checkpoint human input only at importance >= the re-evaluation threshold, configured alongside it.
 
 ---
 
@@ -76,6 +84,8 @@ Each brief covers one call that is the owner's to make. It gives the evidence ga
 
 **Recommendation: (b)** once there is more than one reviewer; **(a)** is acceptable while the owner is the only reviewer. Either way, the ingestion endpoint should also check the target URL's host against a curator allow-list, not just the caller.
 
+**Decided (owner, 2026-09-26): (b).** Per-reviewer tokens from a local config file (never in the repo), checked on write endpoints; the reviewer id comes from the token; ingestion checks URL hosts against a curator allow-list.
+
 ---
 
 ## 8. Long-term storage layout for the ledger and graph
@@ -88,6 +98,8 @@ Each brief covers one call that is the owner's to make. It gives the evidence ga
 - **(c)** Prune or compact superseded snapshots. Cost: it contradicts append-only as written; history of *states* is lost, though the ledger's own versions are kept.
 
 **Recommendation: (a) for the ledger** first, since it is the dominant cost and a question is the natural unit. Measure again with `scripts/measure_storage.py` before touching the graph.
+
+**Decided (owner, 2026-09-26): (a).** One checkpoint log per question for the ledger, with a one-time migration; re-measure before touching the graph.
 
 ---
 
@@ -102,6 +114,8 @@ Each brief covers one call that is the owner's to make. It gives the evidence ga
 
 **Recommendation: (a).** It matches the intent of re-evaluation (catch answers that may now be wrong) at no bookkeeping cost. Note that §7.2's wording is symmetric, so this is a design change, not a fix.
 
+**Decided (owner, 2026-09-26): (a).** Only downgrades are material; upgrades are picked up at the next reopen for any other reason.
+
 ---
 
 ## 10. May models challenge claims during idle re-examination? (new)
@@ -114,3 +128,5 @@ Each brief covers one call that is the owner's to make. It gives the evidence ga
 - **(c)** Models challenge with full weight. Cost: noise propagates into grades.
 
 **Recommendation: (a).** It closes the gap without letting an unproven model move the system's judgment of sources.
+
+**Decided (owner, 2026-09-26): (a).** Models may challenge; a model-only challenge is dissent and counts toward reputability and fitness only once the challenging model is admitted and established.
