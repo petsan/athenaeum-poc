@@ -1,0 +1,101 @@
+Copyright (c) 2026 Piorun, Inc. All rights reserved.
+
+PROPRIETARY SOURCE-AVAILABLE LICENSE -- VIEW ONLY
+
+This repository and all of its contents, including without limitation
+source code, tests, scripts, configuration, documentation, and design
+documents (collectively, the "Software"), are the proprietary property of
+Piorun, Inc. (the "Owner") and are protected by copyright law and
+international treaties. The Software is made publicly visible solely so
+that it may be viewed. It is NOT open-source software, and no
+open-source license is granted.
+
+1. PERMITTED USE
+
+   You may view the Software through the hosting platform on which the
+   Owner has published it. Where the Owner has published the Software on
+   GitHub, you also have only those rights that GitHub's Terms of Service
+   require the Owner to grant to other GitHub users, namely to view and
+   to fork the repository within GitHub's service. A fork confers no
+   other right, and every restriction in this license applies in full to
+   any fork and to any copy of the Software, wherever located.
+
+2. PROHIBITED USE
+
+   Except as expressly permitted in Section 1, or as agreed in writing
+   and signed by an authorized representative of the Owner, you may not,
+   in whole or in part:
+
+   (a) copy, reproduce, download for use, or store the Software;
+   (b) modify, adapt, translate, or create derivative works of the Software;
+   (c) distribute, publish, sublicense, sell, lease, lend, or otherwise
+       make the Software available to any third party;
+   (d) use, run, execute, deploy, or incorporate the Software into any
+       other software, product, or service, whether commercial or
+       non-commercial;
+   (e) reverse engineer or re-implement the Software's designs, methods,
+       or documentation for the purpose of creating a competing or
+       substantially similar work; or
+   (f) remove or alter any copyright, proprietary, or license notice in
+       the Software.
+
+3. ARTIFICIAL INTELLIGENCE AND MACHINE LEARNING
+
+   Without limiting Section 2, you may not use the Software, or any part
+   of it, directly or indirectly:
+
+   (a) to train, pre-train, fine-tune, distill, or otherwise develop or
+       improve any machine learning model or artificial intelligence
+       system;
+   (b) to evaluate, benchmark, test, or validate any such model or
+       system;
+   (c) as part of any dataset, corpus, or collection used for any of the
+       foregoing purposes; or
+   (d) as retrieval, grounding, or reference material from which any
+       such system generates code, text, or other output that reproduces
+       or derives from the Software.
+
+   These restrictions apply equally to natural persons and to automated
+   or non-human agents, including large language models, AI agents,
+   crawlers, and scrapers, and to any person or entity operating,
+   directing, or deploying them.
+
+4. RESERVATION OF RIGHTS
+
+   All rights not expressly granted in this license are reserved by the
+   Owner. No license or right is granted by implication, estoppel, or
+   otherwise. Public visibility of the Software does not constitute
+   publication into the public domain, a waiver of any right, or
+   permission to use the Software.
+
+5. TERMINATION
+
+   Any use of the Software in violation of this license is unauthorized
+   and automatically terminates any rights you may have under it. Upon
+   termination you must immediately cease all use of the Software and
+   destroy all copies in your possession or control. The Owner reserves
+   all remedies available at law or in equity.
+
+6. NO WARRANTY
+
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+   EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+   MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND
+   NON-INFRINGEMENT.
+
+7. LIMITATION OF LIABILITY
+
+   IN NO EVENT SHALL THE OWNER BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER
+   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT, OR OTHERWISE,
+   ARISING FROM, OUT OF, OR IN CONNECTION WITH THE SOFTWARE OR THE USE OF
+   OR OTHER DEALINGS IN THE SOFTWARE.
+
+8. THIRD-PARTY COMPONENTS
+
+   This license covers only material authored by or for the Owner.
+   Third-party software referenced or depended upon by the Software
+   (for example, Python packages or model weights) remains subject to
+   its own license terms.
+
+For permission requests, contact the Owner through the repository's
+hosting platform.

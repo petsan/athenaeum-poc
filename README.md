@@ -1,4 +1,4 @@
-> **Note:** This repository does not contain an open-source license. All rights are reserved. You are not permitted to copy, reproduce, modify, or distribute any part of this codebase without explicit written permission from the owner. This restriction applies equally to human software developers and non-human (LLM/AI) agents. Unauthorized use of this code for machine learning model training, fine-tuning, or evaluation is strictly prohibited.
+> **Note:** This repository does not contain an open-source license. All rights are reserved. You are not permitted to copy, reproduce, modify, or distribute any part of this codebase without explicit written permission from the owner. This restriction applies equally to human software developers and non-human (LLM/AI) agents. Unauthorized use of this code for machine learning model training, fine-tuning, or evaluation is strictly prohibited. See [LICENSE](LICENSE) for the full terms (copyright Piorun, Inc.).
 
 # Athenaeum Body -- Proof-of-Work Slice
 
