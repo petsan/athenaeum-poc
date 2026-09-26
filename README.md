@@ -6,6 +6,74 @@ A minimal, runnable, tested implementation of the highest-risk structural
 guarantees from `body-design.md`: not a full build of the Body, but enough
 working code to validate the core ideas and poke at them directly.
 
+## Architecture
+
+```mermaid
+flowchart TB
+    subgraph clients["Clients"]
+        phone["Mobile web client<br/>(client/index.html)"]
+        py["Python callers<br/>(scripts, tests, demo_brain.py)"]
+    end
+
+    subgraph api["HTTP API — athenaeum_body/api.py"]
+        reads["Reads: questions, versions,<br/>maintenance, checkpoints, health<br/>(served from a snapshot; never wait)"]
+        inbox["Async submit → durable inbox<br/>(202 at once)"]
+        sync["Sync submit<br/>(deliberates in the request)"]
+        writes["Reviewer-token writes:<br/>checkpoint decisions, ingestion<br/>(allow-listed hosts only)"]
+    end
+
+    subgraph maint["Maintainer — athenaeum_brain/maintenance.py"]
+        sched["MultiUnitScheduler<br/>priority round-robin,<br/>checkpoint per round, kill-safe resume"]
+        qunit["Question units<br/>(priority 0)"]
+        iunit["Idle-evolution cycles<br/>(priority −1)"]
+        gunit["Ingestion batches<br/>(priority −1)"]
+        retry["Failed rounds: retry,<br/>then suspend visibly"]
+    end
+
+    subgraph brain["Brain — athenaeum_brain/"]
+        rounds["Deliberation rounds:<br/>framing → exploration →<br/>cross-examination → synthesis"]
+        agents["Master Agents:<br/>Mathematics, Logic, Engineering,<br/>Physics, Philosophy, Theology, World News"]
+        idle["Idle evolution: re-examine claims,<br/>consolidate, resolve disputes,<br/>calibrate, propose amendments"]
+        reopen["Re-evaluation: importance,<br/>materiality, reopen with diff"]
+        gov["Governance: human input,<br/>checkpoints, domain fidelity"]
+    end
+
+    subgraph body["Body stores — athenaeum_body/"]
+        ledger["Question Ledger<br/>(one log per question)"]
+        bgraph["Belief Graph<br/>(questions, answers, claims, sources)"]
+        rep["Reputability<br/>(grades + versioned standard)"]
+        misc["Consolidation · Fidelity · Calibration ·<br/>Model fitness · Human checkpoints · Audits"]
+        cas[("Append-only, hash-chained checkpoint logs<br/>on a content-addressed store")]
+    end
+
+    subgraph models["Model serving"]
+        lab["llama.cpp model-lab guests<br/>(CPU; OLMo 3 7B admitted)"]
+        gpu["Elastic GPU workers<br/>(opt-in, checked live)"]
+        sandbox["Execution sandbox<br/>(off by configuration)"]
+    end
+
+    phone --> reads & inbox & sync & writes
+    py --> maint & brain
+    inbox --> sched
+    writes --> sched
+    sync --> rounds
+    sched --> qunit & iunit & gunit
+    sched -.-> retry
+    qunit --> rounds
+    iunit --> idle
+    rounds --> agents
+    idle --> reopen
+    idle --> gov
+    agents -->|"fallback + idle challenges"| lab
+    lab -.-> gpu
+    agents -.->|"verification (when enabled)"| sandbox
+    rounds & idle & reopen & gov --> ledger & bgraph & rep & misc
+    gunit --> bgraph
+    ledger & bgraph & rep & misc --> cas
+```
+
+The Body provides storage, scheduling and model serving, with durability guarantees. The Brain decides what is true enough to commit, and when to revisit it. Every store is an append-only, hash-chained log over content-addressed storage, so anything the system concluded, and why, stays recoverable.
+
 ## What's actually implemented
 
 - **Content-addressed, tamper-evident storage** (`storage/content_addressed.py`)
