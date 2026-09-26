@@ -41,8 +41,8 @@ in `brain-design.md` (round *content* -- this only runs no-op/demo round
 handlers). See `body-design.md` Section 11 for the full task backlog this
 slice draws from (roughly Phase 0-3, plus pieces of 3.4/7.5).
 
-No license is included yet -- add one before treating this as anything
-other than a private proof of concept.
+Licensed under a proprietary, view-only license (all rights reserved,
+Piorun, Inc.) -- see `LICENSE`. This is not open-source software.
 
 ## Running it
 
