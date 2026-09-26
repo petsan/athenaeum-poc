@@ -261,7 +261,7 @@ Earlier sections each ended with their own "suggested next step," repeatedly sup
 - [x] ~~Cross-agent verification routing, e.g. Mathematics → Engineering sandbox (task 44).~~ Done 2026-09-26 (Phase D) — see Section 47. Off in normal operation because `execution_sandbox.enabled` is false.
 - [x] ~~Model admission gate (§6.7, task 47), and applying Model Fitness weight at synthesis.~~ Done 2026-09-26 (Phase E) — see Section 48.
 - [ ] **Owner action: OLMo 3 7B guest (VMID 116) is swap-thrashing** — `llama-server` at 98% of its 10 GB limit, ~45× slower, all live-OLMo tests timing out. Restart it / `--mlock` or `--no-mmap` / more RAM. Diagnosis and options in `known-bugs.md` #24. (Found 2026-09-26.)
-- [ ] Domain Fidelity re-grounding and escalation-to-checkpoint (§2.4.3, task 30).
+- [x] ~~Domain Fidelity re-grounding and escalation-to-checkpoint (§2.4.3, task 30).~~ Done 2026-09-26 (Phase F) — see Section 49.
 - [ ] Re-evaluation and consolidation audit sampling (§9.4–9.5, tasks 22–23).
 - [ ] Adversarial suite: 7 of §8's 15 failure modes covered (task 20; `circular_corroboration` added in Section 42); several remaining ones depend on the items above.
 
@@ -285,7 +285,7 @@ Earlier sections each ended with their own "suggested next step," repeatedly sup
 4. ~~**§3.6 Idle-evolution round.**~~ — **done 2026-09-26 as Phase C, Section 46.** A work-unit type that samples existing committed claims and re-runs cross-examination against current grades; is the natural caller for `resolve_dispute` (§42), consolidation `record_survival`, and `domain_fidelity.needs_review`. Feeds materiality from item 3.
 5. ~~**Task 44 cross-agent verification routing.**~~ — **done 2026-09-26 as Phase D, Section 47.** Mathematics's formalizable claims (primality) routed to `MasterOfEngineering.verify_claim` so a sandbox run corroborates/challenges them. Sandbox stays behind its existing config gate.
 6. ~~**§6.7 model admission gate + fitness at synthesis.**~~ — **done 2026-09-26 as Phase E, Section 48.** Provisional status for a newly admitted model; apply `model_fitness.apply_fitness_to_confidence` alongside `reputability_factor` for claims with `serving_model` (keep raw `confidence` untouched, same as §41).
-7. **§2.4.3 Domain Fidelity re-grounding/escalation** — on `needs_review`, re-ground against the agent's baseline cases; escalate to a human checkpoint after repeated failure (reuse `human_checkpoint_store`).
+7. ~~**§2.4.3 Domain Fidelity re-grounding/escalation**~~ — **done 2026-09-26 as Phase F, Section 49.** On `needs_review`, re-ground against the agent's baseline cases; escalate to a human checkpoint after repeated failure (reuse `human_checkpoint_store`).
 8. **§9.4–9.5 audit sampling** for re-evaluation and consolidation fidelity.
 9. **Remaining adversarial cases**, added as their mechanisms land: retroactive history rewriting (after 1), stale framing (after 3/4), silent authority creep (Logic never issues a first-order claim; checkable now), unfalsifiable-claims-as-physics, overconfidence drift (calibration store), lossy compaction, silent style drift, unjustified human-input skew, uncommitted canonical writes (checkable now). Aim to add the two "checkable now" ones opportunistically in milestone 1's session if it's small.
 
@@ -302,7 +302,7 @@ The owner approved this batch to run unattended, in whatever order works best, *
 | C | Idle-evolution round (§3.6) — plan item 4; standard amendments only *proposed* to the human checkpoint, never auto-adopted | **done** — §46 |
 | D | Cross-agent verification routing (task 44) — plan item 5; respects the existing sandbox gate | **done** — §47 |
 | E | Model admission gate + fitness weighting at synthesis (§6.7) — plan item 6 | **done** — §48 (live-OLMo tests unverifiable this run, see §48) |
-| F | Domain Fidelity re-grounding/escalation (§2.4.3) — plan item 7 | open |
+| F | Domain Fidelity re-grounding/escalation (§2.4.3) — plan item 7 | **done** — §49 (offline-verified) |
 | G | Audit sampling (§9.4–9.5) — plan item 8 | open |
 | H | Adversarial suite toward 15/15 (§8, §9.2) — plan item 9 | open |
 | I | *(optional)* README body refresh — **draft only; never pushed without the owner's review.** The top notice and LICENSE are never touched. | open |
@@ -586,6 +586,20 @@ Each has a size cap (n ≤ 10⁷, h ≤ 10 km) so a sandbox job is decided by th
 **Not wired, deliberately:** the HTTP API passes no fitness store — with no models admitted yet, every model-backed claim would weigh zero, so turning it on is an admission decision for the owner. The agents' fallback still asks `DEFAULT_MODEL`.
 
 **Verification — stated exactly, because it was partial.** During this phase the OLMo 3 7B guest (VMID 116) degraded badly (known-bugs.md #24: `llama-server` at 98% of its 10 GB limit, swap full, ~45× slower). The normal full suite could not complete in reasonable time. Added an opt-in `ATHENAEUM_OFFLINE_MODELS=1` mode in `tests/conftest.py` (model fallback behaves as "backend unreachable"; default behaviour unchanged) and ran: **354 passed, 1 skipped, 3 failed** with `test_model_backed_reasoning.py` (15 tests, all live-OLMo) set aside — the 3 failures are all `BackendUnavailable: 'olmo3-7b' … timed out` (`test_elastic_workers` CPU-fallback test and two in `test_model_serving_real.py`). None of those 18 tests exercise code this phase changed. 373 tests collected in total (363 prior + 10 new in `tests/test_model_admission.py`). The live-OLMo tests must be re-run once the guest is fixed.
+
+## 49. Domain Fidelity remediation: flagged review, re-grounding, escalation (§2.4.3) — Phase F
+
+`src/athenaeum_brain/fidelity_remediation.py` (new) turns a Domain Fidelity drop into a staged, recorded path instead of a silent behaviour change. `remediate(store, agent, recent_claims=, cycle_id=, checkpoints=)` advances an agent by at most one step per call:
+- **Flagged review** — when `needs_review` fires, the agent's recently re-examined claims are checked for *style* (fingerprint deviation ≥ `STYLE_CONFIRM_THRESHOLD`, placeholder 0.25), not correctness. Not confirmed → `cleared`.
+- **Re-grounding** — confirmed → for `REGROUNDING_CYCLES` (3) further fidelity readings, the agent's **model-backed fallback is suppressed**, so it can only assert what its own grounded, deterministic computation produces: the POC's mechanical form of "increase weight toward the foundational corpus", with model completions as the newer, less-disciplined material. Suppression is a `contextvars`-scoped block (`model_backed_reasoning.fallback_suppressed`) applied by the loop around its exploration round only (new `fidelity=` parameter; the answer lists `regrounding_agents`), so it can't leak across the API's threads.
+- **Escalation** — still drifting when the period ends → `escalated`, a `domain-fidelity:<agent>` human checkpoint is (re-)armed, and suppression stays on until a Reviewer approves it; then `cleared`. A second escalation always re-arms the checkpoint, so an earlier approval can't clear it (tested).
+Every transition is appended to the agent's remediation history (new `DomainFidelityStore.remediation/set_remediation/agents_in_stage`) with its reason; a repeated call for the same cycle id is a no-op. Idle evolution (§46) now calls `remediate` for every agent it scores, and reports `remediation` stages in its result — tested end to end with a drifting (model-written) Mathematics claim.
+
+"Time" here is fidelity readings about the agent (normally one per idle cycle that sampled it), not wall-clock — re-grounding ends when there is enough new evidence about the agent, not after an arbitrary duration.
+
+**Known gap:** only Mathematics, Engineering, Logic and WorldNews have fingerprint checks (`domain_fidelity.FINGERPRINT_CHECKS`), so drift in Physics, Philosophy or Theology can be flagged by overreach but never *confirmed* on style — those agents always clear at review. Adding their markers (§2.4.1 names them: defeat-condition rate for Physics, assumption-surfacing for Philosophy, `traditional` typing for Theology) is logged as a follow-up.
+
+**Verified offline** (OLMo 3 guest still degraded, known-bugs.md #24 — probed again: ~65 s for a 4-token completion): `ATHENAEUM_OFFLINE_MODELS=1`, `test_model_backed_reasoning.py` set aside → **366 passed, 1 skipped, 3 failed**, the same three `olmo3-7b` timeouts as §48. 385 collected (373 prior + 12 new in `tests/test_fidelity_remediation.py`).
 
 ### Explicitly not on this list
 Any application-level work beyond what `deployment-playbook.md` promises to deliver (verified SSH access to a correctly-networked guest, not a deployed application).

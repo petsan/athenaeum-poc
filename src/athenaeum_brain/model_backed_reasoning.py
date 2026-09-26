@@ -23,6 +23,8 @@ asserted. 0.6 matches the same "plausible but not yet checked" weight
 human_input.py already uses for justified-but-unverified testimony.
 """
 from __future__ import annotations
+import contextlib
+import contextvars
 from athenaeum_body.model_lab_registry import MODEL_LAB_ENDPOINTS
 from athenaeum_body.model_serving import LlamaCppBackend, ModelSpec, BackendUnavailable
 from athenaeum_body.elastic_workers import build_elastic_gpu_backend
@@ -33,6 +35,24 @@ DEFAULT_MODEL = "olmo3-7b"  # was olmo2-1b until 2026-09-23 -- OLMo 2 1B
 # exist, up to 32B); swapped once that was verified live against
 # Hugging Face, same resource footprint as the existing mistral-7b guest.
 FALLBACK_CONFIDENCE = 0.6
+
+# Section 2.4.3 re-grounding: agents whose model fallback is switched off
+# for now, so they can only assert what their own grounded, deterministic
+# computation produces. A context variable, not a module-level set, so
+# suppression applied around one deliberation's exploration round can't
+# leak into another thread's deliberation (the HTTP API is threaded).
+_SUPPRESSED_AGENTS: contextvars.ContextVar[frozenset] = contextvars.ContextVar(
+    "suppressed_fallback_agents", default=frozenset())
+
+
+@contextlib.contextmanager
+def fallback_suppressed(agent_names):
+    """Within this block, model_backed_claim returns None for these agents."""
+    token = _SUPPRESSED_AGENTS.set(_SUPPRESSED_AGENTS.get() | frozenset(agent_names))
+    try:
+        yield
+    finally:
+        _SUPPRESSED_AGENTS.reset(token)
 
 
 def ask_model(question: str, model_name: str = DEFAULT_MODEL, n_predict: int = 96,
@@ -106,7 +126,11 @@ def model_backed_claim(*, agent_name: str, question: str, question_id: str,
     """Builds a Claim from a real model completion, or None if the
     backend couldn't be reached -- callers append this to their own
     deterministic claims list only when it's not None, exactly like any
-    other 'nothing to add' outcome (Section 3.2)."""
+    other 'nothing to add' outcome (Section 3.2). Also None, without any
+    model call, for an agent currently being re-grounded (Section 2.4.3,
+    fallback_suppressed)."""
+    if agent_name in _SUPPRESSED_AGENTS.get():
+        return None
     response = ask_model(question, model_name)
     if not response or not response.strip():
         return None

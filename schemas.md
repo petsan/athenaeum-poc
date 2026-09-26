@@ -66,6 +66,7 @@ As implemented in `reputability_store.py` (Section 6.5, 2026-09-26): each stored
 | `reopen_context` | dict | no | on a reopened version: `prior_version`, `reasons`, `prior_answer` (without its own `reopen_context`), `expanded_traces`, optional `forecast_resolution` |
 | `diff` | dict | no | on a reopened version (Section 7.3): `added`, `removed`, `weight_changes`, `leading_conclusion`, `plural_answers`, `cause` |
 | `fitness_at_use`, `unadmitted_models` | dict, list | no | present when a ModelFitnessStore was used (Section 6.7): `{"agent::model": factor}` snapshot, and models that backed a committed claim without being admitted |
+| `regrounding_agents` | list[str] | no | agents whose model fallback was suppressed for this deliberation (Section 2.4.3 re-grounding or escalation) |
 | `verification` | dict | no | task 44 routing report: `{routed, skipped_reason}` — `skipped_reason` names how many verifiable claims went unverified because `execution_sandbox.enabled` is false |
 
 ## Claim (Brain, Section 3.5) — implemented in `athenaeum_brain/claims.py`

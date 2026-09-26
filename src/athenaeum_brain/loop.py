@@ -8,6 +8,9 @@ from __future__ import annotations
 from athenaeum_body.scheduler.work_unit import WorkUnit, RoundResult
 from athenaeum_body.reputability_store import ReputabilityStore
 from athenaeum_body.model_fitness_store import ModelFitnessStore
+from athenaeum_body.domain_fidelity_store import DomainFidelityStore
+from .model_backed_reasoning import fallback_suppressed
+from .fidelity_remediation import regrounding_agents
 from .model_fitness import fitness_factor, is_model_backed
 from .rounds import framing_round, exploration_round, cross_examination_round, synthesis_round
 from .claims import Claim
@@ -65,9 +68,14 @@ def _attach_fitness_and_record_outcomes(result: dict, store: ModelFitnessStore) 
 
 def make_deliberation_handler(question: str, question_id: str, reputability: ReputabilityStore = None,
                               reopen_context: dict = None, verification: dict = None,
-                              model_fitness: ModelFitnessStore = None):
+                              model_fitness: ModelFitnessStore = None,
+                              fidelity: DomainFidelityStore = None):
     """Returns a round_handler(state, round_index) -> RoundResult usable
     directly as a WorkUnit.round_handler in athenaeum_body's scheduler.
+
+    fidelity (Section 2.4.3): when given, agents under re-grounding or
+    escalation have their model fallback suppressed for this deliberation's
+    exploration round, and the answer names them.
 
     model_fitness (Section 6.7): when given, model-backed claims are
     weighted by their (agent, model) fitness at time of use -- zero for a
@@ -89,9 +97,12 @@ def make_deliberation_handler(question: str, question_id: str, reputability: Rep
 
         if round_index == 1:
             frame = state["frame"]
-            claims = exploration_round(frame, question_id)
+            regrounding = regrounding_agents(fidelity) if fidelity is not None else []
+            with fallback_suppressed(regrounding):
+                claims = exploration_round(frame, question_id)
             return RoundResult(
-                proposed_writes={"exploration_claims": [c.to_dict() for c in claims]},
+                proposed_writes={"exploration_claims": [c.to_dict() for c in claims],
+                                 "regrounding_agents": regrounding},
                 done=False,
             )
 
@@ -137,6 +148,8 @@ def make_deliberation_handler(question: str, question_id: str, reputability: Rep
                 answer["reopen_context"] = reopen_context
             if "verification" in state:  # absent in checkpoints from before task 44
                 answer["verification"] = state["verification"]
+            if state.get("regrounding_agents"):
+                answer["regrounding_agents"] = state["regrounding_agents"]
             # Section 5.4: one section per output type the framing round
             # classified this question as. Forecast and Recommendation are
             # built only from committed claims carrying that structure;
@@ -165,12 +178,13 @@ def make_deliberation_handler(question: str, question_id: str, reputability: Rep
 def make_deliberation_unit(question: str, question_id: str, priority: int = 0,
                             reputability: ReputabilityStore = None, reopen_context: dict = None,
                             unit_id: str = None, verification: dict = None,
-                            model_fitness: ModelFitnessStore = None) -> WorkUnit:
+                            model_fitness: ModelFitnessStore = None,
+                            fidelity: DomainFidelityStore = None) -> WorkUnit:
     """unit_id defaults to question_id; a reopen passes a distinct one so
     the new run's checkpoints never collide with the original's."""
     return WorkUnit(
         id=unit_id or question_id,
         priority=priority,
         round_handler=make_deliberation_handler(question, question_id, reputability, reopen_context,
-                                                verification, model_fitness),
+                                                verification, model_fitness, fidelity),
     )

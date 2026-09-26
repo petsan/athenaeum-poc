@@ -44,6 +44,7 @@ from .rounds import cross_examination_round, reputability_factor
 from .consolidation import claim_key, record_survival
 from .dispute_resolution import resolve_dispute
 from .domain_fidelity import compute_score, needs_review
+from .fidelity_remediation import remediate
 
 SUBMITTER = "idle-evolution"  # recorded as the proposer of standard amendments
 
@@ -188,7 +189,7 @@ def commit(ctx: IdleContext, cycle_id: str, findings: list[dict], plan: dict) ->
                                  question_id=cycle_id, dispute_id=f"{cycle_id}:{key}")
         rulings[key] = record["ruling"]
 
-    flagged = {}
+    flagged, remediation = {}, {}
     if ctx.fidelity is not None:
         for agent, score in plan["fidelity"].items():
             if not any(h.get("cycle_id") == cycle_id for h in ctx.fidelity.history_for(agent)):
@@ -196,6 +197,11 @@ def commit(ctx: IdleContext, cycle_id: str, findings: list[dict], plan: dict) ->
             verdict = needs_review(ctx.fidelity, agent)
             if verdict["needs_review"]:
                 flagged[agent] = verdict["reason"]
+            # Section 2.4.3: the flag starts (or advances) a remediation path,
+            # re-examining this cycle's sample of the agent's claims for style.
+            record = remediate(ctx.fidelity, agent, cycle_id=cycle_id, checkpoints=ctx.checkpoints,
+                               recent_claims=[f["claim"] for f in findings if f["claim"]["issuing_agent"] == agent])
+            remediation[agent] = record["stage"]
 
     proposal = plan["amendment_proposal"]
     if proposal is not None and ctx.checkpoints is not None:
@@ -211,6 +217,7 @@ def commit(ctx: IdleContext, cycle_id: str, findings: list[dict], plan: dict) ->
         "recorded_survival": survived,
         "dispute_rulings": rulings,
         "fidelity_flags": flagged,
+        "remediation": remediation,
         "reevaluation_candidates": plan["reevaluation_candidates"],
         "amendment_proposal": proposal,
     }

@@ -982,6 +982,45 @@ back an agent.
 
 ---
 
+## 2026-09-26 — Domain Fidelity remediation (§2.4.3, Phase F): design choices
+
+**Q: What does "re-grounding" mean in a system with no retrieval layer?**
+
+§2.4.3 describes it as increasing weight toward the agent's foundational
+corpus, on the theory that drift comes from newer, less-disciplined
+material crowding out the agent's grounding. In this POC every agent has
+exactly two sources of claims: its own deterministic, domain-specific
+computation (its grounding) and a general-purpose model completion (the
+less-disciplined material). Suppressing the model fallback for a while is
+the real, mechanical version of that shift — the agent can only say what
+its grounded method can back up. It is also reversible and visible: the
+answer names every agent under re-grounding.
+
+**Q: Why a context variable instead of a flag on the agent or module?**
+
+The HTTP API runs deliberations on threads. A module-level set would
+make one deliberation's suppression apply to every other one running at
+the same time. A `contextvars` block scoped to the exploration round is
+exactly as wide as it needs to be.
+
+**Q: Why measure the re-grounding period in fidelity readings, not
+cycles or time?**
+
+The question at the end of re-grounding is "has this agent's style
+recovered?", and that can only be answered with new evidence about the
+agent. An idle cycle that never sampled the agent adds nothing, so it
+shouldn't count.
+
+**Q: Why does a flag get cleared when style isn't confirmed?**
+
+§2.4.3 says a drop triggers a *review*, and the review re-examines
+specifically for style. The score combines style and jurisdictional
+overreach; if the review finds the style intact, the drop is overreach
+or noise, and treating it as drift would suppress a healthy agent.
+Overreach has its own visibility (Logic's jurisdiction challenges).
+
+---
+
 *See `docs/progress.md` §26 for the checklist this log's entries track
 against, and `docs/infra-topology.md` for the infrastructure-side design
 decisions made in the same planning conversation.*
