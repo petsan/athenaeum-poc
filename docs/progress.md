@@ -264,6 +264,32 @@ Earlier sections each ended with their own "suggested next step," repeatedly sup
 - [ ] Re-evaluation and consolidation audit sampling (§9.4–9.5, tasks 22–23).
 - [ ] Adversarial suite: 7 of §8's 15 failure modes covered (task 20; `circular_corroboration` added in Section 42); several remaining ones depend on the items above.
 
+### Next-session plan (written 2026-09-25, end of session)
+
+**State at hand-off:** `master` = `657af14`, pushed, clean. LXC 104's `/root/athenaeum-poc` matches it for `src/`, `tests/`, `docs/` (synced by tar; the LICENSE/README changes don't affect tests). Last full run: **273 passed, 1 skipped** (skip = real-GPU-worker test; the Windows worker was offline). Milestones done this session: evidence-weighted synthesis (§41), dispute resolution + independence check (§42). Also added a proprietary source-available `LICENSE` (Piorun, Inc.; examine-but-don't-take, companies/employers explicitly welcome to download and review; no AI/ML use) and a matching README note — any future README/LICENSE wording change needs the owner's explicit approval, don't "tidy" it.
+
+**Working method the owner asked for — keep it:** one small milestone at a time → new tests → full suite on LXC 104 → update this file (check off + new numbered Section) + `docs/brain-session-log.md` (design Q&A) + CLAUDE.md test count → check in with the owner → commit/push only once approved. Owner calls the default branch "main"; it is actually `master`.
+
+**Mechanics, so nothing is re-derived:**
+- Windows dev machine has no Python. Tests run on LXC 104 (`ssh -i ~/.ssh/athenaeum_poc root@192.168.0.150`), which has no git. Sync: `tar cf - src tests docs *.md *.yaml *.py pyproject.toml | ssh … 'cd /root/athenaeum-poc && tar xf -'`, then clear `__pycache__`. Before the first sync of a session, confirm the guest copy matches `origin/master` (compare sha256 of `src/` and `tests/`).
+- Windows clone must be `core.autocrlf=false` (LF) or every file hashes differently from the guest's copy.
+- Commit identity: repo-local `Athenaeum POC <poc@athenaeum.local>`, matching all history. Scan each staged diff for secrets before pushing (none found so far, in the tree or the history).
+- Full suite takes ~4.5 min. Tests that touch the model-backed fallback should stub `model_backed_reasoning.ask_model` if they assert exact claim sets (see `test_evidence_weighted_synthesis.py`), otherwise a live OLMo worker can add claims.
+- Host is routinely powered off: `ping 192.168.0.100` first; if down, ask the owner to power it on.
+
+**Ordered milestones (each is one check-in):**
+1. **§6.5 Reputability standard versioning** (next up). Move `_grade_from_tally` into a versioned policy registry (v0 = today's rule, labelled as the seed standard of §6.1). Every `grade_versions` entry records the `standard_version` that produced it. `ReputabilityStore.adopt_standard(policy, rationale)` makes version N+1 govern new decisions only — never rewrites old grade entries. Extend `reevaluation.is_material` with §7.2's fourth trigger (a change of standard version that would alter the grade of a source the answer relied on). Tests: old grades keep their version tag, new outcomes use the new version, and materiality fires only when the re-grade actually differs.
+2. **Forecast/Recommendation producers (§5.4, tasks 13–14).** The builders exist in `output_types.py`; nothing produces their inputs. Add an optional structured payload on `Claim` (e.g. `forecast: {statement, probability, resolution_criterion, resolution_date}`) and have `loop.py` build the section when the frame asks for it *and* a committed claim carries one — otherwise the section explicitly says no agent produced one (honest, not silently omitted). Find one agent that can produce a genuine forecast deterministically before reaching for the model fallback.
+3. **§7.1 importance rating + §7.3 reopen-with-diff.** Importance from framing (domains routed, output types) plus dependency count. Reopen = re-run the loop with the prior answer as context, `QuestionLedger.append_version`, and an explicit diff (committed claims added/removed, leading-conclusion change, weighted-confidence deltas, cause). Uses `consolidation.expand` first if the prior answer was compacted.
+4. **§3.6 Idle-evolution round.** A work-unit type that samples existing committed claims and re-runs cross-examination against current grades; is the natural caller for `resolve_dispute` (§42), consolidation `record_survival`, and `domain_fidelity.needs_review`. Feeds materiality from item 3.
+5. **Task 44 cross-agent verification routing.** Mathematics's formalizable claims (primality) routed to `MasterOfEngineering.verify_claim` so a sandbox run corroborates/challenges them. Sandbox stays behind its existing config gate.
+6. **§6.7 model admission gate + fitness at synthesis.** Provisional status for a newly admitted model; apply `model_fitness.apply_fitness_to_confidence` alongside `reputability_factor` for claims with `serving_model` (keep raw `confidence` untouched, same as §41).
+7. **§2.4.3 Domain Fidelity re-grounding/escalation** — on `needs_review`, re-ground against the agent's baseline cases; escalate to a human checkpoint after repeated failure (reuse `human_checkpoint_store`).
+8. **§9.4–9.5 audit sampling** for re-evaluation and consolidation fidelity.
+9. **Remaining adversarial cases**, added as their mechanisms land: retroactive history rewriting (after 1), stale framing (after 3/4), silent authority creep (Logic never issues a first-order claim; checkable now), unfalsifiable-claims-as-physics, overconfidence drift (calibration store), lossy compaction, silent style drift, unjustified human-input skew, uncommitted canonical writes (checkable now). Aim to add the two "checkable now" ones opportunistically in milestone 1's session if it's small.
+
+**Infra items above in this section are untouched this session** (backup timer `OnBootSec` decision, auto-update mechanism) — still the owner's call, not Brain work.
+
 - [ ] `execution_sandbox.enabled` stays `false` — not actionable right now (the CPU-time gap is a confirmed environment limitation on this specific kernel, not a bug to fix), but re-run `scripts/preflight_check.py` if this project is ever deployed to a *different* host, per `security-review-sandbox.md` Section 7.3/7.4.
 
 ## 27. Brain backlog resumed: Physics, Philosophy, Theology agents; infra topology plan

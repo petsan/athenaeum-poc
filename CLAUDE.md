@@ -85,6 +85,14 @@ These aren't aspirational — every one of them is here because violating it (or
 
 ## Current status (see `docs/progress.md` for full detail)
 
+- **Start here next session:** `docs/progress.md` §26 → "Next-session plan
+  (written 2026-09-25)" — ordered milestones (next: §6.5 reputability
+  standard versioning), the owner's requested working method (small
+  milestone → tests → full suite on LXC 104 → docs → check in → commit only
+  when approved), and the exact sync/test mechanics. 2026-09-25 added
+  evidence-weighted synthesis (§41) and dispute resolution (§42). The repo
+  now carries a proprietary source-available `LICENSE` (Piorun, Inc.) —
+  don't alter it or the README notice without the owner's explicit approval.
 - Body: storage/checkpoint/scheduler/concurrency/ingestion (now including
   a real `fetch_url()` network fetch, not just `FixtureSource`)/model-
   serving-router/sandbox/distributed worker dispatch (`distributed_worker.py`,
