@@ -72,7 +72,8 @@ def make_deliberation_handler(question: str, question_id: str, reputability: Rep
                               reopen_context: dict = None, verification: dict = None,
                               model_fitness: ModelFitnessStore = None,
                               fidelity: DomainFidelityStore = None,
-                              belief_graph: BeliefGraphStore = None, state_key: str = None):
+                              belief_graph: BeliefGraphStore = None, state_key: str = None,
+                              mirror: bool = True):
     """Returns a round_handler(state, round_index) -> RoundResult usable
     directly as a WorkUnit.round_handler in athenaeum_body's scheduler.
 
@@ -103,11 +104,13 @@ def make_deliberation_handler(question: str, question_id: str, reputability: Rep
     # only ever READ from there -- two deliberations time-sliced together
     # used to overwrite each other's frame and answer each other's question.
     # Every write is mirrored at the top level too, so single-unit callers
-    # (and tests) that read state["answer"] etc. keep working.
+    # (and tests) that read state["answer"] etc. keep working. A multi-unit
+    # caller passes mirror=False: there the mirror is only the last unit's
+    # scratch, carried in every later checkpoint (batch 6, Phase AB).
     ns = state_key or f"deliberation:{question_id}"
 
     def writes(state: dict, **new) -> dict:
-        return {ns: {**state.get(ns, {}), **new}, **new}
+        return {ns: {**state.get(ns, {}), **new}, **(new if mirror else {})}
 
     def handler(state: dict, round_index: int) -> RoundResult:
         # A checkpoint written before namespacing has no ns entry; resuming
@@ -207,13 +210,15 @@ def make_deliberation_unit(question: str, question_id: str, priority: int = 0,
                             unit_id: str = None, verification: dict = None,
                             model_fitness: ModelFitnessStore = None,
                             fidelity: DomainFidelityStore = None,
-                            belief_graph: BeliefGraphStore = None) -> WorkUnit:
+                            belief_graph: BeliefGraphStore = None, mirror: bool = True) -> WorkUnit:
     """unit_id defaults to question_id; a reopen passes a distinct one so
-    the new run's checkpoints never collide with the original's."""
+    the new run's checkpoints never collide with the original's. mirror:
+    see make_deliberation_handler."""
     return WorkUnit(
         id=unit_id or question_id,
         priority=priority,
         round_handler=make_deliberation_handler(question, question_id, reputability, reopen_context,
                                                 verification, model_fitness, fidelity, belief_graph,
-                                                state_key=f"deliberation:{unit_id or question_id}"),
+                                                state_key=f"deliberation:{unit_id or question_id}",
+                                                mirror=mirror),
     )

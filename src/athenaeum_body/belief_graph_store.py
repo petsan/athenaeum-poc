@@ -23,6 +23,11 @@ class BeliefGraphStore:
     def _state(self) -> dict:
         return self.log.read_latest() or {"nodes": {}, "edges": {}, "seq": 0}
 
+    def batch(self):
+        """Group the writes of one logical operation (recording an answer, a
+        source) into one checkpoint: CheckpointLog.batch."""
+        return self.log.batch()
+
     def add_node(self, node_id: str, node_type: str, data: dict | None = None) -> BeliefGraphNode:
         state = self._state()
         if node_id not in state["nodes"]:

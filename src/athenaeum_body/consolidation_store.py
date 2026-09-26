@@ -20,6 +20,10 @@ class ConsolidationStore:
     def _state(self) -> dict:
         return self.log.read_latest() or {"entries": {}}
 
+    def batch(self):
+        """Group one idle cycle's updates into one checkpoint: CheckpointLog.batch."""
+        return self.log.batch()
+
     def get(self, key: str) -> dict | None:
         return self._state()["entries"].get(key)
 

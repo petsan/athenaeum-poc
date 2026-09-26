@@ -141,13 +141,15 @@ def ingest(source: FixtureSource, cas: ContentAddressedStore, graph: BeliefGraph
 
 def record_source(graph: BeliefGraphStore, entry: ProvenanceEntry) -> None:
     """Idempotent: nodes and edges are write-once. A cited source that
-    hasn't been ingested yet gets a bare node, filled in by its own ingest."""
+    hasn't been ingested yet gets a bare node, filled in by its own ingest.
+    One checkpoint per source."""
     node_id = f"source:{entry.id}"
-    graph.add_node(node_id, "source", {"license": entry.metadata.get("license"),
-                                       "content_hash": entry.content_hash})
-    for cited in entry.metadata.get("cites", []):
-        graph.add_node(f"source:{cited}", "source", {})
-        graph.add_edge(node_id, f"source:{cited}", "cites")
+    with graph.batch():
+        graph.add_node(node_id, "source", {"license": entry.metadata.get("license"),
+                                           "content_hash": entry.content_hash})
+        for cited in entry.metadata.get("cites", []):
+            graph.add_node(f"source:{cited}", "source", {})
+            graph.add_edge(node_id, f"source:{cited}", "cites")
 
 
 def source_from_spec(spec: dict, fetch=None) -> FixtureSource:

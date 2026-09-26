@@ -109,9 +109,15 @@ class Maintainer:
     def ledger(self) -> QuestionLedger:
         return self.idle.ledger
 
-    def _save(self) -> None:
+    def _save(self, forget: tuple[str, ...] = ()) -> None:
+        """`forget`: units that just left the registry. The runner keeps a
+        per-unit record (round reached, status) for resuming. Once a unit is
+        harvested or given up nothing reads it again, and keeping it would
+        grow every checkpoint forever (batch 6, Phase AB)."""
         log = self.scheduler.runner.log
         state = log.read_latest() or {"units": {}}
+        for unit_id in forget:
+            state.get("units", {}).pop(unit_id, None)
         state["shared_state"] = self.scheduler.runner.shared_state
         log.write_checkpoint(state, label="maintenance")
 
@@ -120,10 +126,11 @@ class Maintainer:
     def _question_unit(self, question_id: str, question: str):
         return make_deliberation_unit(question, question_id, priority=0, reputability=self.idle.reputability,
                                       verification=self.verification, model_fitness=self.model_fitness,
-                                      fidelity=self.idle.fidelity, belief_graph=self.belief_graph)
+                                      fidelity=self.idle.fidelity, belief_graph=self.belief_graph, mirror=False)
 
     def _idle_unit(self, cycle_id: str, info: dict):
-        return make_idle_evolution_unit(self.idle, cycle_id, sample_size=info["sample_size"], seed=info["seed"])
+        return make_idle_evolution_unit(self.idle, cycle_id, sample_size=info["sample_size"], seed=info["seed"],
+                                        mirror=False)
 
     def _ingestion_unit(self, batch_id: str, info: dict):
         return make_ingestion_unit(batch_id, info["sources"], self.ingestion_cas, self.belief_graph,
@@ -231,10 +238,10 @@ class Maintainer:
         if info["kind"] == "question":
             event = self._on_question_done(unit_id)
             del self._m["units"][unit_id]
-            self._save()
+            self._save(forget=(unit_id,))
             return event
         del self._m["units"][unit_id]
-        self._save()
+        self._save(forget=(unit_id,))
         if info["kind"] == "ingestion":
             result = self._harvest(f"ingestion:{unit_id}", "ingestion_result")
             return {"kind": "ingestion", **result} if result is not None else None
@@ -275,7 +282,7 @@ class Maintainer:
             state.pop(ns, None)
         if info["kind"] == "question":
             self.ledger.set_status(unit.id, "suspended")
-        self._save()
+        self._save(forget=(unit.id,))
         return {**event, "kind": "unit_failed", "retrying": False}
 
     def record_failure(self, unit_id: str, info: dict, error: Exception) -> None:
@@ -309,9 +316,10 @@ class Maintainer:
 
     def _on_question_done(self, question_id: str) -> dict:
         answer = self._harvest(f"deliberation:{question_id}", "answer")
-        if answer is not None and self.ledger.get(question_id).status != "completed":
-            self.ledger.append_version(question_id, answer)
-        rating = rate_and_store_importance(self.ledger, question_id, graph=self.belief_graph)
+        with self.ledger.log.batch():   # the answer and its rating: one ledger checkpoint
+            if answer is not None and self.ledger.get(question_id).status != "completed":
+                self.ledger.append_version(question_id, answer)
+            rating = rate_and_store_importance(self.ledger, question_id, graph=self.belief_graph)
         self._m["answered_since_idle"] += 1
         if self._m["answered_since_idle"] >= self.policy.idle_every_questions and not self._idle_in_flight():
             self._submit_idle()

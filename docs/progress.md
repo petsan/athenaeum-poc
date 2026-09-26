@@ -324,7 +324,7 @@ Same rules and stop conditions as batch 1. Ordered so each phase builds on the l
 | N | **Async API** — submit → poll over the ledger's `queued/active/completed` lifecycle (api.py's own stated limitation), plus read endpoints for versions and diffs. | **done** — §57 |
 | — | End-to-end test extended over J–N, then plan batch 3. | **done** — `test_full_lifecycle_through_the_maintainer` (§58) |
 
-**Owner decisions accumulated so far (not in any batch — each needs a call from the owner):** ~~(1) the OLMo 3 guest's memory problem, known-bugs.md #24~~ (resolved §59 once guest changes were permitted); (2) the flaky `qwen2.5-1.5b` factual assertion; (3) what Engineering's reasoning style is while the sandbox is off (its `executable` rounding claims vs. the fidelity fingerprint); (4) which models to admit before the API passes a fitness store (§48); (5) whether §11.5's importance threshold should narrow when human input triggers a checkpoint (§45); (6) adopting `README.draft.md`; (7) how a reviewer approves a checkpoint in the deployed system. The API has no authentication, so approval stays a Python call until the owner picks an auth approach (batch 5, Phase Z). The same decision covers an ingestion endpoint (Phase Y). (8) Whether old checkpoint snapshots may ever be pruned or compacted. The log is append-only by design, so storage grows without bound (measured in batch 6, Phase AB).
+**Owner decisions accumulated so far (not in any batch — each needs a call from the owner):** ~~(1) the OLMo 3 guest's memory problem, known-bugs.md #24~~ (resolved §59 once guest changes were permitted); (2) the flaky `qwen2.5-1.5b` factual assertion; (3) what Engineering's reasoning style is while the sandbox is off (its `executable` rounding claims vs. the fidelity fingerprint); (4) which models to admit before the API passes a fitness store (§48); (5) whether §11.5's importance threshold should narrow when human input triggers a checkpoint (§45); (6) adopting `README.draft.md`; (7) how a reviewer approves a checkpoint in the deployed system. The API has no authentication, so approval stays a Python call until the owner picks an auth approach (batch 5, Phase Z). The same decision covers an ingestion endpoint (Phase Y). (8) How the ledger and graph should be stored long-term. Every write snapshots the whole store, which is still quadratic after Phase AB's 70% cut: roughly 6–7 GB of ledger by 1,000 questions (§76). The options are per-question logs, delta checkpoints, or pruning superseded snapshots, and the last conflicts with append-only as written.
 
 **Batch 2 (J–N) complete 2026-09-26**, end-to-end extended (Section 58).
 
@@ -377,7 +377,7 @@ Same rules and stop conditions. Each item was confirmed against the running code
 | Phase | Scope | Status |
 |---|---|---|
 | AA | **API input validation and error handling** — reproduced on LXC 104: `POST /api/questions` with a non-string `question` crashes the handler, so the client gets no response. It also leaves a `queued` ledger entry nothing will ever run. An empty question is deliberated, a 200 KB question is accepted, and the request body is read with no size limit. Validate (a non-empty string within a length limit; a bounded body), and answer every failure with a JSON error. If a synchronous deliberation fails, suspend the question with its error instead of leaving it `queued`. | **done** — §75, known-bugs #33 |
-| AB | **Measure storage growth** — every store write appends a full-state checkpoint (append-only by design, §5.3), so storage grows with writes × state size. Measure bytes per answered question and per idle cycle on the API wiring, find the dominant writers, and remove only *redundant* writes (a checkpoint of unchanged state). Whether old snapshots may ever be pruned is owner decision 8, not a mechanical fix. | open |
+| AB | **Measure storage growth** — every store write appends a full-state checkpoint (append-only by design, §5.3), so storage grows with writes × state size. Measure bytes per answered question and per idle cycle on the API wiring, find the dominant writers, and remove only *redundant* writes (a checkpoint of unchanged state). Whether old snapshots may ever be pruned is owner decision 8, not a mechanical fix. | **done** — §76, known-bugs #34 |
 | AC | **Refresh the narrated demo** (`demo_brain.py`) for batches 4–5: calibration, ingestion into the graph, a grade change reaching every dependent answer, a failing step set aside visibly. Mind known-bugs #16. | open |
 | — | End-to-end test extended; README draft refreshed (local); plan batch 7. | open |
 
@@ -997,6 +997,34 @@ known-bugs.md #33: a non-string question crashed the request handler (connection
 Tested with raw requests, including a `Content-Length` promising more than is ever sent: a server that tried to read it would hang, and this one answers 413 at once.
 
 **Full live suite: 569 passed, 1 skipped.** 570 collected (556 prior + 14 new in `tests/test_api_validation.py`).
+
+## 76. Storage growth measured, and cut by 70% — Phase AB
+
+`scripts/measure_storage.py` drives the production path: `build_app`'s Maintainer with idle cycles at the default cadence, over deterministic questions. It reports total size and, per log, entries, redundant entries and payload bytes. Baseline, 60 questions and 60 idle cycles: **161.4 MB**, with the per-question cost rising from 1.3 MB to 3.9 MB, i.e. quadratic. No write was literally redundant (an identical state). The waste was elsewhere:
+
+| Cause | Fix | Log before → after |
+|---|---|---|
+| The Belief Graph wrote its **whole state once per node and once per edge** | `CheckpointLog.batch()`: one logical operation, one checkpoint. `record_answer` and `record_source` are each one batch | graph 47.4 → 6.1 MB (510 → 65 entries) |
+| Consolidation wrote **once per claim per idle cycle**; fidelity and calibration likewise | the idle commit batches each store | consolidation 24.9 → 1.3 MB; fidelity 2.6 → 0.8; calibration 0.44 → 0.17 |
+| The Maintainer's checkpoints carried the **last unit's scratch mirror and a runner record for every unit ever run**, although §56 claimed they stay bounded (known-bugs #34) | `mirror=False` for Maintainer units; runner records dropped with the registry entry | maintainer 46.1 → 10.4 MB; state at rest 48 KB → 0.1 KB |
+| The ledger wrote an answer and then its rating as two full-ledger checkpoints | batched, in both paths | index 36.4 → 27.3 MB |
+
+**After: 49.2 MB (−70%).** `batch()` keeps §5.3's rule, since every checkpoint is still a new entry and never an overwrite, and the design already treats checkpoint cadence as configurable. Batching also makes each operation **atomic**: a failure inside a batch writes nothing, instead of leaving half an answer in the graph. Reads inside a batch see its pending writes and return copies, as reads always have. A batch is scoped to one log object.
+
+**What remains is a design question (owner decision 8).** The ledger is now 55% of the total, because every write snapshots the entire ledger (every question, every version), so it still grows quadratically. At the measured rate, roughly 3 writes per question at ~4.4 KB of ledger per question, 1,000 questions would put the ledger alone in the region of 6–7 GB. The Belief Graph is the same shape at a smaller scale. The options change the storage layout or the retention rule, so they're not mine to pick:
+- one log per question, so a write costs one question's size;
+- delta checkpoints;
+- pruning or compacting superseded snapshots, which conflicts with append-only as currently written.
+
+Tests (`tests/test_checkpoint_batching.py`):
+- batch semantics: one entry, reads its own writes, invisible to other readers until written, atomic on failure, nests, copies on read, empty batch writes nothing;
+- one graph checkpoint per answer and per source;
+- an idle cycle writes each of consolidation, fidelity and calibration exactly once while still recording every claim;
+- an answered question costs exactly three ledger checkpoints;
+- the Maintainer's state at rest is exactly `{"maintenance": …}` with no runner records;
+- the measurement script runs.
+
+**Full live suite: 578 passed, 1 skipped.** 579 collected (570 prior + 9 new in `tests/test_checkpoint_batching.py`).
 
 ### Explicitly not on this list
 Any application-level work beyond what `deployment-playbook.md` promises to deliver (verified SSH access to a correctly-networked guest, not a deployed application).

@@ -50,6 +50,13 @@ def answer_node_id(question_id: str, version: int) -> str:
 
 
 def record_answer(graph: BeliefGraphStore, question_id: str, answer: dict, version: int) -> str:
+    """One answer version, recorded as one checkpoint (all its nodes and
+    edges together, or none of them)."""
+    with graph.batch():
+        return _record_answer(graph, question_id, answer, version)
+
+
+def _record_answer(graph: BeliefGraphStore, question_id: str, answer: dict, version: int) -> str:
     q = f"question:{question_id}"
     a = answer_node_id(question_id, version)
     graph.add_node(q, "question", {"question": answer.get("question")})

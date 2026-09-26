@@ -211,37 +211,40 @@ def commit(ctx: IdleContext, cycle_id: str, findings: list[dict], plan: dict) ->
     """Applies the cycle's effects, every one idempotent under cycle_id."""
     survived, compacted, decompacted = [], [], []
     if ctx.consolidation is not None:
-        for f in findings:
-            if f["status"] in ("survived", "weakened"):
-                # The confidence history tracks CURRENT evidence weight, so a
-                # weakened claim's declining trend blocks Tier C promotion (10.2).
-                weighed = {**f["claim"], "confidence": f["claim"]["confidence"] * f["factor_now"]}
-                entry = record_survival(ctx.consolidation, f["claim_key"], weighed, cycle_id=cycle_id)
-                survived.append(f["claim_key"])
-                # 10.3: compaction is performed here, by idle evolution, the
-                # moment a claim meets 10.2's promotion criteria.
-                if entry.get("tier") != "C" and should_promote_to_c(
-                        entry, min_cycles=ctx.consolidation_min_cycles,
-                        min_sources=ctx.consolidation_min_sources, cites=ctx.citation_map())["eligible"]:
-                    compact(ctx.consolidation, f["claim_key"])
-                    compacted.append(f["claim_key"])
-            elif f["status"] in ("challenged", "unsupported"):
-                # 10.5: a compacted claim under challenge is expanded back to its
-                # full trace before anything -- including the dispute below --
-                # reasons about it.
-                entry = ctx.consolidation.get(f["claim_key"])
-                if entry is not None and entry.get("tier") == "C":
-                    decompact(ctx.consolidation, f["claim_key"], reason=f"{cycle_id}: now {f['status']}")
-                    decompacted.append(f["claim_key"])
+        with ctx.consolidation.batch():   # the whole cycle's survivals: one checkpoint, not one per claim
+            cites = ctx.citation_map()
+            for f in findings:
+                if f["status"] in ("survived", "weakened"):
+                    # The confidence history tracks CURRENT evidence weight, so a
+                    # weakened claim's declining trend blocks Tier C promotion (10.2).
+                    weighed = {**f["claim"], "confidence": f["claim"]["confidence"] * f["factor_now"]}
+                    entry = record_survival(ctx.consolidation, f["claim_key"], weighed, cycle_id=cycle_id)
+                    survived.append(f["claim_key"])
+                    # 10.3: compaction is performed here, by idle evolution, the
+                    # moment a claim meets 10.2's promotion criteria.
+                    if entry.get("tier") != "C" and should_promote_to_c(
+                            entry, min_cycles=ctx.consolidation_min_cycles,
+                            min_sources=ctx.consolidation_min_sources, cites=cites)["eligible"]:
+                        compact(ctx.consolidation, f["claim_key"])
+                        compacted.append(f["claim_key"])
+                elif f["status"] in ("challenged", "unsupported"):
+                    # 10.5: a compacted claim under challenge is expanded back to its
+                    # full trace before anything -- including the dispute below --
+                    # reasons about it.
+                    entry = ctx.consolidation.get(f["claim_key"])
+                    if entry is not None and entry.get("tier") == "C":
+                        decompact(ctx.consolidation, f["claim_key"], reason=f"{cycle_id}: now {f['status']}")
+                        decompacted.append(f["claim_key"])
 
     # 5.3: re-examination is when a claim's fate becomes known. Each claim's
     # LATEST fate is kept (set_outcome overwrites), at the confidence its
     # agent originally claimed; 'weakened' still survived cross-examination,
     # 'unsupported' lost the source it rested on.
     if ctx.calibration is not None:
-        for f in findings:
-            ctx.calibration.set_outcome(f["claim_key"], f["claim"]["issuing_agent"], f["claim"]["confidence"],
-                                        verified=f["status"] in ("survived", "weakened"))
+        with ctx.calibration.log.batch():   # one checkpoint per cycle, not per claim
+            for f in findings:
+                ctx.calibration.set_outcome(f["claim_key"], f["claim"]["issuing_agent"], f["claim"]["confidence"],
+                                            verified=f["status"] in ("survived", "weakened"))
 
     rulings = {}
     by_key = {f["claim_key"]: f for f in findings}
@@ -254,17 +257,19 @@ def commit(ctx: IdleContext, cycle_id: str, findings: list[dict], plan: dict) ->
 
     flagged, remediation = {}, {}
     if ctx.fidelity is not None:
-        for agent, score in plan["fidelity"].items():
-            if not any(h.get("cycle_id") == cycle_id for h in ctx.fidelity.history_for(agent)):
-                ctx.fidelity.record(agent, {**score, "cycle_id": cycle_id})
-            verdict = needs_review(ctx.fidelity, agent)
-            if verdict["needs_review"]:
-                flagged[agent] = verdict["reason"]
-            # Section 2.4.3: the flag starts (or advances) a remediation path,
-            # re-examining this cycle's sample of the agent's claims for style.
-            record = remediate(ctx.fidelity, agent, cycle_id=cycle_id, checkpoints=ctx.checkpoints,
-                               recent_claims=[f["claim"] for f in findings if f["claim"]["issuing_agent"] == agent])
-            remediation[agent] = record["stage"]
+        with ctx.fidelity.log.batch():   # one checkpoint per cycle, not per agent and step
+            for agent, score in plan["fidelity"].items():
+                if not any(h.get("cycle_id") == cycle_id for h in ctx.fidelity.history_for(agent)):
+                    ctx.fidelity.record(agent, {**score, "cycle_id": cycle_id})
+                verdict = needs_review(ctx.fidelity, agent)
+                if verdict["needs_review"]:
+                    flagged[agent] = verdict["reason"]
+                # Section 2.4.3: the flag starts (or advances) a remediation path,
+                # re-examining this cycle's sample of the agent's claims for style.
+                record = remediate(ctx.fidelity, agent, cycle_id=cycle_id, checkpoints=ctx.checkpoints,
+                                   recent_claims=[f["claim"] for f in findings
+                                                  if f["claim"]["issuing_agent"] == agent])
+                remediation[agent] = record["stage"]
 
     proposal = plan["amendment_proposal"]
     if proposal is not None and ctx.checkpoints is not None:
@@ -296,16 +301,16 @@ def amendment_checkpoint_key(cycle_id: str) -> str:
 # --- the work unit --------------------------------------------------------
 
 def make_idle_evolution_unit(ctx: IdleContext, cycle_id: str, *, sample_size: int = 20,
-                             seed: int = 0, priority: int = -1) -> WorkUnit:
+                             seed: int = 0, priority: int = -1, mirror: bool = True) -> WorkUnit:
     """Idle work runs at lower priority than questions by default, so the
     time-sliced scheduler serves real questions first. Like a deliberation,
     its working state lives under its own namespace in the scheduler's
     shared state (known-bugs.md #26), mirrored at the top level for
-    single-unit callers."""
+    single-unit callers (mirror=False for multi-unit ones, as in loop.py)."""
     ns = f"idle:{cycle_id}"
 
     def writes(state: dict, new: dict) -> dict:
-        return {ns: {**state.get(ns, {}), **new}, **new}
+        return {ns: {**state.get(ns, {}), **new}, **(new if mirror else {})}
 
     def handler(state: dict, round_index: int) -> RoundResult:
         mine = state[ns] if ns in state else state

@@ -110,6 +110,16 @@ These aren't bugs in the sense of "code that was wrong" — they're incorrect as
 Pinned by `tests/test_api_validation.py` (raw requests).
 **Lesson:** Validate at the boundary, before the first durable write. Whenever work that can fail follows a durable write, make failure a recorded state, not an absence. And every request handler needs a last-resort response.
 
+### 34. The Maintainer's checkpoints were claimed bounded but carried every finished unit's leftovers
+**What happened:** §56 states that after a unit's result is harvested its namespace is removed, "so checkpoints stay bounded". Measuring storage (batch 6, Phase AB) showed the Maintainer's state at rest was 48 KB, not near-empty. Two things were left in it:
+- the **top-level mirror** of the last unit's scratch (`findings`, `sample`, `answer`, …), written by every deliberation and idle unit for single-unit callers and never removed;
+- the runner's **per-unit record** (round reached, status) of every unit that had ever run.
+
+Both were rewritten into every later checkpoint, and the records grew with every unit.
+**Root cause:** Harvesting removed only the namespace it knew about. The mirror was added in the #26 fix for backward compatibility, and nobody asked what it cost a multi-unit caller. The claim in §56 was never measured.
+**Fix:** The unit factories take `mirror=False`, which the Maintainer passes. The Maintainer's `_save(forget=…)` drops a unit's runner record in the same checkpoint that removes it from the registry. Pinned by `tests/test_checkpoint_batching.py`: at rest the saved state is exactly `{"maintenance": …}` with no runner records. The Maintainer's state at rest went from 48 KB to 0.1 KB.
+**Lesson:** "Stays bounded" is a measurable claim, so measure it, and look at the whole state rather than just the part the fix touched. Backward-compatibility shims have running costs too; scope them to the callers that need them.
+
 ---
 
 ## Test-authoring bugs (not library bugs, but worth the same scrutiny)

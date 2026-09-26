@@ -8,7 +8,9 @@ own integrity is verifiable without trusting the storage medium).
 """
 from __future__ import annotations
 
+import copy
 import time
+from contextlib import contextmanager
 from dataclasses import dataclass, asdict, field
 from pathlib import Path
 from typing import Any, Optional
@@ -54,6 +56,31 @@ class CheckpointLog:
         self.index_path.parent.mkdir(parents=True, exist_ok=True)
         if not self.index_path.exists():
             self.index_path.write_text("")
+        self._batch_depth = 0
+        self._pending: Optional[tuple[Any, str]] = None   # (state, label) written inside a batch
+
+    @contextmanager
+    def batch(self):
+        """One logical operation, one checkpoint (batch 6, Phase AB). Inside
+        the block, write_checkpoint only holds the state in memory and
+        read_latest returns (a copy of) it. On a clean exit the last state
+        is written as a single entry; on an exception nothing is written, so
+        the operation is also atomic. Nests: only the outermost block writes.
+        Scoped to this CheckpointLog object -- another object over the same
+        index file doesn't see the pending state until it is written."""
+        self._batch_depth += 1
+        try:
+            yield self
+        except BaseException:
+            if self._batch_depth == 1:
+                self._pending = None
+            raise
+        finally:
+            self._batch_depth -= 1
+        if self._batch_depth == 0 and self._pending is not None:
+            state, label = self._pending
+            self._pending = None
+            self.write_checkpoint(state, label=label)
 
     def _read_index(self) -> list[str]:
         text = self.index_path.read_text()
@@ -65,7 +92,12 @@ class CheckpointLog:
 
     def write_checkpoint(self, state: Any, label: str = "") -> str:
         """Append a new checkpoint entry for `state`. Returns the new
-        checkpoint's snapshot_id. This never overwrites a prior entry."""
+        checkpoint's snapshot_id. This never overwrites a prior entry.
+        Inside a batch() the state is only held (a copy, like a real write)
+        and None is returned; the batch writes it on exit."""
+        if self._batch_depth:
+            self._pending = (copy.deepcopy(state), label)
+            return None
         index = self._read_index()
         prev_hash = index[-1] if index else GENESIS_HASH
         payload_ref = self.cas.put_json(state)
@@ -102,6 +134,8 @@ class CheckpointLog:
     def read_latest(self) -> Optional[Any]:
         """Reload the most recent state, or None if the log is empty --
         this is what boot-from-checkpoint (Section 3.1) calls."""
+        if self._pending is not None:
+            return copy.deepcopy(self._pending[0])
         latest = self.latest_snapshot_id()
         if latest is None:
             return None

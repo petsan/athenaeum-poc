@@ -141,9 +141,10 @@ def build_app(data_dir: Path) -> App:
                 maintainer.record_failure(qid, {"kind": "question", "question": question}, e)
                 raise DeliberationFailed(qid, maintainer.failed[qid]["last_error"]) from e
             answer = unit_log.read_latest()["shared_state"]["answer"]
-            ledger.append_version(qid, answer)
-            # Section 7.1: replace the 0.5 placeholder with a computed rating.
-            importance = rate_and_store_importance(ledger, qid, graph=graph)["importance"]
+            with ledger.log.batch():   # the answer and its rating: one ledger checkpoint
+                ledger.append_version(qid, answer)
+                # Section 7.1: replace the 0.5 placeholder with a computed rating.
+                importance = rate_and_store_importance(ledger, qid, graph=graph)["importance"]
             return {"id": qid, "question": question, "answer": answer, "importance": importance}
 
     worker_thread: list[threading.Thread] = []
