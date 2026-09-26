@@ -645,6 +645,61 @@ numbers are an explicit placeholder, same status as the grading policy.
 
 ---
 
+## 2026-09-25 — Dispute resolution (§6.4): design choices
+
+**Q: What exactly counts as "not independent"?**
+
+Two sources are one line of evidence if either reaches the other through
+citations, or both reach a common upstream source. The common-upstream
+rule matters most in practice: two news reports rewritten from the same
+wire story don't cite each other, but they aren't independent either —
+and the wire story itself often isn't on the claim's provenance list at
+all, so the check follows citations beyond the listed sources. Grouping
+is transitive (union-find), so A–B and B–C dependencies put A and C in
+the same group even though they share nothing directly.
+
+**Q: Where does citation data come from?**
+
+The curator, same as `license`. Nothing in raw content mechanically
+tells you what a source derived from, and pretending otherwise (e.g.
+scraping hyperlinks) would confuse "links to" with "derives from." It's
+an optional field on `FixtureSource`, stored in provenance metadata only
+when present.
+
+**Q: Why does the ruling compare counts of independent lines rather than
+weigh grades more finely?**
+
+§6.4 names two things Logic compares — track records and independence —
+and Logic must not adjudicate domain substance (§4.2.3). Counting
+independent, non-rejected lines of evidence is purely procedural; it
+doesn't require Logic to judge whether a claim is *true*. A tie is
+"unresolved" rather than broken by any secondary rule, for the same
+reason synthesis doesn't pick winners in jurisdictional conflicts (§4.3).
+
+**Q: Why doesn't a ruling downgrade the losing side's sources?**
+
+§6.4.4: no single Master Agent has unilateral blacklist/whitelist
+authority. A ruling is a logged, reversible judgment; grades move only
+through accumulated outcomes (§6.2). A future step could record the
+ruling as an ordinary outcome, but that's a policy decision, not
+something to slip in here.
+
+**One real test bug worth remembering:** the first version of the
+Theology category-error test issued the overconfident `traditional`
+claim *from Theology itself* and expected Theology to flag it. It
+didn't, correctly — every agent's `cross_examine` skips its own claims.
+The realistic case, and the fixed test, is a traditional-typed claim
+arriving from another agent.
+
+**Not done here:** conflict-of-interest checking for *sources* (§6.4.3
+names it). No conflict-of-interest data exists for sources today; human
+submitters already have role-based COI enforcement (§11.7). Disputes are
+also not yet triggered automatically — `resolve_dispute` is called
+explicitly, and an idle-evolution round (§3.6, still open) is the natural
+caller.
+
+---
+
 *See `docs/progress.md` §26 for the checklist this log's entries track
 against, and `docs/infra-topology.md` for the infrastructure-side design
 decisions made in the same planning conversation.*

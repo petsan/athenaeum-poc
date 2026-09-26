@@ -22,7 +22,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import urllib.robotparser
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from .schemas import ProvenanceEntry
 from .storage.content_addressed import ContentAddressedStore
 
@@ -36,6 +36,11 @@ class FixtureSource:
     license: str          # e.g. "public-domain", "cc-by", "all-rights-reserved"
     is_paid_or_metered: bool = False
     robots_disallowed: bool = False
+    cites: list = field(default_factory=list)  # source ids this one cites/derives
+                          # from -- caller/curator-supplied like `license`, since
+                          # it isn't mechanically derivable from raw content; the
+                          # Brain's independence check (dispute_resolution.py)
+                          # reads it back from ProvenanceEntry.metadata["cites"]
 
 
 class FetchError(Exception):
@@ -106,10 +111,13 @@ def parse_and_normalize(source: FixtureSource, cas: ContentAddressedStore) -> Pr
     """Section 9, step 2: accepted raw source -> Provenance Ledger schema.
     Caller must have already checked fetch_and_check(source)['accepted']."""
     content_hash = cas.put(source.content)  # durable, tamper-evident (3.4)
+    metadata = {"license": source.license}
+    if source.cites:
+        metadata["cites"] = list(source.cites)
     return ProvenanceEntry(
         id=source.url,
         content_hash=content_hash,
-        metadata={"license": source.license},
+        metadata=metadata,
     )
 
 

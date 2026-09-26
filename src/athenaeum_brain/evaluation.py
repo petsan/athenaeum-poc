@@ -99,6 +99,18 @@ def _check_serving_model_recorded_for_silent_substitution_detection():
     return claim.serving_model is not None
 
 
+def _check_circular_corroboration_not_counted_as_independent():
+    """Two sources that cite each other must count as ONE line of evidence
+    toward Tier C promotion (10.2), and be named as circular -- the same
+    claim with two genuinely independent sources must still qualify."""
+    from .consolidation import should_promote_to_c
+    entry = {"cycles": 5, "sources": ["src:a", "src:b"], "confidence_history": [0.8] * 5}
+    circular = should_promote_to_c(entry, cites={"src:a": ["src:b"], "src:b": ["src:a"]})
+    independent = should_promote_to_c(entry, cites={})
+    return (not circular["eligible"] and any("circular" in r for r in circular["reasons"])
+            and independent["eligible"])
+
+
 ADVERSARIAL_CASES = {
     "false_consensus": _check_false_consensus,
     "category_error_is_ought": _check_category_error_is_ought,
@@ -106,6 +118,7 @@ ADVERSARIAL_CASES = {
     "prompt_content_injection": _check_prompt_injection_stays_inert,
     "category_error_traditional_confidence": _check_traditional_claims_never_empirical_confidence,
     "silent_model_substitution": _check_serving_model_recorded_for_silent_substitution_detection,
+    "circular_corroboration": _check_circular_corroboration_not_counted_as_independent,
 }
 
 

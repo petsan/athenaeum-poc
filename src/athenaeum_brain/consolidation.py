@@ -6,6 +6,7 @@ WHETHER to promote/compact, not how it's persisted.
 """
 from __future__ import annotations
 from athenaeum_body.consolidation_store import ConsolidationStore
+from .dispute_resolution import check_independence
 
 
 def record_survival(store: ConsolidationStore, key: str, claim: dict) -> dict:
@@ -39,15 +40,24 @@ def _confidence_trend_ok(history: list[float]) -> bool:
     return all(history[i] <= history[i + 1] for i in range(len(history) - 1))
 
 
-def should_promote_to_c(entry: dict, min_cycles: int = 5, min_sources: int = 2) -> dict:
+def should_promote_to_c(entry: dict, min_cycles: int = 5, min_sources: int = 2,
+                        cites: dict | None = None) -> dict:
     """Returns a full verdict, not just a bool, so a caller can see WHY
     a claim didn't qualify -- useful for the same reason materiality's
-    'reasons' list is useful."""
+    'reasons' list is useful.
+
+    Section 10.2 asks for M *independent* corroborating sources: sources
+    that cite each other or share an upstream source count once
+    (dispute_resolution.check_independence, Section 6.4.2). With no
+    citation data, every distinct source is its own line of evidence."""
     reasons = []
     if entry["cycles"] < min_cycles:
         reasons.append(f"only {entry['cycles']}/{min_cycles} survival cycles")
-    if len(entry["sources"]) < min_sources:
-        reasons.append(f"only {len(entry['sources'])}/{min_sources} independent sources")
+    independence = check_independence(entry["sources"], cites or {})
+    if independence["independent_count"] < min_sources:
+        reasons.append(f"only {independence['independent_count']}/{min_sources} independent sources"
+                       + (f" (circular citation among {independence['circular']})"
+                          if independence["circular"] else ""))
     if not _confidence_trend_ok(entry["confidence_history"]):
         reasons.append("confidence trend is declining, not flat or improving")
     return {"eligible": len(reasons) == 0, "reasons": reasons}

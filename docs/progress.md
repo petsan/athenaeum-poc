@@ -253,7 +253,7 @@ Earlier sections each ended with their own "suggested next step," repeatedly sup
 - [x] **Evidence-weighted synthesis (§4.1).** `synthesis_round` now sets `reputability_factor`/`weighted_confidence` on committed claims from grades at time of use; the Research Answer's leading conclusion follows that weight; the §9.7 "no reputability weighting" ablation is real and provably distinct from A1. See Section 41.
 
 **Remaining Brain gaps (audited 2026-09-25 against `brain-design.md` §13's work breakdown — none are literal stubs, all are specified-but-unbuilt):**
-- [ ] Dispute resolution procedure (§6.4, task 9) — including Logic's circular-corroboration/independence check. Only `ReputabilityStore.log_dispute()` storage exists.
+- [x] ~~Dispute resolution procedure (§6.4, task 9) — including Logic's circular-corroboration/independence check. Only `ReputabilityStore.log_dispute()` storage exists.~~ Done 2026-09-25, `dispute_resolution.py` — see Section 42.
 - [ ] Reputability standard versioning (§6.5, task 10).
 - [ ] Forecast and Recommendation builders wired into `loop.py` (§5.4, tasks 13–14) — builders exist, no producer.
 - [ ] Importance rating (§7.1, task 16) and reopen-with-diff (§7.3, task 18).
@@ -262,7 +262,7 @@ Earlier sections each ended with their own "suggested next step," repeatedly sup
 - [ ] Model admission gate (§6.7, task 47), and applying Model Fitness weight at synthesis.
 - [ ] Domain Fidelity re-grounding and escalation-to-checkpoint (§2.4.3, task 30).
 - [ ] Re-evaluation and consolidation audit sampling (§9.4–9.5, tasks 22–23).
-- [ ] Adversarial suite: 6 of §8's 15 failure modes covered (task 20); several remaining ones depend on the items above.
+- [ ] Adversarial suite: 7 of §8's 15 failure modes covered (task 20; `circular_corroboration` added in Section 42); several remaining ones depend on the items above.
 
 - [ ] `execution_sandbox.enabled` stays `false` — not actionable right now (the CPU-time gap is a confirmed environment limitation on this specific kernel, not a bug to fix), but re-run `scripts/preflight_check.py` if this project is ever deployed to a *different* host, per `security-review-sandbox.md` Section 7.3/7.4.
 
@@ -444,6 +444,16 @@ First item from a 2026-09-25 audit of remaining Brain work (now listed in §26).
 `evaluation.py`: `ABLATION_NO_REPUTABILITY_WEIGHTING_FINDING` (Section 32's "indistinguishable from A1") replaced by a real `ablation_no_reputability_weighting()`; `a1_full_workflow()` takes a `grade_lookup` and both return a `research` section. Proven distinct on a real question: with `computed:trial_division` rejected, A1 leads "should we believe 17 is prime?" with Philosophy, the ablation with Mathematics.
 
 **257 passed, 1 skipped** on LXC 104 (247 prior + 10 new in `tests/test_evidence_weighted_synthesis.py`; the skip is the real-GPU-worker test, worker offline). Design reasoning in `docs/brain-session-log.md`.
+
+## 42. Dispute resolution (§6.4) and the independence check that catches circular corroboration
+
+`src/athenaeum_brain/dispute_resolution.py` (new) implements §6.4's four steps as real computation. `check_independence(sources, cites)` groups sources into independent lines of evidence — two sources collapse into one if either reaches the other through citations, or both derive from a common upstream source (even one not itself cited on the claim), transitively; any source on a citation cycle is reported as `circular`. `resolve_dispute(subject_id, sides, reputability=, cites=)` restates each side, grades its sources, routes the category-error check to **Philosophy and Theology's own `cross_examine`** (never decided by Logic, §6.4.3), and rules for a side only if it has strictly more independent, non-rejected lines of evidence after excluding category-error claims — otherwise "unresolved", never a manufactured winner. The ruling and rationale are logged permanently via `ReputabilityStore.log_dispute`, marked reversible, and **never edit a grade** (no unilateral blacklist authority — grades still move only through §6.2 outcomes, tested).
+
+Citation data: `FixtureSource` gains an optional curator-supplied `cites` list (same status as `license` — not mechanically derivable from content), carried into `ProvenanceEntry.metadata["cites"]` only when non-empty so existing entries are unchanged; `citation_map(entries)` builds the lookup from ingested entries.
+
+**Real instance of the failure mode fixed:** `consolidation.should_promote_to_c` counted "independent sources" as `len(entry["sources"])`, so two sources that just cite each other satisfied a 2-source Tier C promotion threshold. It now takes `cites` and counts independent groups, naming circularity in its reasons. With no citation data the count is unchanged, so existing callers behave identically. New adversarial case `circular_corroboration` (suite now 7 of §8's 15 modes).
+
+**273 passed, 1 skipped** on LXC 104 (257 prior + 16 new in `tests/test_dispute_resolution.py`; `test_evaluation.py`'s pinned case list updated to include the new case). Design reasoning in `docs/brain-session-log.md`.
 
 ### Explicitly not on this list
 Any application-level work beyond what `deployment-playbook.md` promises to deliver (verified SSH access to a correctly-networked guest, not a deployed application).
