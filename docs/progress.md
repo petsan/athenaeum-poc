@@ -336,7 +336,7 @@ Same rules and stop conditions. Each item is a real gap found while building bat
 |---|---|---|
 | O | **Whole-word jurisdiction matching** — every agent matches its keywords as *substrings* (`"all"` routes Logic for "does a b**all** fall"; `"if"` matches "d**if**ferent"), which is also the root of the "fall of the Berlin Wall" over-reach limitation. Match whole words; add a physical-context requirement for Physics's motion verbs. | **done** — §60, known-bugs #28 |
 | P | **Automatic compaction and de-compaction in idle evolution** — §10.3 says compaction is *performed by* an idle-evolution process, but idle cycles only record survival; §10.5 requires expanding a compacted claim before resolving a challenge to it, which idle disputes don't do yet. | **done** — §61, known-bugs #29 |
-| Q | **Maintainer restart recovery** — its queue is in memory (§56's stated limitation), so a restart strands queued or mid-way questions. Persist the unit registry in the Maintainer's own checkpoint and resubmit on start; deliberations resume from their last completed round. | open |
+| Q | **Maintainer restart recovery** — its queue is in memory (§56's stated limitation), so a restart strands queued or mid-way questions. Persist the unit registry in the Maintainer's own checkpoint and resubmit on start; deliberations resume from their last completed round. | **done** — §62 |
 | R | **Refresh the narrated demo** (`demo_brain.py`) to show batches 1–2 end to end; mind known-bugs #16 (the final-print trap). | open |
 | — | End-to-end test extended, then plan batch 4. | open |
 
@@ -765,6 +765,16 @@ One existing expectation changed, and it was the right one to change: the batch-
 One existing expectation changed: the batch-1 end-to-end test now also sees idle evolution compact the World News claim on its own — it cites two independent dated events, so it meets the default two-source bar — and its consolidation audit covers both compacted claims.
 
 **Full live suite: 493 passed, 1 skipped.** 494 collected (488 prior + 6 new in `tests/test_auto_consolidation.py`).
+
+## 62. The Maintainer survives a restart — Phase Q
+
+`MultiUnitScheduler`'s queue is in memory, so §56 had to state that a killed Maintainer strands queued or mid-way work. Now the Maintainer keeps its own **registry** — every in-flight unit (a question's text, an idle cycle's seed and sample size), the cadence counters, and pending amendments — inside the scheduler's checkpointed shared state, written the moment it changes rather than only at the next round boundary. A new `Maintainer` built over the same checkpoint log reads it back and, for each registered unit, either resubmits it at its last completed round (from the runner's own checkpoint) or, if it had finished but was never recorded, records it now; `recovered` lists what it picked up.
+
+Delivery semantics are deliberate and stated in `_complete`: **question answers are at-least-once and idempotent** — recorded before the unit leaves the registry, and a replay skips a question the ledger already has as completed, so an answer can be neither lost nor duplicated (both crash points tested). **Idle-cycle follow-ups are at-most-once** — the cycle leaves the registry before its reopens/amendments/audits run, because a replayed reopen would append a duplicate version, whereas a lost one is simply found again by the next cycle.
+
+Tested by throwing a Maintainer away mid-run (the crash) and building a new one over the same files: interleaved questions resume and each is answered exactly once; a finished-but-unrecorded question is recorded on restart; an answer recorded just before the crash isn't recorded again; a half-run idle cycle resumes without starting a second one; counters and pending amendments survive.
+
+**Full live suite: 498 passed, 1 skipped, 1 failed** — the failure is the known-flaky `qwen2.5-1.5b` factual assertion (known-bugs.md open limitations, owner decision 2), which then failed 1 in 6 immediate re-runs; nothing else failed. 500 collected (494 prior + 6 new in `tests/test_maintenance_recovery.py`).
 
 ### Explicitly not on this list
 Any application-level work beyond what `deployment-playbook.md` promises to deliver (verified SSH access to a correctly-networked guest, not a deployed application).
