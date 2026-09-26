@@ -41,7 +41,7 @@ from athenaeum_body.human_checkpoint_store import HumanCheckpointStore
 from athenaeum_body.scheduler.work_unit import WorkUnit, RoundResult
 from .claims import Claim, next_claim_id
 from .rounds import cross_examination_round, reputability_factor
-from .consolidation import claim_key, record_survival
+from .consolidation import claim_key, record_survival, should_promote_to_c, compact, decompact
 from .dispute_resolution import resolve_dispute
 from .domain_fidelity import compute_score, needs_review
 from .fidelity_remediation import remediate
@@ -57,6 +57,10 @@ class IdleContext:
     fidelity: DomainFidelityStore | None = None
     checkpoints: HumanCheckpointStore | None = None
     cites: dict = field(default_factory=dict)
+    # Section 10.2's N and M (brain-design.md Open Question 7: configurable,
+    # values unset by the design -- these are placeholders)
+    consolidation_min_cycles: int = 5
+    consolidation_min_sources: int = 2
 
 
 # --- round 0 ---------------------------------------------------------------
@@ -170,15 +174,30 @@ def review(findings: list[dict], exam: list[dict], reputability: ReputabilitySto
 
 def commit(ctx: IdleContext, cycle_id: str, findings: list[dict], plan: dict) -> dict:
     """Applies the cycle's effects, every one idempotent under cycle_id."""
-    survived = []
+    survived, compacted, decompacted = [], [], []
     if ctx.consolidation is not None:
         for f in findings:
             if f["status"] in ("survived", "weakened"):
                 # The confidence history tracks CURRENT evidence weight, so a
                 # weakened claim's declining trend blocks Tier C promotion (10.2).
                 weighed = {**f["claim"], "confidence": f["claim"]["confidence"] * f["factor_now"]}
-                record_survival(ctx.consolidation, f["claim_key"], weighed, cycle_id=cycle_id)
+                entry = record_survival(ctx.consolidation, f["claim_key"], weighed, cycle_id=cycle_id)
                 survived.append(f["claim_key"])
+                # 10.3: compaction is performed here, by idle evolution, the
+                # moment a claim meets 10.2's promotion criteria.
+                if entry.get("tier") != "C" and should_promote_to_c(
+                        entry, min_cycles=ctx.consolidation_min_cycles,
+                        min_sources=ctx.consolidation_min_sources, cites=ctx.cites)["eligible"]:
+                    compact(ctx.consolidation, f["claim_key"])
+                    compacted.append(f["claim_key"])
+            elif f["status"] in ("challenged", "unsupported"):
+                # 10.5: a compacted claim under challenge is expanded back to its
+                # full trace before anything -- including the dispute below --
+                # reasons about it.
+                entry = ctx.consolidation.get(f["claim_key"])
+                if entry is not None and entry.get("tier") == "C":
+                    decompact(ctx.consolidation, f["claim_key"], reason=f"{cycle_id}: now {f['status']}")
+                    decompacted.append(f["claim_key"])
 
     rulings = {}
     by_key = {f["claim_key"]: f for f in findings}
@@ -215,6 +234,8 @@ def commit(ctx: IdleContext, cycle_id: str, findings: list[dict], plan: dict) ->
         "status_counts": {s: sum(1 for f in findings if f["status"] == s)
                           for s in ("survived", "weakened", "unsupported", "challenged")},
         "recorded_survival": survived,
+        "compacted": compacted,
+        "decompacted": decompacted,
         "dispute_rulings": rulings,
         "fidelity_flags": flagged,
         "remediation": remediation,

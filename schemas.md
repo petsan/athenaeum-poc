@@ -39,6 +39,20 @@ Concrete shapes for `body-design.md` Section 5.1's five stores and `brain-design
 
 As implemented in `reputability_store.py` (Section 6.5, 2026-09-26): each stored grade entry also carries `decided_under` (int — the standard version in force when it was decided) and `cause` (`"evidence"` \| `"standard_amendment"`); entries written before versioning existed read back as `decided_under: 0, cause: "evidence"`. `current_grade()` returns the projection `{grade, version, standard_version}`, where `standard_version` is the standard in force now — this is what answers snapshot as `source_grades_at_use`.
 
+## Consolidation Entry (Section 10) — `consolidation_store.py`, keyed by `consolidation.claim_key` (`agent::statement`)
+| Field | Type | Tier | Notes |
+|---|---|---|---|
+| `tier` | str | both | `"B"` (validated, tracked) or `"C"` (compacted canon) |
+| `statement` | str | both | |
+| `cycles` | int | both | survival cycles up to compaction; on a C node it must equal the archived trace's (§9.5 audit) |
+| `sources` | list[str] | both | distinct supporting sources seen |
+| `cycle_ids` | list[str] | both | idle cycles already counted — makes `record_survival` idempotent, preserved across compaction |
+| `confidence_history` | list[float] | B | evidence weight per survival (idle cycles record *current weighted* confidence, so erosion blocks promotion) |
+| `archive_ref` | str | both | `None` on B until compacted; on C, the content-addressed pointer to the full archived trace |
+| `confidence` | float | C | the last confidence at compaction — must equal the archive's final value |
+| `cycles_since_compaction`, `current_confidence` | int, float | C | survival *after* compaction, kept separate so the node keeps matching its archive |
+| `decompacted_from`, `decompaction_reason` | str, str | B | present when a C node was expanded back (§10.5) because it was challenged or lost its support |
+
 ## Reputability Standard (Section 6.5)
 | Field | Type | Required | Notes |
 |---|---|---|---|

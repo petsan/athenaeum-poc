@@ -335,7 +335,7 @@ Same rules and stop conditions. Each item is a real gap found while building bat
 | Phase | Scope | Status |
 |---|---|---|
 | O | **Whole-word jurisdiction matching** — every agent matches its keywords as *substrings* (`"all"` routes Logic for "does a b**all** fall"; `"if"` matches "d**if**ferent"), which is also the root of the "fall of the Berlin Wall" over-reach limitation. Match whole words; add a physical-context requirement for Physics's motion verbs. | **done** — §60, known-bugs #28 |
-| P | **Automatic compaction and de-compaction in idle evolution** — §10.3 says compaction is *performed by* an idle-evolution process, but idle cycles only record survival; §10.5 requires expanding a compacted claim before resolving a challenge to it, which idle disputes don't do yet. | open |
+| P | **Automatic compaction and de-compaction in idle evolution** — §10.3 says compaction is *performed by* an idle-evolution process, but idle cycles only record survival; §10.5 requires expanding a compacted claim before resolving a challenge to it, which idle disputes don't do yet. | **done** — §61, known-bugs #29 |
 | Q | **Maintainer restart recovery** — its queue is in memory (§56's stated limitation), so a restart strands queued or mid-way questions. Persist the unit registry in the Maintainer's own checkpoint and resubmit on start; deliberations resume from their last completed round. | open |
 | R | **Refresh the narrated demo** (`demo_brain.py`) to show batches 1–2 end to end; mind known-bugs #16 (the final-print trap). | open |
 | — | End-to-end test extended, then plan batch 4. | open |
@@ -755,6 +755,16 @@ Physics's everyday motion verbs ("fall", "drop") now route only with physical co
 One existing expectation changed, and it was the right one to change: the batch-2 end-to-end test expected a Physics fidelity record that existed only because the Berlin Wall question wrongly routed Physics. It now asserts the opposite (Physics not routed) and checks that every agent the idle cycle *actually* scored has a fingerprint.
 
 **Full live suite: 487 passed, 1 skipped** (GPU worker offline). 488 collected (462 prior + 26 new in `tests/test_jurisdiction_matching.py`).
+
+## 61. Idle evolution compacts and de-compacts on its own (§10.3, §10.5) — Phase P
+
+§10.3 says compaction is *performed by* an idle-evolution process; until now idle cycles only recorded survival and compaction happened only when someone called `compact()`. Now the idle commit round compacts a claim the moment its entry meets §10.2's criteria (N cycles, M independent sources, no declining trend — N and M on `IdleContext`, placeholders per Open Question 7), and **de-compacts** any Tier C claim that is now challenged or unsupported *before* its dispute is resolved (§10.5) — new `consolidation.decompact()` restores the full archived trace as the active Tier B entry, recording `decompacted_from` and why; the archive itself is untouched (§10.4). Results report `compacted` and `decompacted`.
+
+**Real bug on the way (known-bugs.md #29):** a compacted node has no `confidence_history`, so the first survival recorded after compaction — or a second `compact()` — raised `KeyError`. Latent until now because nothing had compacted and then kept going. Fixed so a Tier C node stays compact and keeps matching its archive: post-compaction survival goes into `cycles_since_compaction` / `current_confidence` (a first attempt overwrote `confidence`, and the §9.5 audit correctly flagged the mismatch); `compact()` is idempotent and preserves `cycle_ids`. `schemas.md` gains the Consolidation Entry table, which had never been written down.
+
+One existing expectation changed: the batch-1 end-to-end test now also sees idle evolution compact the World News claim on its own — it cites two independent dated events, so it meets the default two-source bar — and its consolidation audit covers both compacted claims.
+
+**Full live suite: 493 passed, 1 skipped.** 494 collected (488 prior + 6 new in `tests/test_auto_consolidation.py`).
 
 ### Explicitly not on this list
 Any application-level work beyond what `deployment-playbook.md` promises to deliver (verified SSH access to a correctly-networked guest, not a deployed application).

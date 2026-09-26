@@ -133,6 +133,11 @@ def test_full_lifecycle(system):
     assert all(r["amendment_proposal"] is None for r in results)
     entry = s.cons.get(PRIME_KEY)
     assert entry["cycles"] == 5
+    # idle evolution compacts on its own (10.3) what meets the default bar of two
+    # independent sources: the World News claim cites two dated events
+    history_key = f"WorldNews::{answers['history']['committed'][0]['statement']}"
+    assert [k for r in results for k in r["compacted"]] == [history_key]
+    # the one-source primality claim needs a lower bar, applied here by hand
     assert should_promote_to_c(entry, min_cycles=5, min_sources=1)["eligible"]
     compact(s.cons, PRIME_KEY)
 
@@ -162,7 +167,7 @@ def test_full_lifecycle(system):
     assert re_audit["stagnation_candidates"] == []
 
     cons_audit = consolidation_audit(s.cons, audit_id="e2e-2", min_sources=1, store=s.audits)
-    assert cons_audit["population"] == 1 and cons_audit["failed"] == []
+    assert cons_audit["population"] == 2 and cons_audit["failed"] == []
 
     for qid in QUESTIONS:
         latest = s.ledger.get(qid).versions[-1]

@@ -37,6 +37,16 @@ def record_survival(store: ConsolidationStore, key: str, claim: dict, cycle_id: 
         if cycle_id in seen:
             return entry
         seen.append(cycle_id)
+    if entry.get("tier") == "C":
+        # A compacted node's history lives in its archived trace, and must
+        # keep matching it (the 9.5 audit compares them). Surviving again
+        # counts separately, and the latest confidence goes in its own field
+        # so `confidence` keeps matching the archive
+        # (known-bugs.md #29: this path used to KeyError on confidence_history).
+        entry["cycles_since_compaction"] = entry.get("cycles_since_compaction", 0) + 1
+        entry["current_confidence"] = claim["confidence"]
+        store.upsert(key, entry)
+        return entry
     entry["cycles"] += 1
     for src in claim.get("supporting_provenance", []):
         if src not in entry["sources"]:
@@ -83,19 +93,41 @@ def should_promote_to_c(entry: dict, min_cycles: int = 5, min_sources: int = 2,
 def compact(store: ConsolidationStore, key: str) -> dict:
     """Section 10.3-10.4: archive the full trace (content-addressed,
     never deleted), replace the active entry with a compact Tier C form
-    plus an archive pointer."""
+    plus an archive pointer. Compacting an already-compacted node is a
+    no-op that returns it."""
     entry = store.get(key)
     if entry is None:
         raise KeyError(f"no tracked entry for {key!r}")
+    if entry.get("tier") == "C":
+        return entry
     ref = store.archive_full_trace(entry)
     compact_node = {
         "tier": "C", "statement": entry["statement"],
         "confidence": entry["confidence_history"][-1],
         "cycles": entry["cycles"], "sources": entry["sources"],
         "archive_ref": ref,
+        # kept so record_survival stays idempotent across a compaction
+        "cycle_ids": list(entry.get("cycle_ids", [])),
     }
     store.upsert(key, compact_node)
     return compact_node
+
+
+def decompact(store: ConsolidationStore, key: str, reason: str) -> dict:
+    """Section 10.5: when a compacted claim is challenged, reasoning must not
+    build on the lossy summary -- the full archived trace becomes the active
+    entry again (back at Tier B), recording why and where it came from. The
+    archived copy stays where it is (10.4: nothing is ever deleted).
+    De-compacting an entry that isn't Tier C is a no-op."""
+    entry = store.get(key)
+    if entry is None or entry.get("tier") != "C":
+        return entry
+    full = store.read_full_trace(entry["archive_ref"])
+    restored = {**full, "tier": "B",
+                "decompacted_from": entry["archive_ref"], "decompaction_reason": reason,
+                "cycle_ids": sorted(set(full.get("cycle_ids", [])) | set(entry.get("cycle_ids", [])))}
+    store.upsert(key, restored)
+    return restored
 
 
 def expand(store: ConsolidationStore, key: str) -> dict:
