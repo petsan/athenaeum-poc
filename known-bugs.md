@@ -140,6 +140,12 @@ These aren't bugs in the sense of "code that was wrong" — they're incorrect as
 **Fix:** Primality is claimed only when the question mentions primality, and only for whole numbers not part of a decimal and not carrying a unit (`4.9m`, `1 second`, `20 kg` are quantities, not candidates); repeats are claimed once. Questions about other properties now fall through to the model fallback, as they should, instead of getting an irrelevant deterministic claim. Pinned by `tests/test_math_parsing.py`.
 **Lesson:** Same as #21 — a deterministic claim must answer the question asked. An irrelevant claim with confidence 1.0 is worse than none: it commits, it can lead an answer, and it trains consolidation on noise.
 
+### 26. Two deliberations time-sliced on the scheduler answered each other's questions
+**What happened:** `MultiUnitScheduler` runs every unit through ONE `SingleUnitRunner` with ONE `shared_state` — by design, so a committed write is visible to later units. But the deliberation handler kept its *working* state under fixed top-level keys (`frame`, `exploration_claims`, `exam_claims`, `answer`). With two deliberations interleaved round by round, the second one's framing round overwrote the first one's `frame`, so the first explored the *second* question: "is 17 prime?" came back with the rounding-2.5 answer, silently, filed under the wrong question. The idle-evolution unit had the same exposure. Found 2026-09-26 (batch 2, Phase M) by reading the scheduler before building on it, then reproduced with two real deliberations before fixing. Every earlier test ran one deliberation per runner, which is why nothing caught it — including the Body's own multi-unit tests, whose toy handlers didn't use per-unit keys.
+**Root cause:** Shared state was the right design for *committed* results and the wrong place for *per-unit scratch* — the two were never separated.
+**Fix:** Each deliberation keeps its working state under `deliberation:<unit_id>` (idle cycles: `idle:<cycle_id>`) and reads only from there; writes are also mirrored at the top level so single-unit callers and existing tests are unaffected, and a checkpoint from before the fix (no namespace) resumes from the top-level keys it did write. The Maintainer removes a unit's namespace once its result is recorded, keeping checkpoints bounded. `tests/test_maintenance.py::test_interleaved_deliberations_each_answer_their_own_question` is the regression test.
+**Lesson:** When a component is shared by design, check what *else* ends up shared with it. "Concurrent units share state" was a stated feature; "concurrent units share scratch space" was an unstated consequence — and the tests only ever ran one unit at a time, so they couldn't see it. Any test of a concurrency mechanism must run more than one unit through it.
+
 ---
 
 ## Open known limitations (found, not yet fixed)
@@ -213,6 +219,7 @@ Before writing similar code again in this project:
 - **Any new test:** re-read entries 11–14 before assuming a failing test means the implementation is wrong (entry 12 has recurred once already).
 - **Any new claim statement template:** re-read entry 22 — statements must be self-contained, never "this question".
 - **Any new identifier that is persisted or crosses a process boundary:** re-read entry 23 — never a per-process counter.
+- **Any new work-unit handler, or anything run on `MultiUnitScheduler`:** re-read entry 26 — per-unit scratch state goes under the unit's own namespace, and a concurrency test must run more than one unit.
 - **Any new parser that pulls numbers or quantities out of question text:** re-read entry 21 and the open limitations list — require a unit or grammatical role, never just "it's numeric".
 - **Any new demo/narrated script:** re-read entry 16 before appending to it.
 - **Any security or reliability claim in a design doc:** re-read entry 15 before writing "both X and Y share a cause" — prove it, don't infer it.

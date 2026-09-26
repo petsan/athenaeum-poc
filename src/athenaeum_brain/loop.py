@@ -72,7 +72,7 @@ def make_deliberation_handler(question: str, question_id: str, reputability: Rep
                               reopen_context: dict = None, verification: dict = None,
                               model_fitness: ModelFitnessStore = None,
                               fidelity: DomainFidelityStore = None,
-                              belief_graph: BeliefGraphStore = None):
+                              belief_graph: BeliefGraphStore = None, state_key: str = None):
     """Returns a round_handler(state, round_index) -> RoundResult usable
     directly as a WorkUnit.round_handler in athenaeum_body's scheduler.
 
@@ -98,24 +98,38 @@ def make_deliberation_handler(question: str, question_id: str, reputability: Rep
     runner}. Omitted means no routing. Callers derive 'enabled' from
     verification_routing.sandbox_enabled(), i.e. from config."""
 
+    # known-bugs.md #26: the scheduler gives every unit ONE shared_state, so
+    # a deliberation's working state lives under its own namespace and is
+    # only ever READ from there -- two deliberations time-sliced together
+    # used to overwrite each other's frame and answer each other's question.
+    # Every write is mirrored at the top level too, so single-unit callers
+    # (and tests) that read state["answer"] etc. keep working.
+    ns = state_key or f"deliberation:{question_id}"
+
+    def writes(state: dict, **new) -> dict:
+        return {ns: {**state.get(ns, {}), **new}, **new}
+
     def handler(state: dict, round_index: int) -> RoundResult:
+        # A checkpoint written before namespacing has no ns entry; resuming
+        # from one reads the top-level keys it did write.
+        mine = state[ns] if ns in state else state
         if round_index == 0:
             frame = framing_round(question, question_id)
-            return RoundResult(proposed_writes={"frame": frame}, done=False)
+            return RoundResult(proposed_writes=writes(state, frame=frame), done=False)
 
         if round_index == 1:
-            frame = state["frame"]
+            frame = mine["frame"]
             regrounding = regrounding_agents(fidelity) if fidelity is not None else []
             with fallback_suppressed(regrounding):
                 claims = exploration_round(frame, question_id)
             return RoundResult(
-                proposed_writes={"exploration_claims": [c.to_dict() for c in claims],
-                                 "regrounding_agents": regrounding},
+                proposed_writes=writes(state, exploration_claims=[c.to_dict() for c in claims],
+                                       regrounding_agents=regrounding),
                 done=False,
             )
 
         if round_index == 2:
-            claims = [Claim(**d) for d in state["exploration_claims"]]
+            claims = [Claim(**d) for d in mine["exploration_claims"]]
             exam = cross_examination_round(claims, question_id)
             # Task 44: formalizable claims routed to Engineering for an
             # independent executed check -- only when the caller passes an
@@ -126,15 +140,15 @@ def make_deliberation_handler(question: str, question_id: str, reputability: Rep
                 sandbox_run=(verification or {}).get("sandbox_run"))
             exam += routing["responses"]
             return RoundResult(
-                proposed_writes={"exam_claims": [c.to_dict() for c in exam],
-                                 "verification": {"routed": routing["routed"],
-                                                  "skipped_reason": routing["skipped_reason"]}},
+                proposed_writes=writes(state, exam_claims=[c.to_dict() for c in exam],
+                                       verification={"routed": routing["routed"],
+                                                     "skipped_reason": routing["skipped_reason"]}),
                 done=False,
             )
 
         if round_index == 3:
-            claims = [Claim(**d) for d in state["exploration_claims"]]
-            exam = [Claim(**d) for d in state["exam_claims"]]
+            claims = [Claim(**d) for d in mine["exploration_claims"]]
+            exam = [Claim(**d) for d in mine["exam_claims"]]
             # Grades read here are time-of-use: this deliberation's own
             # outcomes are only recorded afterwards, in
             # _attach_grades_and_record_outcomes.
@@ -147,23 +161,23 @@ def make_deliberation_handler(question: str, question_id: str, reputability: Rep
                 # reopen (reopening.py, Section 7.3) and importance rating
                 # (7.1) never depend on a caller remembering them.
                 "question": question,
-                "frame": state["frame"],
+                "frame": mine["frame"],
                 "committed": [c.to_dict() for c in result["committed"]],
                 "dissent": result["dissent"],
                 "plural_answers": result["plural_answers"],
             }
             if reopen_context is not None:
                 answer["reopen_context"] = reopen_context
-            if "verification" in state:  # absent in checkpoints from before task 44
-                answer["verification"] = state["verification"]
-            if state.get("regrounding_agents"):
-                answer["regrounding_agents"] = state["regrounding_agents"]
+            if "verification" in mine:  # absent in checkpoints from before task 44
+                answer["verification"] = mine["verification"]
+            if mine.get("regrounding_agents"):
+                answer["regrounding_agents"] = mine["regrounding_agents"]
             # Section 5.4: one section per output type the framing round
             # classified this question as. Forecast and Recommendation are
             # built only from committed claims carrying that structure;
             # when none do, the section says so explicitly rather than
             # being silently left out.
-            output_types = state["frame"].get("output_types", [RESEARCH])
+            output_types = mine["frame"].get("output_types", [RESEARCH])
             sections = {}
             if RESEARCH in output_types:
                 sections[RESEARCH] = build_research_answer(
@@ -180,7 +194,7 @@ def make_deliberation_handler(question: str, question_id: str, reputability: Rep
             if belief_graph is not None:
                 version = reopen_context["prior_version"] + 1 if reopen_context else 0
                 record_answer(belief_graph, question_id, answer, version)
-            return RoundResult(proposed_writes={"answer": answer}, done=True)
+            return RoundResult(proposed_writes=writes(state, answer=answer), done=True)
         raise ValueError(f"no round {round_index} in the deliberation loop")
 
     return handler
@@ -198,5 +212,6 @@ def make_deliberation_unit(question: str, question_id: str, priority: int = 0,
         id=unit_id or question_id,
         priority=priority,
         round_handler=make_deliberation_handler(question, question_id, reputability, reopen_context,
-                                                verification, model_fitness, fidelity, belief_graph),
+                                                verification, model_fitness, fidelity, belief_graph,
+                                                state_key=f"deliberation:{unit_id or question_id}"),
     )

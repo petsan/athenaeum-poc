@@ -1118,6 +1118,45 @@ model-serving layer.
 
 ---
 
+## 2026-09-26 — Maintenance cadence (Phase M): design choices, and bug #26
+
+**Q: Why read the scheduler before building the Maintainer on it?**
+
+Because the Maintainer's whole premise is running questions and idle
+cycles *together* on it, and nothing in the repo had ever done that with
+real deliberations. Reading `MultiUnitScheduler` showed one shared state
+for all units; the deliberation handler used fixed keys in it. That's a
+hypothesis until reproduced, so it was reproduced first: two real
+deliberations interleaved, and the first answered the second's question.
+Only then fixed.
+
+**Q: Why namespace per unit rather than give each unit its own runner?**
+
+Shared state is a deliberate Body feature (committed writes visible to
+later units — Section 7's cross-unit visibility). The bug was mixing
+scratch space into it, not sharing it. Namespacing keeps the feature and
+removes the collision; mirroring writes at the top level keeps every
+single-unit caller, test and old checkpoint working unchanged.
+
+**Q: Why "one idle cycle per dry spell"?**
+
+An idle cycle re-examines committed claims against current agents and
+grades. If nothing new has been asked or committed since the last one,
+another cycle can only repeat it — pure churn that, worse, inflates
+consolidation survival counts toward Tier C without any new evidence.
+The first version let a cadence cycle and a dry-spell cycle run back to
+back; its own test caught it.
+
+**Q: Why does the Maintainer remove a unit's namespace after harvesting?**
+
+Every round checkpoints the whole shared state. Without cleanup, each
+new round would re-write every past unit's scratch data — storage growing
+quadratically with the number of questions ever asked. Once the answer is
+in the ledger, the graph and the stores, the scratch copy has no further
+use.
+
+---
+
 *See `docs/progress.md` §26 for the checklist this log's entries track
 against, and `docs/infra-topology.md` for the infrastructure-side design
 decisions made in the same planning conversation.*

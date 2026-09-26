@@ -232,17 +232,27 @@ def amendment_checkpoint_key(cycle_id: str) -> str:
 def make_idle_evolution_unit(ctx: IdleContext, cycle_id: str, *, sample_size: int = 20,
                              seed: int = 0, priority: int = -1) -> WorkUnit:
     """Idle work runs at lower priority than questions by default, so the
-    time-sliced scheduler serves real questions first."""
+    time-sliced scheduler serves real questions first. Like a deliberation,
+    its working state lives under its own namespace in the scheduler's
+    shared state (known-bugs.md #26), mirrored at the top level for
+    single-unit callers."""
+    ns = f"idle:{cycle_id}"
+
+    def writes(state: dict, new: dict) -> dict:
+        return {ns: {**state.get(ns, {}), **new}, **new}
+
     def handler(state: dict, round_index: int) -> RoundResult:
+        mine = state[ns] if ns in state else state
         if round_index == 0:
-            return RoundResult(proposed_writes={"sample": sample_claims(ctx.ledger, sample_size, seed)})
+            return RoundResult(proposed_writes=writes(state, {"sample": sample_claims(ctx.ledger, sample_size, seed)}))
         if round_index == 1:
-            return RoundResult(proposed_writes=reexamine(state["sample"], ctx.reputability, cycle_id))
+            return RoundResult(proposed_writes=writes(state, reexamine(mine["sample"], ctx.reputability, cycle_id)))
         if round_index == 2:
-            return RoundResult(proposed_writes={"plan": review(state["findings"], state["exam"], ctx.reputability)})
+            return RoundResult(proposed_writes=writes(
+                state, {"plan": review(mine["findings"], mine["exam"], ctx.reputability)}))
         if round_index == 3:
-            result = commit(ctx, cycle_id, state["findings"], state["plan"])
-            return RoundResult(proposed_writes={"idle_result": result}, done=True)
+            result = commit(ctx, cycle_id, mine["findings"], mine["plan"])
+            return RoundResult(proposed_writes=writes(state, {"idle_result": result}), done=True)
         raise ValueError(f"no round {round_index} in an idle-evolution cycle")
 
     return WorkUnit(id=cycle_id, priority=priority, round_handler=handler)
@@ -265,16 +275,18 @@ def apply_amendment_if_approved(ctx: IdleContext, cycle_id: str, proposal: dict)
     return {"adopted": True, **result}
 
 
-def feed_reevaluation(ctx: IdleContext, idle_result: dict, *, unit_log_for, importance_threshold: float = 0.3) -> dict:
+def feed_reevaluation(ctx: IdleContext, idle_result: dict, *, unit_log_for, importance_threshold: float = 0.3,
+                      belief_graph=None) -> dict:
     """Hands each question the cycle implicated to reopen_if_material, with
     the cycle's findings as additional material reasons (7.2). The usual
     importance gate still applies. unit_log_for(question_id) supplies a
-    fresh checkpoint log for each reopen."""
+    fresh checkpoint log for each reopen; with a Belief Graph, reopened
+    versions are recorded there too."""
     from .reopening import reopen_if_material
     outcomes = {}
     for qid, reasons in idle_result["reevaluation_candidates"].items():
         outcomes[qid] = reopen_if_material(
             ctx.ledger, qid, reputability=ctx.reputability, unit_log=unit_log_for(qid),
             importance_threshold=importance_threshold, consolidation=ctx.consolidation,
-            additional_reasons=reasons)
+            additional_reasons=reasons, belief_graph=belief_graph)
     return outcomes
