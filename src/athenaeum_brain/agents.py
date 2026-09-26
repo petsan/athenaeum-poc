@@ -264,10 +264,17 @@ class MasterOfEngineering:
                 question_id=question_id, round=1, issuing_agent=self.name,
                 subject=token,
                 statement=f"{token} rounds to {rounded} (IEEE-754 round-half-to-even convention)",
-                claim_type="executable", confidence=1.0,
+                # Owner decision 3 (2026-09-26): 'formal', not 'executable' --
+                # nothing executes this in a sandbox; 'executable' is reserved
+                # for verify_code's real runs. What makes it Engineering's
+                # claim is the implementation standard it names. ONE source,
+                # naming the rule and its implementation together: the
+                # computation only applies the standard, so citing them as
+                # two sources would count one line of evidence twice.
+                claim_type="formal", confidence=1.0,
                 defeat_condition="a different result under decimal.ROUND_HALF_EVEN",
                 jurisdiction_check=True,
-                supporting_provenance=["computed:decimal.ROUND_HALF_EVEN"],
+                supporting_provenance=["standard:IEEE-754/decimal.ROUND_HALF_EVEN"],
                 recommendation_option={
                     "option": f"round half to even ({token} -> {rounded})",
                     "serves_objective": "avoiding systematic upward bias when many rounded values are summed (the IEEE-754 default)",

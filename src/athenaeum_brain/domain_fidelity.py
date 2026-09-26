@@ -25,7 +25,12 @@ def _explicit_defeat_condition(c: dict) -> bool:
 # answering in its place, since that is what drift looks like here.
 FINGERPRINT_CHECKS = {
     "Mathematics": lambda c: any(p.startswith("computed:") for p in c.get("supporting_provenance", [])),
-    "Engineering": lambda c: c.get("claim_type") == "executable",
+    # Owner decision 3 (2026-09-26): Engineering's style is a real sandbox
+    # run, OR a claim that names the implementation standard it follows
+    # (IEEE-754, a format, a protocol) -- which stays meaningful while the
+    # sandbox is off, and which Mathematics' convention-free claims never do.
+    "Engineering": lambda c: c.get("claim_type") == "executable" or any(
+        p.startswith("standard:") for p in c.get("supporting_provenance", [])),
     "Logic": lambda c: c.get("claim_type") == "procedural",  # Logic must NEVER assert first-order claims
     "WorldNews": lambda c: any(p.startswith("dated_event:") for p in c.get("supporting_provenance", [])),
     # Added 2026-09-26 (Phase J) from 2.4.1's own list:

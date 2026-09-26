@@ -1232,6 +1232,25 @@ No existing test asserted that an upgrade reopens. The batch 7 end-to-end test's
 
 **Full live suite: 602 passed, 1 skipped.** 603 collected (599 prior + 4 new). The qwen routing test now passes deterministically. The known-bugs open-limitation entry for it is marked resolved.
 
+## 89. Engineering's style without a sandbox — Phase AL (decision 3)
+
+Engineering's rounding claims came from an in-process `decimal` computation but were typed `executable`, which the design reserves for real sandboxed runs. Now:
+- **Claim type:** they are `formal`. `executable` remains only on `verify_code` and `verify_claim` results, which really ran in the sandbox.
+- **Provenance:** they cite **one** source naming the rule and its implementation together, `standard:IEEE-754/decimal.ROUND_HALF_EVEN`, replacing `computed:decimal.ROUND_HALF_EVEN`.
+- **Fingerprint:** Engineering's style is `claim_type == "executable"` *or* a `standard:` source. Mathematics' fingerprint is still `computed:` provenance, so each agent's rounding claim is on-style for its own agent and off-style for the other, and the two stay distinguishable while the sandbox is off.
+
+**Caught on the way, by the batch 1 end-to-end test:** the first version cited the computation and the standard as *two* sources. Consolidation then counted two independent lines of evidence and promoted the rounding claim to Tier C, but the computation only applies the standard, so they aren't independent. Using a single source fixed it. It's worth remembering whenever provenance is split: every source counts as its own line of evidence unless citation data says otherwise.
+
+Tests (`tests/test_engineering_style.py`):
+- the claim is `formal`, with its single standard source;
+- Engineering and Mathematics fingerprints each accept their own claim and reject the other's, and Engineering's rounding no longer reads as drift;
+- a real sandbox run is still on-style, while a bare model fallback is not;
+- the Mathematics-vs-Engineering plural answer on rounding is kept.
+
+The known-bugs open limitation is marked resolved. The change in claim type is owner-approved; no existing test asserted it.
+
+**Full live suite: 606 passed, 1 skipped.** 607 collected (603 prior + 4 new in `tests/test_engineering_style.py`).
+
 ### Batch 10 (planned 2026-09-26, implementing the owner's decisions)
 
 The owner decided 2–5 and 7–10 on 2026-09-26, each as recommended in `docs/owner-decisions.md`; 6 waits on reading `README.draft.md`. Each phase implements one or two decisions. Where a decision changes an existing test's meaning, that change is now owner-approved and is called out in the phase's write-up.
@@ -1239,7 +1258,7 @@ The owner decided 2–5 and 7–10 on 2026-09-26, each as recommended in `docs/o
 | Phase | Decision(s) | Scope | Status |
 |---|---|---|---|
 | AK | 2, 9 | The qwen routing test asserts a non-empty answer from the right backend and model only. Grade upgrades stop being material under §7.2: only downgrades reopen, and upgrades are picked up at the next reopen for any other reason. | **done** — §88 |
-| AL | 3 | Engineering's rounding claims become `formal`. Its fidelity fingerprint becomes "names an implementation standard" (IEEE-754, formats, protocols), without depending on the sandbox. The Mathematics-vs-Engineering plural answer is kept. | open |
+| AL | 3 | Engineering's rounding claims become `formal`. Its fidelity fingerprint becomes "names an implementation standard" (IEEE-754, formats, protocols), without depending on the sandbox. The Mathematics-vs-Engineering plural answer is kept. | **done** — §89 |
 | AM | 4 | Admit OLMo 3 7B with a written rationale, and wire a `ModelFitnessStore` into the API. Model claims start at 0.5 per agent and move with outcomes. | open |
 | AN | 5 | Human input triggers a checkpoint only at importance ≥ the re-evaluation threshold, configured alongside it. | open |
 | AO | 10 | During idle re-examination a model may challenge a model-backed claim. The challenge is dissent, and counts toward reputability, fitness and calibration only once the challenging model is admitted and `established`. | open |
