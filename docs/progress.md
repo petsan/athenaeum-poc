@@ -260,7 +260,7 @@ Earlier sections each ended with their own "suggested next step," repeatedly sup
 - [x] ~~Idle-evolution rounds (§3.6).~~ Done 2026-09-26 (Phase C) — see Section 46.
 - [x] ~~Cross-agent verification routing, e.g. Mathematics → Engineering sandbox (task 44).~~ Done 2026-09-26 (Phase D) — see Section 47. Off in normal operation because `execution_sandbox.enabled` is false.
 - [x] ~~Model admission gate (§6.7, task 47), and applying Model Fitness weight at synthesis.~~ Done 2026-09-26 (Phase E) — see Section 48.
-- [ ] **Owner action: OLMo 3 7B guest (VMID 116) is swap-thrashing** — `llama-server` at 98% of its 10 GB limit, ~45× slower, all live-OLMo tests timing out. Restart it / `--mlock` or `--no-mmap` / more RAM. Diagnosis and options in `known-bugs.md` #24. (Found 2026-09-26.)
+- [x] ~~**Owner action: OLMo 3 7B guest (VMID 116) is swap-thrashing**~~ — **fixed 2026-09-26** once guest changes were permitted: the growth was `llama-server`'s 8 GiB-default RAM prompt cache; `--cache-ram 512` now on all seven model-lab guests and in the setup template (known-bugs.md #24, #27; Section 59).
 - [x] ~~Domain Fidelity re-grounding and escalation-to-checkpoint (§2.4.3, task 30).~~ Done 2026-09-26 (Phase F) — see Section 49.
 - [x] ~~Re-evaluation and consolidation audit sampling (§9.4–9.5, tasks 22–23).~~ Done 2026-09-26 (Phase G) — see Section 50.
 - [x] ~~Adversarial suite: 7 of §8's 15 failure modes covered (task 20; `circular_corroboration` added in Section 42); several remaining ones depend on the items above.~~ **15 of 15** as of 2026-09-26 (Phase H) — see Section 51.
@@ -324,7 +324,7 @@ Same rules and stop conditions as batch 1. Ordered so each phase builds on the l
 | N | **Async API** — submit → poll over the ledger's `queued/active/completed` lifecycle (api.py's own stated limitation), plus read endpoints for versions and diffs. | **done** — §57 |
 | — | End-to-end test extended over J–N, then plan batch 3. | **done** — `test_full_lifecycle_through_the_maintainer` (§58) |
 
-**Owner decisions accumulated so far (not in any batch — each needs a call from the owner):** (1) the OLMo 3 guest's memory problem, known-bugs.md #24; (2) the flaky `qwen2.5-1.5b` factual assertion; (3) what Engineering's reasoning style is while the sandbox is off (its `executable` rounding claims vs. the fidelity fingerprint); (4) which models to admit before the API passes a fitness store (§48); (5) whether §11.5's importance threshold should narrow when human input triggers a checkpoint (§45); (6) adopting `README.draft.md`.
+**Owner decisions accumulated so far (not in any batch — each needs a call from the owner):** ~~(1) the OLMo 3 guest's memory problem, known-bugs.md #24~~ (resolved §59 once guest changes were permitted); (2) the flaky `qwen2.5-1.5b` factual assertion; (3) what Engineering's reasoning style is while the sandbox is off (its `executable` rounding claims vs. the fidelity fingerprint); (4) which models to admit before the API passes a fitness store (§48); (5) whether §11.5's importance threshold should narrow when human input triggers a checkpoint (§45); (6) adopting `README.draft.md`.
 
 **Batch 2 (J–N) complete 2026-09-26**, end-to-end extended (Section 58).
 
@@ -735,6 +735,16 @@ Tested against a real running server: async submit returns 202 without an answer
 **Verified offline** (OLMo 3 guest still degraded — ~73 s per 4-token call): **443 passed, 1 skipped, 3 failed**, the usual three `olmo3-7b` timeouts. 462 collected.
 
 **Permission change, 2026-09-26 (owner):** Proxmox guests may now be created, modified or destroyed as needed during this development phase. This lifts the batch rule "never create/modify/destroy Proxmox guests" and unblocks the OLMo 3 guest fix (known-bugs.md #24, owner decision 1).
+
+## 59. Model-lab guests fixed; first full live run since the degradation
+
+With guest changes permitted, the OLMo 3 7B guest's memory growth was traced to its actual cause: recent `llama-server` builds keep a **prompt cache in RAM whose default ceiling is 8192 MiB** (`--cache-ram`). A 4.4 GB model plus an 8 GB cache can't fit a 10 GB container, so the process grew with every distinct prompt until it swap-thrashed — a function of *use* (a day of full-suite runs), not uptime. All seven model-lab guests were exposed, not just 116.
+
+**Fixed on all seven guests** (VMIDs 111–117) and in `infra/proxmox/model-lab/setup-llama-and-download.sh`: `ExecStart` now ends `--no-jinja --cache-ram 512` (template variable `LLAMA_CACHE_RAM_MIB`), applied idempotently and verified in each running process's arguments, each guest healthy within 2–7 s of restart. 116's swap drained; a 4-token completion went from ~65 s to **1.3 s**.
+
+**Second finding (known-bugs.md #27):** §38 and the setup script said `--no-jinja` had been added to *every* guest; in fact only 116 had it — the other six were never re-provisioned from the updated template. The first `sed`, keyed on `--no-jinja`, silently changed only 116; checking the live units caught it. All seven now match the template exactly.
+
+**Full live suite, no offline mode, nothing ignored: 461 passed, 1 skipped** (the skip is the real-GPU-worker test, worker offline) in 4 m 56 s — the first fully green live run since the guest degraded, including all 15 live-OLMo tests in `test_model_backed_reasoning.py` and every live model-serving test. This retroactively confirms phases E–N, which had only been verified offline.
 
 ### Explicitly not on this list
 Any application-level work beyond what `deployment-playbook.md` promises to deliver (verified SSH access to a correctly-networked guest, not a deployed application).

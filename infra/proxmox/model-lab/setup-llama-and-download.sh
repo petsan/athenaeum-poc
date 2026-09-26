@@ -23,6 +23,15 @@
 # the chat template is never actually needed -- --no-jinja skips parsing
 # it entirely. Applied to every guest's ExecStart, not just OLMo 3's,
 # since any future model's template could hit the same gap.
+#
+# --cache-ram (known-bugs.md #24, found 2026-09-26): recent llama-server
+# builds keep a prompt cache in RAM that may grow to 8192 MiB by default.
+# On a guest sized for its model (4-10 GB) that cache outgrows the
+# container's memory limit after enough distinct prompts, swap fills, and
+# the memory-mapped weights start being evicted and re-read -- the OLMo 3
+# 7B guest went ~45x slower while /health still said "ok". Callers here
+# send short, mostly distinct prompts, so a small cache loses almost
+# nothing. LLAMA_CACHE_RAM_MIB overrides the default.
 set -euo pipefail
 
 IP="${1:?usage: setup-llama-and-download.sh IP HF_REPO HF_FILE LABEL}"
@@ -31,6 +40,7 @@ HF_FILE="${3:?}"
 LABEL="${4:?}"
 KEY="${SSH_PRIVATE_KEY_PATH:-$HOME/.ssh/athenaeum_poc}"
 PORT="${LLAMA_PORT:-8080}"
+CACHE_RAM_MIB="${LLAMA_CACHE_RAM_MIB:-512}"
 
 echo "=== $LABEL @ $IP -- installing llama.cpp + downloading $HF_REPO/$HF_FILE ==="
 
@@ -70,7 +80,7 @@ Description=llama.cpp server -- ${LABEL} (Athenaeum model-lab candidate)
 After=network.target
 
 [Service]
-ExecStart=/opt/llama.cpp/build/bin/llama-server --model /opt/models/${HF_FILE} --host 0.0.0.0 --port ${PORT} -c 4096 --threads \$(nproc) --no-jinja
+ExecStart=/opt/llama.cpp/build/bin/llama-server --model /opt/models/${HF_FILE} --host 0.0.0.0 --port ${PORT} -c 4096 --threads \$(nproc) --no-jinja --cache-ram ${CACHE_RAM_MIB}
 Restart=on-failure
 RestartSec=5
 
