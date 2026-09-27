@@ -89,7 +89,11 @@ The sections below this one are a chronological log, and the numbering runs roug
 
 **Open owner decisions:**
 - `docs/proposals/evalgate-integration.md` §7 (D13–D19);
-- `docs/proposals/evaltools-extraction.md` §7 (X1–X7): extracting evalgate's tools into a thin, reusable `evalcore` library for unrelated projects;
+- `evalcore` (the reusable evaluation toolkit from `docs/proposals/evaltools-extraction.md`): **decided (X1–X7) and being built**.
+  - It lives in its own private repo, `github.com/petsan/evalcore`, at `C:\Users\petsa\evalcore`, with tests in `/opt/evalcore-venv` on LXC 104.
+  - E1–E4 are done: statistics and gates identical to evalgate's; detectors, judges and calibration; the artifacts and front end; the fault matrix and dashboard.
+  - Then: E5 (rebase evalgate on it), then E6 (a mock pilot project, then Athenaeum using evalcore directly, per X7).
+  - Its own `progress.md` is authoritative;
 - not blocking: an auto-update mechanism for deployed code, and an off-site backup destination.
 
 **Debugging tools: use these, not ad hoc pipelines** (installed 2026-09-27, §106):

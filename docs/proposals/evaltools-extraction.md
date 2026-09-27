@@ -1,6 +1,15 @@
 # Plan: a thin, reusable evaluation toolkit extracted from evalgate
 
-Status: **plan only, for the owner's decision. Nothing is built.**
+Status: **decided and in progress.** The owner's decisions (2026-09-27):
+- X1: `evalcore`.
+- X2: a new private repo, `github.com/petsan/evalcore`.
+- X3: under the Athenaeum license (Piorun, Inc.), copied byte-for-byte.
+- X4: a mock project as the unrelated pilot.
+- X5: evalgate is rebased on the core.
+- X6: numpy only.
+- X7 (after E3): Athenaeum uses evalcore directly.
+
+Progress is tracked in evalcore's own `progress.md`.
 Written 2026-09-27, from evalgate `9baa359` (v0.2.0). Working name **`evalcore`** (decision X1).
 
 This plan lives in the Athenaeum repo only because that is where this session works. It is **not Athenaeum work**: the toolkit is meant for any project. The file moves to the new repo when that repo is created.
