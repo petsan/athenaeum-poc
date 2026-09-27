@@ -1417,10 +1417,49 @@ Same rules and stop conditions.
 | Phase | Scope | Status |
 |---|---|---|
 | AR | **Decision 11: a judging benchmark for challenger models.** A curated, balanced set of labelled answers and statements. A challenger's "no" counts only once its latest recorded score, for the *current* benchmark and challenge-prompt versions, meets a stated accuracy. Includes a script to run it live and record the result, plus what OLMo 3 7B actually scores. | **done** — §97 |
-| AS | **Decision 12: the Belief Graph as an append-only journal.** Each checkpoint holds only the nodes and edges it adds; reads apply new entries incrementally from a cache. Existing full-snapshot logs keep working without a rewrite. Re-measure storage. | open |
+| AS | **Decision 12: the Belief Graph as an append-only journal.** Each checkpoint holds only the nodes and edges it adds; reads apply new entries incrementally from a cache. Existing full-snapshot logs keep working without a rewrite. Re-measure storage. | **done** — §98 |
 | AT | **Reopens deliberate like first answers.** They still skip verification routing and domain-fidelity re-grounding (noted in §90). Thread `verification` and `fidelity` through the reopen path. | open |
 | AU | **Human input over HTTP.** The importance-gated checkpoint rule (decision 5) exists, but nothing reaches it from the app. Add a token-authenticated endpoint: input enters as a cross-examined claim, is checkpointed or reopens the answer by the existing rules, and is recorded against the submitter's track record. | open |
 | — | End-to-end test extended; live smoke; README refreshed if anything user-visible changed. | open |
+
+## 98. The Belief Graph as an append-only journal — Phase AS (decision 12)
+
+After the ledger split (§94), the Belief Graph was the fastest-growing store: every write snapshotted the whole graph.
+
+**Layout.** Each checkpoint now holds only the nodes and edges it *adds*: `{"journal": 1, "items": [...]}`. `record_answer` and `record_source` still write one checkpoint per operation, through the store's own `batch()`:
+- reads inside a batch see its writes;
+- a failed batch writes nothing;
+- batches nest.
+
+Reads fold new entries into an in-memory cache, so a read costs only what was added since the last one. Two stores over one log stay consistent, each folding the other's writes incrementally (tested).
+
+**Why a journal, not a split per question.** The graph's nodes are shared: a source or a claim belongs to many questions, and `questions_relying_on_source` walks from a source back to every answer. Splitting by question would need reverse indexes across files. The journal delivers what the decision asked for, a write that costs its own entries rather than the whole graph, as recorded with decision 12 in `docs/owner-decisions.md`.
+
+**Compatibility, with no rewrite.** A log written before this starts with full snapshots. A snapshot simply resets the fold, and journal entries after it apply on top, so old data dirs keep working. `seq` continues the old numbering (tested with a hand-made old-format log).
+
+**Safety.** The cache is private: `node()`, `nodes()` and `edges()` hand out deep copies (the schema's `from_dict` shares the dict it's given), so a caller mutating `.data` can't corrupt the graph (tested).
+
+**Measured**, 60 questions with idle cycles, same wiring as §76 and §94:
+
+| | §94 | now |
+|---|---|---|
+| Belief Graph | 5.42 MB (a 177 KB state per write) | **0.15 MB** (1.2 KB per write) |
+| Total | 20.4 MB | **15.1 MB** |
+
+Across batches 6, 10 and 11, total storage for the same workload went from 161.4 MB to 15.1 MB. The largest remaining log is the Maintainer's per-round resume state (10.7 MB). That grows linearly with work, not quadratically, and it's working state rather than retained history.
+
+Tests (`tests/test_graph_journal.py`, 7):
+- each checkpoint holds only its additions, and a shared source isn't written again;
+- a write costs the same however big the graph is (40 answers);
+- `seq` has no gaps and nodes stay write-once;
+- an old full-snapshot log keeps working and its numbering continues;
+- two stores stay consistent and fold incrementally;
+- a failed batch writes nothing, and batches nest;
+- handed-out values are copies.
+
+All existing graph tests pass unchanged.
+
+**Full live suite: 674 passed, 1 skipped.** 675 collected (668 prior + 7 new).
 
 ## 97. Challenger models qualify on a judging benchmark — Phase AR (decision 11)
 

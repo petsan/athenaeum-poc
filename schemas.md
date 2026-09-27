@@ -21,6 +21,8 @@ Concrete shapes for `body-design.md` Section 5.1's five stores and `brain-design
 
 **As implemented (2026-09-26, `belief_graph_store.py` + `athenaeum_brain/belief_graph.py`):** nodes and edges are write-once (re-writing an id returns the original); both carry a store-wide monotonically increasing `seq` in `data`, so "added after X" never depends on wall-clock time. Node ids: `question:<id>`, `answer:<question_id>:v<version>`, `claim:<agent>::<statement>` (the canonical `claim_key`, so the same claim reached from two questions is one node; `data` holds `statement`, `issuing_agent`, `claim_type`, normalized `subject`), `source:<source_id>`. Edge ids are `<source>|<type>|<target>`; types used: `has_version` (question→answer), `relies_on` (answer→committed claim), `dissents` (answer→challenged claim), `cites` (claim→source, which is provenance; and source→source, recorded by ingestion when it is given a graph — those `source` nodes carry `license` and `content_hash`, and `belief_graph.citations()` reads only the source→source edges).
 
+**Journal layout (owner decision 12, 2026-09-26):** the graph's log is an append-only journal. Each checkpoint is `{"journal": 1, "items": [{"kind": "node"|"edge", "record": <node or edge>}]}`, holding only what it adds. A log from before this starts with full `{nodes, edges, seq}` snapshots, and a snapshot resets the fold that journal entries then apply to.
+
 ## Provenance Entry
 | Field | Type | Required | Notes |
 |---|---|---|---|
