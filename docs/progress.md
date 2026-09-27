@@ -91,8 +91,12 @@ The sections below this one are a chronological log, and the numbering runs roug
 - `docs/proposals/evalgate-integration.md` §7 (D13–D19);
 - `evalcore` (the reusable evaluation toolkit from `docs/proposals/evaltools-extraction.md`): **decided (X1–X7) and being built**.
   - It lives in its own private repo, `github.com/petsan/evalcore`, at `C:\Users\petsa\evalcore`, with tests in `/opt/evalcore-venv` on LXC 104.
-  - E1–E4 are done: statistics and gates identical to evalgate's; detectors, judges and calibration; the artifacts and front end; the fault matrix and dashboard.
-  - Then: E5 (rebase evalgate on it), then E6 (a mock pilot project, then Athenaeum using evalcore directly, per X7).
+  - It is now **public** (owner's decision). Commits use the GitHub noreply address. Tagged `v0.1.0`.
+  - Done:
+    - E1–E4: statistics and gates identical to evalgate 0.2.0's; detectors, judges and calibration; the artifacts, front end and CLI; the fault matrix and dashboard.
+    - E5: evalgate 0.3.0 rebased on evalcore. Its CI is green, and LXC 250 was redeployed and ran successfully.
+    - E6, part 1: an unrelated pilot, `examples/parcel_quotes`, APPROVED.
+  - **Next: E6, part 2: Athenaeum using evalcore directly (X7).** That still needs the owner's answers to D14–D19 of `docs/proposals/evalgate-integration.md` that remain relevant: D15 (grow the judging benchmark to ≥ 110 cases), D16 (where the dashboard lives), D17 (judge and labels), D19 (nightly schedule). D13 (the harness shape) and D18 are superseded by X7 and E5.
   - Its own `progress.md` is authoritative;
 - not blocking: an auto-update mechanism for deployed code, and an off-site backup destination.
 
