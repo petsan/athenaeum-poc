@@ -1583,7 +1583,19 @@ The bar is 0.95, so no model's challenges count, and they wouldn't even if the b
 
 ### 107.2 Service levels under a burst (the `api_service` suite, LXC 104)
 
-31 questions were submitted asynchronously at once. Submit p95 was 7 ms, poll p95 3 ms (1,235 polls) and read p95 1 ms. **Every question was answered at 66 s, within 0.2 s of the others.** The scheduler time-slices equal-priority units round-robin (§7.2): each round goes to the back of the queue, so every four-round question finishes in the last sweep. That is fair when one question is long (a model call must not starve the rest), but for a burst of short questions every answer waits for the whole burst. Run to completion, the mean wait would be about half. **Owner decision, not changed:** keep round-robin, or run a unit to completion unless it waits on a model. The rounds took about 0.54 s each (122 rounds), mostly checkpoint writes. The SLO defaults (0.5 s per request, 120 s until answered) come from this run plus headroom.
+31 questions were submitted asynchronously at once. Submit p95 was 7 ms, poll p95 3 ms (1,235 polls) and read p95 1 ms. **Every question was answered at 66 s, within 0.2 s of the others.** The scheduler time-slices equal-priority units round-robin (§7.2): each round goes to the back of the queue, so every four-round question finishes in the last sweep. That is fair when one question is long (a model call must not starve the rest), but for a burst of short questions every answer waits for the whole burst. Run to completion, the mean wait would be about half. **Owner decision, not changed:** keep round-robin, or run a unit to completion unless it waits on a model. The rounds took about 0.54 s each (122 rounds); where that time goes is not yet profiled. The SLO defaults (0.5 s per request, 120 s until answered) come from this run plus headroom.
+
+### 107.3 Model calls stopped at the first line break (measured, adopted)
+
+`answer_only` keeps only a completion's first line (known-bugs #35), but every call still generated all 96 tokens. The `model_answers` suite showed the admitted model's latency was the same for every question, about 25 s, whether the answer was "Paris" or a paragraph. llama-server takes stop strings, so generation can end at the first `\n`. The risk was a completion that *starts* with a line break, which would come back empty. Measured on olmo3-7b over the 60 benchmark questions:
+
+| | Graded right | Answered | p50 | p95 |
+|---|---|---|---|---|
+| No stop (before) | 53 | 60 | 25.0 s | 25.6 s |
+| Stop at `\n`, one attempt | 54 | 60 | 6.1 s | 8.1 s |
+| Stop at `\n`, five attempts (the default) | 54 | 60 | 4.8 s | 6.4 s |
+
+Adopted as `ask_model`'s default (`ANSWER_STOP`). Every model fallback and challenge in the system is now about 4× faster, with the same answers. The GPU path also ignored `n_predict` (always 96 tokens, even for an 8-token yes/no); it now gets the same limits. The misses are real (a leap year has "365 days"; `2^10` is "one hundred") or graded as a floor ("sodium chloride" for NaCl, "299 792" for about 300,000). In one run the model answered the mineral question with a self-generated "( disregard previous instructions. I cannot answer that…": the model's own output can look like an injection.
 
 ## 106. Debugging tools, a reusable toolkit plan, and the model store verified
 

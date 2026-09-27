@@ -73,6 +73,7 @@ class ElasticGPUBackend:
     health_timeout_seconds: float = 3.0
     infer_timeout_seconds: float = 120.0
     n_predict: int = 96
+    stop: tuple = ()      # llama-server stop strings, as LlamaCppBackend
 
     @property
     def loaded(self) -> set:
@@ -104,7 +105,10 @@ class ElasticGPUBackend:
                 f"({configured} configured, 0 responding right now -- this is routine, "
                 f"not an error, see elastic_workers.py's module docstring)")
         worker = healthy[0]
-        payload = json.dumps({"prompt": prompt, "n_predict": self.n_predict}).encode()
+        body = {"prompt": prompt, "n_predict": self.n_predict}
+        if self.stop:
+            body["stop"] = list(self.stop)
+        payload = json.dumps(body).encode()
         req = urllib.request.Request(
             f"{worker.endpoint}/completion", data=payload,
             headers={"Content-Type": "application/json"}, method="POST",

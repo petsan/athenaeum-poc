@@ -65,11 +65,16 @@ def fallback_suppressed(agent_names):
 # How a question is put to the model (see ask_model's docstring for why it
 # is framed at all). scripts/measure_answer_prompts.py compares alternatives.
 ANSWER_FRAME = "Q: {question}\nA:"
+# Generation ends at the first line break: answer_only keeps only the first
+# line, so everything after it was generated and thrown away. Measured on
+# olmo3-7b over the 60 benchmark questions (progress.md §107.3): p95 latency
+# 25.6 s -> 6.4 s, 53 -> 54 graded right, 60/60 answered even on one attempt.
+ANSWER_STOP = ("\n",)
 
 
 def ask_model(question: str, model_name: str = DEFAULT_MODEL, n_predict: int = 96,
               timeout_seconds: float = 120.0, max_attempts: int = 5, frame: str = ANSWER_FRAME,
-              stop: tuple = ()) -> str | None:
+              stop: tuple = ANSWER_STOP) -> str | None:
     """Returns the model's answer -- its completion cut to the answer itself
     (answer_only) -- or None if the backend is unreachable or only ever
     answered with nothing.
@@ -118,6 +123,9 @@ def ask_model(question: str, model_name: str = DEFAULT_MODEL, n_predict: int = 9
     # without benefit. The actual "never crash, fall back to CPU"
     # discipline is the same either way.
     gpu_backend = build_elastic_gpu_backend()
+    # the same limits on either path: the GPU backend used to generate its own
+    # 96 tokens even when asked for 8 (a challenge's yes/no)
+    gpu_backend.n_predict, gpu_backend.stop = n_predict, stop
 
     for _ in range(max_attempts):
         response = None
