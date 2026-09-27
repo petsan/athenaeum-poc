@@ -1634,6 +1634,17 @@ Fault matrix (100 trials per cell, 0 false alarms from any tool in 100 healthy t
 
 The labelling file for D17 has started: `evals/labelling/citation_support.json`, 9 model-backed claims from this run. Rerun `scripts/prepare_citation_labels.py` after later nightly runs to add more (existing items and labels are never touched). It needs 30 labels.
 
+### 107.5 Next: batch 13 (proposed, not started)
+
+Batch 12 is complete (commits 0335497 → ab338ee). Proposed next, in order, each a small milestone with full tests:
+1. **evalcore: "caught when it manifested".** `run_matrix` records whether a fault actually touched a case in each trial and reports that rate beside the raw catch rate, so the dashboard shows a tool's real sensitivity without the reader doing the ceiling arithmetic of §107.4. Generic, so it goes in evalcore (tag v0.1.2), then Athenaeum pins it.
+2. **Profile a deliberation round** (0.54 s each under the API burst, §107.2) with the installed tools (`py-spy record`), and fix what dominates if it's cheap. The scheduler's round-robin itself stays until the owner decides.
+3. **A baseline for regressions and PSI.** Only an APPROVED run can become the baseline, and none can be approved until D15/D17 are settled. Proposal: let the owner approve a baseline for the decidable suites, run with `--suites` excluding judging and provenance, so regressions are caught meanwhile.
+4. **The grader's floor.** After the owner's benchmark review, add accepted aliases to items (e.g. "sodium chloride" for NaCl, "299 792" for about 300,000), so `model_answers` stops under-counting.
+5. **Model-backed calibration.** Once citation labels exist, feed labelled model-backed claims into the calibration suite, where over-confidence can finally show.
+
+Owner decisions that unblock things: the LXC 250 key (§107.4), reviewing `judging_benchmark.json` (D15), labelling `citation_support.json` (D17), and the scheduler under bursts (§107.2).
+
 ## 106. Debugging tools, a reusable toolkit plan, and the model store verified
 
 **Debugging tools** (owner: "install debugging tools, and use those instead"; the owner chose all three kinds):
