@@ -1418,9 +1418,23 @@ Same rules and stop conditions.
 |---|---|---|
 | AR | **Decision 11: a judging benchmark for challenger models.** A curated, balanced set of labelled answers and statements. A challenger's "no" counts only once its latest recorded score, for the *current* benchmark and challenge-prompt versions, meets a stated accuracy. Includes a script to run it live and record the result, plus what OLMo 3 7B actually scores. | **done** — §97 |
 | AS | **Decision 12: the Belief Graph as an append-only journal.** Each checkpoint holds only the nodes and edges it adds; reads apply new entries incrementally from a cache. Existing full-snapshot logs keep working without a rewrite. Re-measure storage. | **done** — §98 |
-| AT | **Reopens deliberate like first answers.** They still skip verification routing and domain-fidelity re-grounding (noted in §90). Thread `verification` and `fidelity` through the reopen path. | open |
+| AT | **Reopens deliberate like first answers.** They still skip verification routing and domain-fidelity re-grounding (noted in §90). Thread `verification` and `fidelity` through the reopen path. | **done** — §99 |
 | AU | **Human input over HTTP.** The importance-gated checkpoint rule (decision 5) exists, but nothing reaches it from the app. Add a token-authenticated endpoint: input enters as a cross-examined claim, is checkpointed or reopens the answer by the existing rules, and is recorded against the submitter's track record. | open |
 | — | End-to-end test extended; live smoke; README refreshed if anything user-visible changed. | open |
+
+## 99. Reopens deliberate like first answers — Phase AT
+
+§90 noted that a reopen re-deliberated without two things a first answer gets: verification routing (task 44) and domain-fidelity re-grounding (§2.4.3). So a reopened answer could, for instance, include a model claim from an agent that was meant to be re-grounding. `reopen_question`, `reopen_if_material` and `feed_reevaluation` now take `verification` and `fidelity`, alongside the `model_fitness` they gained in §90. The Maintainer passes its own verification setting, and the idle context's fidelity store.
+
+Tests (`tests/test_reopen_parity.py`):
+- a prime answer that was sieve-checked the first time is sieve-checked again when a downgrade reopens it (`verification.routed == 1` on both versions);
+- when Physics is re-grounding, reopening a model-answered question records `regrounding_agents: ["Physics"]` and commits no model claim.
+
+Both would fail without the change: the reopened version would carry neither field.
+
+**Found while writing it:** the first draft of the re-grounding test hand-wrote a remediation record without the `until_reading` field a real "regrounding" record carries. The idle cycle raised `KeyError` three times, and Phase W's handling set it aside as `unit_failed`, which is how it was spotted rather than going silent. It was a test bug, and the test now builds a complete record.
+
+**Full live suite: 676 passed, 1 skipped.** 677 collected (675 prior + 2 new).
 
 ## 98. The Belief Graph as an append-only journal — Phase AS (decision 12)
 

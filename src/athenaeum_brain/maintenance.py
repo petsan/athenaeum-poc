@@ -382,7 +382,8 @@ class Maintainer:
             return None
         reopened = feed_reevaluation(self.idle, result, unit_log_for=lambda qid: self.log_for(f"reopen-{qid}-{cycle_id}"),
                                      importance_threshold=self.policy.importance_threshold,
-                                     belief_graph=self.belief_graph, model_fitness=self.model_fitness)
+                                     belief_graph=self.belief_graph, model_fitness=self.model_fitness,
+                                     verification=self.verification)
         pending = self._m["pending_amendments"]
         if result["amendment_proposal"] is not None:
             pending[cycle_id] = result["amendment_proposal"]
