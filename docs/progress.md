@@ -15,7 +15,10 @@ The sections below this one are a chronological log, and the numbering runs roug
 - Batches 1–11 are complete. All owner decisions 2–12 are made and implemented (briefs in `docs/owner-decisions.md`).
 - The narrated demo (`demo_brain.py`) covers batches 1–11.
 - Last full live suite: **693 passed, 1 skipped** (§103). Since the rebuild (§105), only the offline suite has run: 672 passed, 2 skipped. The 5 failures all needed the model guests, which were down then.
-- **The owner said the next change "will be pretty big"; it had not been specified when this was written.** Ask for it.
+- **The next big change is proposed, not started:** [`docs/proposals/evalgate-integration.md`](proposals/evalgate-integration.md) (2026-09-27).
+  - It brings the owner's other project, evalgate (`github.com/petsan/evalgate`, private, deployed on LXC 250), into Athenaeum as its release gate, plus a dashboard showing how well each evalgate tool works.
+  - The owner asked for planning only. **Nothing is built until decisions D13–D19 (§7 of the proposal) are made.**
+  - The plan is batch 12, phases AV–BA.
 
 **Standing rules (from the owner, all still in force):**
 - Work in batches: commit and push at the end of every phase. Run an end-to-end test at the end of a batch, then plan the next.
@@ -78,7 +81,7 @@ The sections below this one are a chronological log, and the numbering runs roug
 - To download or complete the store: `infra/proxmox/model-lab/download-models-to-host.sh [manifest.tsv|stored-models.tsv]`, as root on the host. It is resumable, and it SHA-256-checks every new download.
 
 **Still running when this was written. Verify each before relying on it:**
-1. **Model guest setup** (llama.cpp build and llama-server): 115 and 116 were serving, 113 was loading its model, and 111, 112 and 114 were still building.
+1. **Model guest setup: finished.** All six (111–116) answered `{"status":"ok"}` on 2026-09-27, serving from the mounted store. The full live suite has not been rerun since the rebuild.
    - Check: `for i in 161 162 163 164 165 166; do curl -s -m5 http://192.168.0.$i:8080/health; echo; done`.
    - Any guest that isn't `{"status":"ok"}`: re-run `infra/proxmox/model-lab/setup-llama-and-download.sh <ip> <hf_repo> <hf_file> <label>` (values from `manifest.tsv`). It's idempotent.
    - Run it in the foreground, or as one tracked background job per guest, never `&` inside a pipeline (§105).
