@@ -56,7 +56,7 @@ from .loop import make_deliberation_unit
 from .idle_evolution import (
     IdleContext, make_idle_evolution_unit, apply_amendment_if_approved, feed_reevaluation,
 )
-from .reopening import rate_and_store_importance
+from .reopening import rate_and_store_importance, reopen_if_material
 from .audits import reevaluation_audit, consolidation_audit
 from .evaluation import calibration_drift
 from .reevaluation import IMPORTANCE_THRESHOLD
@@ -331,6 +331,14 @@ class Maintainer:
         self._save(forget=(unit.id,))
         return {**event, "kind": "unit_failed", "retrying": False}
 
+    def request_reopen(self, question_id: str, reason: str) -> None:
+        """Queues a reviewer-approved reopen for the next idle cycle's
+        follow-ups (persisted, so a restart keeps it), and makes sure an
+        idle cycle will come even if the queue is otherwise quiet."""
+        self._m.setdefault("requested_reopens", {}).setdefault(question_id, []).append(reason)
+        self._m["idle_since_last_question"] = False
+        self._save()
+
     def record_failure(self, unit_id: str, info: dict, error: Exception) -> None:
         """Records work that failed outside the scheduler -- the API's
         synchronous path -- the same way a given-up unit is recorded, so
@@ -384,6 +392,19 @@ class Maintainer:
                                      importance_threshold=self.policy.importance_threshold,
                                      belief_graph=self.belief_graph, model_fitness=self.model_fitness,
                                      verification=self.verification)
+        # Reopens a reviewer approved (e.g. human input, 11.5): the approval is
+        # the judgment, so the importance gate doesn't apply. Taken from the
+        # registry first, like the unit itself: at-most-once, like every other
+        # idle follow-up, and a lost one can be approved again.
+        requested = self._m.pop("requested_reopens", {})
+        for qid, reasons in requested.items():
+            self._save()
+            reopened[qid] = reopen_if_material(
+                self.ledger, qid, reputability=self.idle.reputability,
+                unit_log=self.log_for(f"reopen-{qid}-{cycle_id}-approved"), importance_threshold=0.0,
+                consolidation=self.idle.consolidation, additional_reasons=reasons,
+                belief_graph=self.belief_graph, model_fitness=self.model_fitness,
+                verification=self.verification, fidelity=self.idle.fidelity)
         pending = self._m["pending_amendments"]
         if result["amendment_proposal"] is not None:
             pending[cycle_id] = result["amendment_proposal"]

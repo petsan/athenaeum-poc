@@ -187,7 +187,9 @@ function renderCard(entry) {
   const pending = entry.status === "queued" || entry.status === "active";
   const latest = versions.length - 1;
   const shown = Math.min(selected.has(entry.id) ? selected.get(entry.id) : latest, latest);
-  const signature = JSON.stringify([entry.status, versions.length, shown, entry.importance]);
+  const inputs = entry.human_inputs || [];
+  const signature = JSON.stringify([entry.status, versions.length, shown, entry.importance,
+                                    Boolean(reviewerToken()), inputs.map(i => i.status)]);
   if (rendered.get(entry.id) === signature) return;  // nothing new: don't disturb the card
   rendered.set(entry.id, signature);
 
@@ -215,6 +217,12 @@ function renderCard(entry) {
     html += `<div class="note">Deliberating in the background...</div>`;
   } else if (entry.status === "suspended") {
     html += `<div class="claim"><span class="tag dissent">suspended</span>Deliberation failed repeatedly and was stopped: ${esc(entry.error || "no error recorded")}</div>`;
+  }
+  for (const i of inputs) {   // human input on this question (Section 11), and what became of it
+    html += `<div class="note">${esc(i.submitter_id)} responded: "${esc(i.statement)}" — ${esc(INPUT_OUTCOMES[i.status] || i.status)}</div>`;
+  }
+  if (versions.length && reviewerToken()) {
+    html += `<div class="versions"><button data-respond="${esc(entry.id)}">Respond with evidence</button></div>`;
   }
   card.innerHTML = html;
   card.querySelectorAll(".versions button").forEach(b => b.addEventListener("click", () => {
@@ -292,6 +300,46 @@ try { tokenInput.value = sessionStorage.getItem("athenaeum-token") || ""; } catc
 tokenInput.addEventListener("change", () => {
   try { sessionStorage.setItem("athenaeum-token", reviewerToken()); } catch (e) { /* no storage */ }
   refreshCheckpoints();
+  for (const entry of questions.values()) renderCard(entry);   // show or hide "Respond"
+});
+
+// Human input (Section 11): it enters as a claim and is examined, never
+// simply accepted. What happened to it is shown on the card.
+const INPUT_OUTCOMES = {
+  challenged: "challenged in cross-examination; not taken further",
+  not_material: "noted; the answer doesn't rely on what it concerns",
+  recorded: "examined and kept as testimony (a minor question: no review needed)",
+  checkpointed: "waiting for a reviewer",
+  approved: "approved by a reviewer; the answer is being reconsidered",
+  rejected: "rejected by a reviewer",
+};
+
+async function respond(questionId) {
+  const status = document.getElementById("review-status");
+  const statement = prompt("What do you want to add or dispute?");
+  if (!statement) return;
+  const justification = prompt("Why? A source or your reasoning (may be left empty).") || "";
+  const scope = prompt("Which source or subject of the answer does it concern? (e.g. computed:trial_division)");
+  if (!scope) return;
+  try {
+    const { status: code, body } = await getJSON(`/api/questions/${encodeURIComponent(questionId)}/input`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${reviewerToken()}` },
+      body: JSON.stringify({ statement, justification, declared_scope: scope })
+    });
+    status.textContent = code === 200 ? `${questionId}: ${INPUT_OUTCOMES[body.outcome] || body.outcome}`
+                                      : `${questionId}: refused (${code}) -- ${body.error}`;
+  } catch (e) {
+    status.textContent = `${questionId}: request failed -- ${e}`;
+  }
+  fetchedAs.delete(questionId);   // fetch its full entry again, with the input on it
+  await refreshQuestions();
+  refreshCheckpoints();
+}
+
+results.addEventListener("click", e => {
+  const id = e.target && e.target.dataset && e.target.dataset.respond;
+  if (id) respond(id);
 });
 
 async function decide(key, decision) {

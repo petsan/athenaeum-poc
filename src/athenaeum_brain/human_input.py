@@ -154,3 +154,51 @@ def clear_checkpoint(checkpoints: HumanCheckpointStore, question_id: str, *, rev
     if decision == "request_more_deliberation":
         return checkpoints.request_more_deliberation(question_id, reviewer_id)
     raise HumanInputError(f"unknown decision {decision!r}")
+
+
+def process_human_input(*, answer: dict, submission: dict, question_id: str, importance: float,
+                        reputability: ReputabilityStore, checkpoints: HumanCheckpointStore,
+                        consolidation=None) -> dict:
+    """Section 11, end to end, for one submission against a question's latest
+    answer (batch 11, Phase AU). Returns what happened:
+
+      challenged    -- a current agent challenged it; it counts against the
+                       submitter's track record, and nothing else happens
+      not_material  -- it targets nothing the answer relies on
+      recorded      -- material, but the question is below the importance
+                       threshold and the input touches neither the leading
+                       conclusion nor consolidated knowledge: it stands as
+                       examined testimony, and nothing reopens (7.3's gate)
+      checkpointed  -- waits for a reviewer; on approval the answer reopens
+
+    The submitter's outcome is recorded either way (11.3)."""
+    from .consolidation import claim_key
+    from .output_types import RESEARCH
+    from .rounds import cross_examination_round
+    claim = submission["claim"]
+    challenges = [r for r in cross_examination_round([claim], question_id)
+                  if r.relation == "challenges" and r.target_claim_id == claim.claim_id]
+    survived = not challenges
+    record_submitter_outcome(reputability, submission, survived)
+    base = {"claim": claim.to_dict(), "survived": survived,
+            "challenges": [r.statement for r in challenges]}
+    if not survived:
+        return {**base, "outcome": "challenged"}
+    materiality = human_input_is_material(answer, submission, survived)
+    if not materiality["material"]:
+        return {**base, "outcome": "not_material", "reasons": materiality["reasons"]}
+
+    scope = submission["declared_scope"]
+    touches = lambda c: c.get("subject") == scope or scope in c.get("supporting_provenance", [])
+    research = answer.get("output_answer", {}).get("sections", {}).get(RESEARCH) or {}
+    leading = research.get("leading_conclusion") or {}
+    changes_leading = bool(leading) and touches(leading)
+    overturns_tier_c = consolidation is not None and any(
+        (consolidation.get(claim_key(c)) or {}).get("tier") == "C"
+        for c in answer.get("committed", []) if touches(c))
+    cp = trigger_checkpoint_if_needed(checkpoints, question_id, submission, materiality, importance=importance,
+                                      changes_leading_conclusion=changes_leading,
+                                      overturns_tier_c=overturns_tier_c)
+    if cp is None:
+        return {**base, "outcome": "recorded", "reasons": materiality["reasons"]}
+    return {**base, "outcome": "checkpointed", "reasons": materiality["reasons"], "checkpoint": cp["reason"]}

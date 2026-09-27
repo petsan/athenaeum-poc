@@ -47,6 +47,7 @@ from .audit_store import AuditStore
 from .calibration_store import CalibrationStore
 from .model_fitness_store import ModelFitnessStore
 from .reviewers import Reviewers, Identity, reviewers_path
+from .human_input_store import HumanInputStore
 from .ingestion import host_allowed
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -58,7 +59,9 @@ from athenaeum_brain.reopening import rate_and_store_importance  # noqa: E402
 from athenaeum_brain.verification_routing import sandbox_enabled  # noqa: E402
 from athenaeum_brain.idle_evolution import IdleContext  # noqa: E402
 from athenaeum_brain.maintenance import Maintainer  # noqa: E402
-from athenaeum_brain.human_input import clear_checkpoint, HumanInputError, CheckpointConflictError  # noqa: E402
+from athenaeum_brain.human_input import (  # noqa: E402
+    clear_checkpoint, HumanInputError, CheckpointConflictError, submit_human_input, process_human_input,
+)
 
 CLIENT_DIR = Path(__file__).resolve().parents[2] / "client"
 
@@ -293,6 +296,7 @@ def build_app(data_dir: Path) -> App:
                                             for m in ADMITTED_MODELS},
                             "recent_events": list(maintainer.events[-10:])},
             "checkpoints": _checkpoints_locked(),
+            "human_inputs": _inputs_by_question_locked(),
         }
         with snapshot_lock:
             snapshot.clear()
@@ -354,7 +358,17 @@ def build_app(data_dir: Path) -> App:
         return entries
 
     def get_question(qid: str):
-        return _view()["by_id"].get(qid)
+        """One question, with any human input on it (and what became of it)."""
+        view = _view()
+        entry = view["by_id"].get(qid)
+        inputs = view.get("human_inputs", {}).get(qid)
+        return {**entry, "human_inputs": inputs} if entry and inputs else entry
+
+    def _inputs_by_question_locked() -> dict:
+        grouped: dict = {}
+        for record in human_inputs._state()["inputs"].values():
+            grouped.setdefault(record["question_id"], []).append(record)
+        return grouped
 
     def _checkpoints_locked() -> list:
         found = []
@@ -389,6 +403,7 @@ def build_app(data_dir: Path) -> App:
 
     # --- writes that need a reviewer (owner decision 7) -------------------------
     reviewers = Reviewers(reviewers_path(data_dir))
+    human_inputs = HumanInputStore(log_for("human-inputs"))
 
     def decide_checkpoint(identity: Identity, key: str, body: dict) -> dict:
         """Section 11.5/11.7 over HTTP: the reviewer's identity comes from
@@ -413,8 +428,64 @@ def build_app(data_dir: Path) -> App:
                 raise ApiError(409, str(e))
             except HumanInputError as e:
                 raise ApiError(400, str(e))
+            reopen_requested = _settle_human_input(key, decision, identity, note)
             _refresh_locked()
-        return {"key": key, **result}
+        if reopen_requested:
+            _start_worker()   # the approved reopen runs with the next idle cycle's follow-ups
+        return {"key": key, **result, "reopen_requested": reopen_requested}
+
+    def _settle_human_input(question_id: str, decision: str, identity: Identity, note) -> bool:
+        """Caller holds `lock`. A question's checkpoint may be holding human
+        input (11.5): an approval queues the answer's reopen with that input
+        as the reason; a rejection records the note."""
+        waiting = [i for i in human_inputs.for_question(question_id) if i["status"] == "checkpointed"]
+        if not waiting:
+            return False
+        latest = waiting[-1]
+        if decision == "approve":
+            human_inputs.set_status(latest["id"], "approved", reviewer_id=identity.reviewer_id)
+            maintainer.request_reopen(question_id, f"human input from {latest['submitter_id']}, approved by "
+                                                   f"{identity.reviewer_id}: \"{latest['statement']}\" "
+                                                   f"(justification: {latest['justification'] or 'none given'})")
+            return True
+        if decision == "reject_with_note":
+            human_inputs.set_status(latest["id"], "rejected", reviewer_id=identity.reviewer_id, note=note)
+        return False
+
+    def submit_input(identity: Identity, question_id: str, body: dict) -> dict:
+        """Section 11 over HTTP: the submitter is whoever the token says; the
+        input enters as a claim and is examined, never simply accepted."""
+        fields = {}
+        for name, required in (("statement", True), ("justification", False), ("declared_scope", True)):
+            value = body.get(name, "" if not required else None)
+            if not isinstance(value, str) or (required and not value.strip()) or len(value) > MAX_QUESTION_CHARS:
+                raise ApiError(400, f"{name} must be a{' non-empty' if required else ''} string of at most "
+                                    f"{MAX_QUESTION_CHARS} characters")
+            fields[name] = value.strip()
+        with lock:
+            entry = ledger.get(question_id)
+            if entry is None:
+                raise ApiError(404, f"no question {question_id!r}")
+            if not entry.versions:
+                raise ApiError(409, f"{question_id} has no answer yet to respond to")
+            try:
+                submission = submit_human_input(question_id=question_id, round_no=len(entry.versions),
+                                                submitter_id=identity.reviewer_id, submitter_role=identity.role,
+                                                **fields)
+            except HumanInputError as e:
+                raise ApiError(400, str(e))
+            outcome = process_human_input(answer=entry.versions[-1], submission=submission, question_id=question_id,
+                                          importance=entry.importance, reputability=reputability,
+                                          checkpoints=maintainer.idle.checkpoints,
+                                          consolidation=maintainer.idle.consolidation)
+            input_id = f"input-{human_inputs.count() + 1}"
+            human_inputs.record(input_id, {
+                "question_id": question_id, "submitter_id": identity.reviewer_id, "role": identity.role,
+                **fields, "status": outcome["outcome"], "reasons": outcome.get("reasons", []),
+                "challenges": outcome["challenges"], "submitted_at": time.time()})
+            _refresh_locked()
+        return {"id": input_id, "question_id": question_id, "outcome": outcome["outcome"],
+                "reasons": outcome.get("reasons", []), "challenges": outcome["challenges"]}
 
     def submit_ingestion(identity: Identity, body: dict) -> dict:
         """Section 9 over HTTP: only allow-listed hosts, checked here for
@@ -453,6 +524,7 @@ def build_app(data_dir: Path) -> App:
     app.submit_async, app.get_version, app.maintenance_status = submit_async, get_version, maintenance_status
     app.maintainer, app.worker_thread, app.checkpoints = maintainer, worker_thread, checkpoints
     app.reviewers, app.decide_checkpoint, app.submit_ingestion = reviewers, decide_checkpoint, submit_ingestion
+    app.submit_input = submit_input
     app.lock = lock   # a test seam: holding it stands in for a round in progress
     return app
 
@@ -460,7 +532,7 @@ def build_app(data_dir: Path) -> App:
 class Handler(BaseHTTPRequestHandler):
     submit_question = list_questions = get_question = health = None  # set by make_handler
     submit_async = get_version = maintenance_status = checkpoints = None
-    reviewers = decide_checkpoint = submit_ingestion = None
+    reviewers = decide_checkpoint = submit_ingestion = submit_input = None
 
     def _json(self, code: int, payload, headers: dict | None = None) -> None:
         body = json.dumps(payload).encode("utf-8")
@@ -589,6 +661,11 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/ingestion":
             self._authorized_write(lambda identity, body: self.submit_ingestion(identity, body))
             return
+        q_prefix, q_suffix = "/api/questions/", "/input"
+        if path.startswith(q_prefix) and path.endswith(q_suffix) and len(path) > len(q_prefix) + len(q_suffix):
+            qid = unquote(path[len(q_prefix):-len(q_suffix)])
+            self._authorized_write(lambda identity, body: self.submit_input(identity, qid, body))
+            return
         prefix, suffix = "/api/checkpoints/", "/decision"
         if path.startswith(prefix) and path.endswith(suffix) and len(path) > len(prefix) + len(suffix):
             key = unquote(path[len(prefix):-len(suffix)])
@@ -634,6 +711,7 @@ def make_handler(data_dir: Path):
     BoundHandler.reviewers = app.reviewers
     BoundHandler.decide_checkpoint = staticmethod(app.decide_checkpoint)
     BoundHandler.submit_ingestion = staticmethod(app.submit_ingestion)
+    BoundHandler.submit_input = staticmethod(app.submit_input)
     return BoundHandler
 
 

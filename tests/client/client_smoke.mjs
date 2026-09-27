@@ -74,6 +74,11 @@ const fetch = async (path, opts = {}) => {
   } else if (path === "/api/questions?view=summary") {
     body = state.questions.map(q => ({ id: q.id, status: q.status, question: q.question, importance: q.importance,
                                        versions: q.versions.length, ...(q.error ? { error: q.error } : {}) }));
+  } else if (path.startsWith("/api/questions/") && path.endsWith("/input") && opts.method === "POST") {
+    inputs.push({ path, headers: opts.headers, body: JSON.parse(opts.body) });
+    status = 200; body = { outcome: "checkpointed" };
+    const q = state.questions.find(q => q.id === "q-1");
+    q.human_inputs = [{ submitter_id: "mo", statement: inputs.at(-1).body.statement, status: "checkpointed" }];
   } else if (path.startsWith("/api/questions/")) {
     const id = decodeURIComponent(path.slice("/api/questions/".length));
     fullFetches[id] = (fullFetches[id] || 0) + 1;
@@ -92,8 +97,10 @@ const fetch = async (path, opts = {}) => {
 const timers = [];
 const decisions = [];
 let promptAnswer = null;
+const promptQueue = [];   // answers for a sequence of prompts, used before promptAnswer
+const inputs = [];
 const context = vm.createContext({ document, fetch, setTimeout: (f, ms) => timers.push({ f, ms }), console,
-                                   prompt: () => promptAnswer });
+                                   prompt: () => (promptQueue.length ? promptQueue.shift() : promptAnswer) });
 vm.runInContext(script, context);
 const settle = async () => { for (let i = 0; i < 20; i++) await new Promise(r => setImmediate(r)); };
 const cardHtml = id => vm.runInContext(`cards.get(${JSON.stringify(id)}).innerHTML`, context);
@@ -224,5 +231,25 @@ assert.match(document.getElementById("review-status").textContent, /q-9: refused
 items().listeners.click({ target: { dataset: {} } });  // a click that isn't on a button does nothing
 await settle();
 assert.equal(decisions.length, 2);
+
+// --- batch 11: responding to an answer with human input ------------------------
+// (the token entered above re-rendered the cards: each answered one can be responded to)
+assert.match(cardHtml("q-1"), /data-respond="q-1">Respond with evidence/);
+assert.ok(!cardHtml("q-5").includes("data-respond"), "a suspended question, with no answer, has nothing to respond to");
+promptQueue.push("", "unused", "unused");                          // cancelled at the first prompt: nothing sent
+document.getElementById("results").listeners.click({ target: { dataset: { respond: "q-1" } } });
+await settle();
+assert.equal(inputs.length, 0);
+promptQueue.length = 0;
+promptQueue.push("<b>2.5 is ambiguous</b>", "see IEEE-754", "standard:IEEE-754/decimal.ROUND_HALF_EVEN");
+document.getElementById("results").listeners.click({ target: { dataset: { respond: "q-1" } } });
+await settle();
+const sent = inputs.at(-1);
+assert.equal(sent.path, "/api/questions/q-1/input");
+assert.equal(sent.headers.Authorization, "Bearer tok-123");
+assert.deepEqual(sent.body, { statement: "<b>2.5 is ambiguous</b>", justification: "see IEEE-754",
+                              declared_scope: "standard:IEEE-754/decimal.ROUND_HALF_EVEN" });
+assert.equal(document.getElementById("review-status").textContent, "q-1: waiting for a reviewer");
+assert.match(cardHtml("q-1"), /mo responded: "&lt;b&gt;2\.5 is ambiguous&lt;\/b&gt;" — waiting for a reviewer/);
 
 console.log("client smoke: all checks passed");

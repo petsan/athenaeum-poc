@@ -1419,8 +1419,41 @@ Same rules and stop conditions.
 | AR | **Decision 11: a judging benchmark for challenger models.** A curated, balanced set of labelled answers and statements. A challenger's "no" counts only once its latest recorded score, for the *current* benchmark and challenge-prompt versions, meets a stated accuracy. Includes a script to run it live and record the result, plus what OLMo 3 7B actually scores. | **done** — §97 |
 | AS | **Decision 12: the Belief Graph as an append-only journal.** Each checkpoint holds only the nodes and edges it adds; reads apply new entries incrementally from a cache. Existing full-snapshot logs keep working without a rewrite. Re-measure storage. | **done** — §98 |
 | AT | **Reopens deliberate like first answers.** They still skip verification routing and domain-fidelity re-grounding (noted in §90). Thread `verification` and `fidelity` through the reopen path. | **done** — §99 |
-| AU | **Human input over HTTP.** The importance-gated checkpoint rule (decision 5) exists, but nothing reaches it from the app. Add a token-authenticated endpoint: input enters as a cross-examined claim, is checkpointed or reopens the answer by the existing rules, and is recorded against the submitter's track record. | open |
+| AU | **Human input over HTTP.** The importance-gated checkpoint rule (decision 5) exists, but nothing reaches it from the app. Add a token-authenticated endpoint: input enters as a cross-examined claim, is checkpointed or reopens the answer by the existing rules, and is recorded against the submitter's track record. | **done** — §100 |
 | — | End-to-end test extended; live smoke; README refreshed if anything user-visible changed. | open |
+
+## 100. Human input over HTTP — Phase AU
+
+Section 11's pieces (submission, cross-examination, submitter grading, materiality, the importance-gated checkpoint from decision 5) existed, but nothing in the app reached them. Now:
+
+**`POST /api/questions/<id>/input`**, with a reviewer token of any role, takes `{statement, justification, declared_scope}`. The submitter's identity and role come from the **token**, never the body (tested). `human_input.process_human_input` then applies the existing rules in order:
+1. the input becomes a `human_input` claim and is **cross-examined** by the agents;
+2. the submitter is graded on whether it survived (§11.3, as a `human_submitter` in the reputability store);
+3. the outcome is decided:
+   - **`challenged`**: an agent challenged it, and it goes no further;
+   - **`not_material`**: it concerns nothing the answer relies on;
+   - **`recorded`**: material, but the question is below the importance threshold and the input touches neither the leading conclusion nor consolidated knowledge, so it stands as examined testimony and nothing reopens (§7.3's gate);
+   - **`checkpointed`**: it waits for a reviewer, because the question is important, or the input would change the leading conclusion, or would overturn a Tier C claim.
+
+**Approval.** When a reviewer approves a question's checkpoint that holds human input, `Maintainer.request_reopen` queues the answer's reopen, with the input as the stated reason ("human input from mo, approved by rita: …"). The request is persisted and runs with the next idle cycle's follow-ups. An approval is itself the judgment, so the importance gate doesn't apply to it. §11.7 still holds: only a reviewer can approve, and never their own input (409). A rejection keeps its note, and nothing reopens.
+
+**Storage and display.** A new Body store, `HumanInputStore` (`human-inputs` log), records each input and its fate. `GET /api/questions/<id>` includes them.
+
+**Client.** With a token entered, every answered card has a "Respond with evidence" button, which asks for the statement, the reason and what it concerns. Each input is shown on the card with its fate in plain words, escaped like everything else.
+
+Tests (`tests/test_human_input_api.py`, 13):
+- each of the four outcomes (the "challenged" path by forcing a cross-examiner challenge; the rest for real);
+- the leading-conclusion rule at importance 0;
+- approval → reopen with the input in the reasons, done by the background worker, and self-approval refused;
+- a rejection keeps its note;
+- bad submissions (404, 400 ×3), and an unanswered question (409);
+- over HTTP, a 401 without a token, and identity taken from the token.
+
+The client smoke test covers the button, a cancelled prompt sending nothing, the request, the displayed outcome, and escaping of the statement.
+
+**Found while writing it:** my first tests used "17" as the scope for the prime answer, but that claim has no subject. It is identified by its source, `computed:trial_division`, so "17" was correctly not material. This was a test-data mistake, not a bug.
+
+**Full live suite: 689 passed, 1 skipped.** 690 collected (677 prior + 13 new).
 
 ## 99. Reopens deliberate like first answers — Phase AT
 
