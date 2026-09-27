@@ -3,9 +3,12 @@ Description=Daily schedule for pve-athenaeum-backup.service
 
 [Timer]
 OnCalendar=*-*-* 03:30:00
-# Catches up on a missed run if the host was off at 03:30 (e.g. right
-# after an accidental power-off, or if the host was mid-reboot) -- runs
-# once shortly after boot instead of silently waiting a full day.
+# This host is normally off at 03:30 (it's powered down between sessions),
+# and Persistent=true alone did not catch up after a cold boot: it only
+# replays a run the TIMER itself missed, and it had never fired (the first
+# backup was started by hand; known-bugs.md #20). So also run shortly after
+# every boot.
+OnBootSec=10min
 Persistent=true
 RandomizedDelaySec=10m
 

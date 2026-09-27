@@ -78,7 +78,8 @@ const fetch = async (path, opts = {}) => {
     inputs.push({ path, headers: opts.headers, body: JSON.parse(opts.body) });
     status = 200; body = { outcome: "checkpointed" };
     const q = state.questions.find(q => q.id === "q-1");
-    q.human_inputs = [{ submitter_id: "mo", statement: inputs.at(-1).body.statement, status: "checkpointed" }];
+    q.human_inputs = [{ submitter_id: "mo", statement: inputs.at(-1).body.statement, status: "checkpointed" },
+                      { submitter_id: "rita", statement: "<i>no source</i>", status: "challenged", responds_to: "input-1" }];
   } else if (path.startsWith("/api/questions/")) {
     const id = decodeURIComponent(path.slice("/api/questions/".length));
     fullFetches[id] = (fullFetches[id] || 0) + 1;
@@ -251,5 +252,6 @@ assert.deepEqual(sent.body, { statement: "<b>2.5 is ambiguous</b>", justificatio
                               declared_scope: "standard:IEEE-754/decimal.ROUND_HALF_EVEN" });
 assert.equal(document.getElementById("review-status").textContent, "q-1: waiting for a reviewer");
 assert.match(cardHtml("q-1"), /mo responded: "&lt;b&gt;2\.5 is ambiguous&lt;\/b&gt;" — waiting for a reviewer/);
+assert.match(cardHtml("q-1"), /rita rejected input-1, noting: "&lt;i&gt;no source&lt;\/i&gt;" — challenged in cross-examination/);
 
 console.log("client smoke: all checks passed");

@@ -233,7 +233,7 @@ Earlier sections each ended with their own "suggested next step," repeatedly sup
 
 ### Infra (Proxmox) — real, not yet drilled
 - [x] **Verify the whole stack survives an actual cold boot.** Done for real on 2026-09-22: `shutdown now` on the host, confirmed fully unreachable, powered back on, then verified — `onboot: 1` started both guests (uptime matched boot time), `pve-docker-bridge-fix.service` ran automatically at boot (`0/SUCCESS`, confirmed via `systemctl status` directly, not just inferred), and guest-to-internet reachability worked immediately (104 pinged `8.8.8.8` cleanly right after boot).
-- [ ] **Backup timer's `Persistent=true` did NOT catch up on this cold boot — real gap, not a false alarm.** After the reboot, `pve-athenaeum-backup.timer` was `active (waiting)` for the next normal `03:30` slot, 2+ hours out, rather than firing immediately. Root cause: the very first backup was triggered manually (`systemctl start pve-athenaeum-backup.service`) during setup, bypassing the *timer* — so the timer itself has never recorded a trigger of its own, and `Persistent=true` only catches up a run the timer previously missed, not "any backup ever." Given this host is routinely powered off well before 3:30am, **the backup may rarely or never actually fire** under real usage as currently configured — the opposite of "self-updating." **Proposed fix, not yet applied:** add `OnBootSec=10min` alongside the existing `OnCalendar` in `pve-athenaeum-backup.timer`, so it also reliably fires shortly after every boot. Decide and apply next session.
+- [ ] **Backup timer's `Persistent=true` did NOT catch up on this cold boot — real gap, not a false alarm.** After the reboot, `pve-athenaeum-backup.timer` was `active (waiting)` for the next normal `03:30` slot, 2+ hours out, rather than firing immediately. Root cause: the very first backup was triggered manually (`systemctl start pve-athenaeum-backup.service`) during setup, bypassing the *timer* — so the timer itself has never recorded a trigger of its own, and `Persistent=true` only catches up a run the timer previously missed, not "any backup ever." Given this host is routinely powered off well before 3:30am, **the backup may rarely or never actually fire** under real usage as currently configured — the opposite of "self-updating." **Proposed fix, not yet applied:** add `OnBootSec=10min` alongside the existing `OnCalendar` in `pve-athenaeum-backup.timer`, so it also reliably fires shortly after every boot. Decide and apply next session. **2026-09-26: `OnBootSec=10min` added to the repo's timer unit; not yet on the live host, which needs host root (one-line command in known-bugs.md #20, §103).**
 - [ ] Confirm the `local-thin-multi`/`local` storage content-type config is still intact after any future script touches it — `known-bugs.md` #19 was a real, if fixed, near-miss.
 - [ ] Off-host/off-site backup remains explicitly not built (`infra/proxmox/README.md`'s stated scope boundary) — only build this if actually needed, don't assume it's implied by "backups exist now."
 - [ ] **Decide: auto-update mechanism for deployed code, and where it actually runs.** Raised 2026-09-22, deliberately deferred rather than decided under time pressure. Two real options, architecturally different, needs a real decision together: (a) set up auto `git pull` on LXC guest 104 (`athenaeum-preflight`) from the new private GitHub repo (`github.com/petsan/athenaeum-poc`), replacing the current manual `scp` workflow — no Docker involved; or (b) build and run Athenaeum inside an actual Docker container on the host's *existing*, otherwise-unrelated Docker daemon, with a watchtower-style auto pull+restart — a genuinely new piece of infrastructure sharing that daemon with its other workloads. Neither has been started.
@@ -1423,6 +1423,52 @@ Same rules and stop conditions.
 | — | End-to-end test extended; live smoke; README refreshed if anything user-visible changed. | **done** — §101 |
 
 **Batch 11 (AR–AU) complete 2026-09-26.** No owner decision is open.
+
+## 103. The remaining to-do list
+
+The owner asked for this on 2026-09-26 ("please do the following"). Of the six items left, four could be done without further input. Two need the owner to choose something.
+
+**Every lab model on the judging benchmark.** Live, 2 repeats each (48 judgments), recorded into LXC 104's `data/api-run` fitness store:
+
+| Model | Score | Qualifies (95%)? | Pattern of misses |
+|---|---|---|---|
+| mistral-7b | 45/48, 94% | no, one point short | accepted wrong counts only (spider legs, continents) |
+| phi-3.5-mini | 42/48, 88% | no | accepted wrong answers only (spider legs, continents, closest planet) |
+| olmo3-7b | 38/48, 79% | no | mostly rejected right short answers ("4", "0", "Paris") |
+| granite-2b | 38/48, 79% | no | both kinds |
+| qwen2.5-1.5b | 35/48, 73% | no | accepted wrong answers only; never rejected a right one |
+| qwen-coder-1.5b | 27/48, 56% | no | near chance |
+
+OLMo 3 7B scored 79% this time against 77% in batch 11, so the benchmark is stable to within a couple of cases. No model's challenges count, so all stay dissent. The two failure modes are opposite: OLMo rejects correct short answers, while Mistral, Phi and Qwen 2.5 accept wrong ones. The 95% bar catches both. Mistral 7B is the only near-qualifier. Qualifying needs a score, not a model swap, so nothing changes until a model measures ≥ 95%. README and the demo cite the new figures.
+
+**Rejection notes re-enter as input (design §11.4).** A reviewer's `reject_with_note` used to only record the note. Now the note is examined as human input of its own (`api._examine_input_locked`, which the input endpoint shares):
+- it is attributed to the reviewer, so they are graded on it like any submitter;
+- it declares the rejected input's scope;
+- it carries `responds_to: "input-N"`;
+- the decision response includes it as `note_input`.
+
+If the note is material it checkpoints, and the conflict-of-interest rule means a *different* reviewer must clear it. If it is challenged it goes no further, and the original checkpoint stays pending as the rejection left it. The client shows it as "rita rejected input-1, noting: ...". Tests: two new API tests (note checkpointed then cleared by a second reviewer, which reopens; note challenged), plus a client smoke assertion.
+
+**The answer prompt: measured, left as it is.** `ask_model` now takes a `frame` (default `ANSWER_FRAME`, unchanged), and `scripts/measure_answer_prompts.py` compares frames live. On OLMo 3 7B, 10 questions × 3, one attempt each, no retries:
+
+| Frame | Skipped | Right (where known) | Time |
+|---|---|---|---|
+| current `Q: …\nA:` | 1/30 (3%) | 24/24 | 518 s |
+| `Question: …\nAnswer:` | 0/30 | 24/24 | 481 s |
+| one-shot (a Paris example first) | 0/30 | 24/24 | 402 s |
+| "Answer the question in one short line." | **30/30** | — | 135 s |
+
+The batch 10 skip rate of 25% was one question ("what force acts on a stationary object?"); across a broader set the current frame skips 3%. Zero out of 30 against one out of 30 is not a difference this sample can show, and all three answering frames were always right. Changing the prompt would change every model claim, including reopen diffs, for no measured gain, so the default stays. The five retries remain as insurance. The instruction frame is a real finding. Checked on the raw backend, OLMo returns an entirely empty completion for it, every time: the same failure as the original unframed prompt (§38), from one instruction line placed before the `Q:`. Any future instruction-style frame must be measured before adoption. A first 6-repeat run timed out at 50 minutes without output, because the script only printed at the end; it now prints each frame as it finishes. Each call takes 11–23 s on the CPU guest.
+
+**The backup timer** (known-bugs #20). `OnBootSec=10min` is now in `infra/proxmox/systemd/pve-athenaeum-backup.timer`, so any rebuild gets it. It is **not on the live host**: that needs root on `proxmox01`, which is deliberately outside the automation's access (the API token can't write host files, and no host SSH key exists). The one-line command to apply it is in known-bugs #20.
+
+**Not done, needing the owner:**
+- the auto-update mechanism (manual, or a pull-and-restart job);
+- an off-site backup destination (any destination must not be a paid service).
+
+Both are unchanged in the §26 checklist.
+
+**Full live suite: 693 passed, 1 skipped** (690 + 3 new: two rejection-note API tests and the frame test), and the client smoke passes.
 
 ## 102. The narrated demo covers batches 6–11
 

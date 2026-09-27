@@ -351,7 +351,7 @@ try:
         scores.record_judging("judge-model", result)
         print(f"a judge that {label}: {result['correct']}/{result['total']} -> challenges count?",
               challenger_qualified(scores, "judge-model"))
-    print(f"(the bar is {QUALIFYING_ACCURACY:.0%}; live, OLMo 3 7B scored 77%, so its challenges stay dissent only)")
+    print(f"(the bar is {QUALIFYING_ACCURACY:.0%}; live, OLMo 3 7B scores 77-79%, so its challenges stay dissent only)")
     mbr.ask_model = stand_in_model
 
     step("18. Human input is examined, and waits for a reviewer when it matters (Section 11)")

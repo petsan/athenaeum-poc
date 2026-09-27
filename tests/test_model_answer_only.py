@@ -64,3 +64,20 @@ def test_the_same_answer_to_different_questions_is_not_the_same_claim(monkeypatc
     b = model_backed_claim(agent_name="Physics", question="why do objects fall\nwhen dropped?", question_id="q2")
     assert claim_key(a.to_dict()) != claim_key(b.to_dict())
     assert b.statement == "Gravity (in answer to: why do objects fall when dropped?)"
+
+
+def test_the_question_is_framed_once_and_braces_in_it_survive(monkeypatch):
+    sent = []
+
+    class Capture:
+        def __init__(self, *a, **k):
+            pass
+
+        def infer(self, spec, prompt):
+            sent.append(prompt)
+            return "Four"
+    _backend(monkeypatch, iter([]))
+    monkeypatch.setattr(mbr, "LlamaCppBackend", Capture)
+    assert ask_model("what is {2+2}?") == "Four"
+    assert ask_model("what is 2+2?", frame="Question: {question}\nAnswer:") == "Four"
+    assert sent == ["Q: what is {2+2}?\nA:", "Question: what is 2+2?\nAnswer:"]

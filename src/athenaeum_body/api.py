@@ -428,29 +428,62 @@ def build_app(data_dir: Path) -> App:
                 raise ApiError(409, str(e))
             except HumanInputError as e:
                 raise ApiError(400, str(e))
-            reopen_requested = _settle_human_input(key, decision, identity, note)
+            reopen_requested, note_input = _settle_human_input(key, decision, identity, note)
             _refresh_locked()
         if reopen_requested:
             _start_worker()   # the approved reopen runs with the next idle cycle's follow-ups
-        return {"key": key, **result, "reopen_requested": reopen_requested}
+        response = {"key": key, **result, "reopen_requested": reopen_requested}
+        if note_input is not None:
+            response["note_input"] = note_input
+        return response
 
-    def _settle_human_input(question_id: str, decision: str, identity: Identity, note) -> bool:
+    def _settle_human_input(question_id: str, decision: str, identity: Identity, note) -> tuple[bool, dict | None]:
         """Caller holds `lock`. A question's checkpoint may be holding human
         input (11.5): an approval queues the answer's reopen with that input
-        as the reason; a rejection records the note."""
+        as the reason. A rejection is not an override either (11.4): the
+        reviewer's note re-enters as human input of its own, examined like
+        any other. Returns (reopen requested, the note's input or None)."""
         waiting = [i for i in human_inputs.for_question(question_id) if i["status"] == "checkpointed"]
         if not waiting:
-            return False
+            return False, None
         latest = waiting[-1]
         if decision == "approve":
             human_inputs.set_status(latest["id"], "approved", reviewer_id=identity.reviewer_id)
             maintainer.request_reopen(question_id, f"human input from {latest['submitter_id']}, approved by "
                                                    f"{identity.reviewer_id}: \"{latest['statement']}\" "
                                                    f"(justification: {latest['justification'] or 'none given'})")
-            return True
+            return True, None
         if decision == "reject_with_note":
             human_inputs.set_status(latest["id"], "rejected", reviewer_id=identity.reviewer_id, note=note)
-        return False
+            entry = ledger.get(question_id)
+            if entry is not None and entry.versions:
+                return False, _examine_input_locked(entry, identity, {
+                    "statement": note, "justification": f"{identity.reviewer_id}'s reason for rejecting {latest['id']}",
+                    "declared_scope": latest["declared_scope"]}, responds_to=latest["id"])
+        return False, None
+
+    def _examine_input_locked(entry, identity: Identity, fields: dict, responds_to: str | None = None) -> dict:
+        """Caller holds `lock`. Section 11: one input enters as a claim against
+        the question's latest answer and is examined, then recorded."""
+        question_id = entry.id
+        try:
+            submission = submit_human_input(question_id=question_id, round_no=len(entry.versions),
+                                            submitter_id=identity.reviewer_id, submitter_role=identity.role,
+                                            **fields)
+        except HumanInputError as e:
+            raise ApiError(400, str(e))
+        outcome = process_human_input(answer=entry.versions[-1], submission=submission, question_id=question_id,
+                                      importance=entry.importance, reputability=reputability,
+                                      checkpoints=maintainer.idle.checkpoints,
+                                      consolidation=maintainer.idle.consolidation)
+        input_id = f"input-{human_inputs.count() + 1}"
+        human_inputs.record(input_id, {
+            "question_id": question_id, "submitter_id": identity.reviewer_id, "role": identity.role,
+            **fields, "status": outcome["outcome"], "reasons": outcome.get("reasons", []),
+            "challenges": outcome["challenges"], "submitted_at": time.time(),
+            **({"responds_to": responds_to} if responds_to else {})})
+        return {"id": input_id, "question_id": question_id, "outcome": outcome["outcome"],
+                "reasons": outcome.get("reasons", []), "challenges": outcome["challenges"]}
 
     def submit_input(identity: Identity, question_id: str, body: dict) -> dict:
         """Section 11 over HTTP: the submitter is whoever the token says; the
@@ -468,24 +501,9 @@ def build_app(data_dir: Path) -> App:
                 raise ApiError(404, f"no question {question_id!r}")
             if not entry.versions:
                 raise ApiError(409, f"{question_id} has no answer yet to respond to")
-            try:
-                submission = submit_human_input(question_id=question_id, round_no=len(entry.versions),
-                                                submitter_id=identity.reviewer_id, submitter_role=identity.role,
-                                                **fields)
-            except HumanInputError as e:
-                raise ApiError(400, str(e))
-            outcome = process_human_input(answer=entry.versions[-1], submission=submission, question_id=question_id,
-                                          importance=entry.importance, reputability=reputability,
-                                          checkpoints=maintainer.idle.checkpoints,
-                                          consolidation=maintainer.idle.consolidation)
-            input_id = f"input-{human_inputs.count() + 1}"
-            human_inputs.record(input_id, {
-                "question_id": question_id, "submitter_id": identity.reviewer_id, "role": identity.role,
-                **fields, "status": outcome["outcome"], "reasons": outcome.get("reasons", []),
-                "challenges": outcome["challenges"], "submitted_at": time.time()})
+            result = _examine_input_locked(entry, identity, fields)
             _refresh_locked()
-        return {"id": input_id, "question_id": question_id, "outcome": outcome["outcome"],
-                "reasons": outcome.get("reasons", []), "challenges": outcome["challenges"]}
+        return result
 
     def submit_ingestion(identity: Identity, body: dict) -> dict:
         """Section 9 over HTTP: only allow-listed hosts, checked here for

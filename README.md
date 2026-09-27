@@ -146,7 +146,8 @@ a deliberation killed mid-way resumes from its last completed round.
   re-examines model-backed claims too, but its "no" counts only once it
   passes a judging benchmark of labelled answers
   (`scripts/run_judging_benchmark.py`); until then it is recorded as
-  dissent. OLMo 3 7B currently scores 77% against the 95% needed. The same pass drives knowledge
+  dissent. OLMo 3 7B scores 77–79% against the 95% needed, and no lab
+  model qualifies yet (Mistral 7B comes closest, at 94%). The same pass drives knowledge
   consolidation, dispute resolution, domain-drift monitoring, and
   proposals to amend the grading standard (which only a human reviewer
   can approve), and records each claim's fate for per-agent calibration.
@@ -170,7 +171,8 @@ a deliberation killed mid-way resumes from its last completed round.
   important question, the leading conclusion, or consolidated knowledge)
   wait at a human checkpoint with role separation and
   conflict-of-interest checks; an approved one reopens the answer with
-  the input as the stated reason.
+  the input as the stated reason. A rejection is no override either:
+  the reviewer's note enters as input of its own, examined the same way.
 - **Evaluation** — ground-truth benchmarks, baselines and ablations,
   calibration and drift tracking, reproducible audits of re-evaluation
   and consolidation, non-compensatory integrity gates, and an

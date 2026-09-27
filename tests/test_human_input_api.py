@@ -113,6 +113,55 @@ def test_a_rejected_input_keeps_its_note_and_reopens_nothing(app):
     assert app.maintainer._m.get("requested_reopens", {}) == {}
 
 
+def test_a_rejection_note_re_enters_as_input_of_its_own(app):
+    """Section 11.4: reject-with-note is not a unilateral override. The note
+    is examined like any input, attributed to the reviewer who wrote it, so
+    if it matters it waits for a different reviewer."""
+    set_importance(app, "q-1", 0.0)
+    say(app, "q-1", "computed:trial_division", statement="17 has a factor I found")
+    decided = app.decide_checkpoint(REVIEWER, "q-1", {"decision": "reject_with_note",
+                                                      "note": "trial division up to 4 finds no factor of 17"})
+    assert decided["note_input"]["id"] == "input-2" and decided["note_input"]["outcome"] == "checkpointed"
+    original, note = app[2]("q-1")["human_inputs"]
+    assert original["status"] == "rejected"
+    assert note["submitter_id"] == "rita" and note["role"] == "reviewer" and note["responds_to"] == "input-1"
+    assert note["statement"] == "trial division up to 4 finds no factor of 17"
+    assert note["justification"] == "rita's reason for rejecting input-1"
+    assert note["declared_scope"] == "computed:trial_division"
+    assert app.maintainer.idle.checkpoints.get("q-1")["submitter_id"] == "rita"
+    with pytest.raises(ApiError) as own:                            # rita can't clear her own note
+        app.decide_checkpoint(REVIEWER, "q-1", {"decision": "approve"})
+    assert own.value.status == 409
+    again = app.decide_checkpoint(Identity("ravi", "reviewer"), "q-1", {"decision": "approve"})
+    assert again["reopen_requested"] is True and "note_input" not in again
+    assert app[2]("q-1")["human_inputs"][1]["status"] == "approved"
+
+
+def test_a_challenged_rejection_note_goes_no_further(app, monkeypatch):
+    """The note gets no free pass: if a cross-examiner challenges it, it
+    counts against the reviewer's record, and the original checkpoint stays
+    as the rejection left it (still pending, still mo's)."""
+    from athenaeum_brain import rounds
+    real = rounds.cross_examination_round
+    set_importance(app, "q-2", 0.9)
+    say(app, "q-2", "computed:decimal.ROUND_HALF_UP")
+
+    def challenge_everything(claims, qid):
+        out = real(claims, qid)
+        c = claims[0]
+        out.append(type(c)(question_id=qid, round=2, issuing_agent="Logic", statement="that does not follow",
+                           claim_type="procedural", confidence=1.0, defeat_condition="d", jurisdiction_check=True,
+                           relation="challenges", target_claim_id=c.claim_id))
+        return out
+    monkeypatch.setattr(rounds, "cross_examination_round", challenge_everything)
+    decided = app.decide_checkpoint(REVIEWER, "q-2", {"decision": "reject_with_note", "note": "see the standard"})
+    assert decided["note_input"]["outcome"] == "challenged"
+    assert app[2]("q-2")["human_inputs"][1]["responds_to"] == "input-1"
+    cp = app.maintainer.idle.checkpoints.get("q-2")
+    assert cp["status"] == "pending_human_checkpoint" and cp["submitter_id"] == "mo"
+    assert app.maintainer.idle.reputability.current_grade("rita") is not None      # graded like any submitter
+
+
 @pytest.mark.parametrize("qid, body, status", [
     ("q-404", {"statement": "x", "declared_scope": "17"}, 404),
     ("q-1", {"statement": "", "declared_scope": "17"}, 400),

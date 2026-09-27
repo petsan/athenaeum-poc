@@ -62,8 +62,13 @@ def fallback_suppressed(agent_names):
         _SUPPRESSED_AGENTS.reset(token)
 
 
+# How a question is put to the model (see ask_model's docstring for why it
+# is framed at all). scripts/measure_answer_prompts.py compares alternatives.
+ANSWER_FRAME = "Q: {question}\nA:"
+
+
 def ask_model(question: str, model_name: str = DEFAULT_MODEL, n_predict: int = 96,
-              timeout_seconds: float = 120.0, max_attempts: int = 5) -> str | None:
+              timeout_seconds: float = 120.0, max_attempts: int = 5, frame: str = ANSWER_FRAME) -> str | None:
     """Returns the model's answer -- its completion cut to the answer itself
     (answer_only) -- or None if the backend is unreachable or only ever
     answered with nothing.
@@ -97,7 +102,7 @@ def ask_model(question: str, model_name: str = DEFAULT_MODEL, n_predict: int = 9
     future one) to remember to retry or frame prompts individually."""
     if model_name not in MODEL_LAB_ENDPOINTS:
         return None
-    framed_question = f"Q: {question}\nA:"
+    framed_question = frame.format(question=question)
     spec = ModelSpec(name=model_name, vram_gb=0)
     cpu_backend = LlamaCppBackend(endpoints={model_name: MODEL_LAB_ENDPOINTS[model_name]},
                                    n_predict=n_predict, timeout_seconds=timeout_seconds)

@@ -219,7 +219,8 @@ function renderCard(entry) {
     html += `<div class="claim"><span class="tag dissent">suspended</span>Deliberation failed repeatedly and was stopped: ${esc(entry.error || "no error recorded")}</div>`;
   }
   for (const i of inputs) {   // human input on this question (Section 11), and what became of it
-    html += `<div class="note">${esc(i.submitter_id)} responded: "${esc(i.statement)}" — ${esc(INPUT_OUTCOMES[i.status] || i.status)}</div>`;
+    const said = i.responds_to ? `rejected ${esc(i.responds_to)}, noting` : "responded";   // a rejection note is input too (11.4)
+    html += `<div class="note">${esc(i.submitter_id)} ${said}: "${esc(i.statement)}" — ${esc(INPUT_OUTCOMES[i.status] || i.status)}</div>`;
   }
   if (versions.length && reviewerToken()) {
     html += `<div class="versions"><button data-respond="${esc(entry.id)}">Respond with evidence</button></div>`;
