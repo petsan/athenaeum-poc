@@ -54,8 +54,8 @@
   <text x="695" y="166" text-anchor="middle" class="body">inside the request</text>
   <rect x="796" y="115" width="178" height="62" rx="7" class="box" stroke="#7950f2"/>
   <text x="885" y="134" text-anchor="middle" class="head">Reviewer-token writes</text>
-  <text x="885" y="151" text-anchor="middle" class="body">review decisions · ingestion</text>
-  <text x="885" y="166" text-anchor="middle" class="body">from allow-listed hosts</text>
+  <text x="885" y="151" text-anchor="middle" class="body">human input · review decisions ·</text>
+  <text x="885" y="166" text-anchor="middle" class="body">allow-listed ingestion</text>
   <line x1="600" y1="190" x2="600" y2="208" class="link" marker-end="url(#arrow)"/>
 
   <!-- Maintainer -->

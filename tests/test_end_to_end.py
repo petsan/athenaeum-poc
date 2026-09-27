@@ -696,3 +696,78 @@ def test_the_owner_decisions_together(tmp_path, monkeypatch):
     assert len(question_logs) == 2 and all(n.endswith(".txt") for n in question_logs)
     index = CheckpointLog(cas=ContentAddressedStore(tmp_path / "cas"), index_path=tmp_path / "index.txt").read_latest()
     assert index == {"layout": 2, "ids": ["q-1", "q-2"]}
+
+
+# ---------------------------------------------------------------------------
+# Batch 11 (AR-AU), over real HTTP with the background worker: a member's
+# evidence on an important answer waits for a reviewer, whose approval
+# reopens the answer -- deliberated like a first answer -- with the input as
+# the reason; the challenger isn't benchmark-qualified; the graph is a journal.
+# ---------------------------------------------------------------------------
+
+def test_human_input_through_review_to_reopen(tmp_path, monkeypatch):
+    import json
+    import threading
+    import time
+    import urllib.error
+    import urllib.request
+    from http.server import ThreadingHTTPServer
+    from athenaeum_body import api
+    from athenaeum_body.reviewers import add_reviewer
+
+    monkeypatch.setattr(model_backed_reasoning, "ask_model", lambda *a, **k: None)
+    tokens = {rid: add_reviewer(tmp_path / "reviewers.json", rid, role)
+              for rid, role in (("mo", "member"), ("rita", "reviewer"))}
+    server = ThreadingHTTPServer(("127.0.0.1", 0), api.make_handler(tmp_path))
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    base = f"http://127.0.0.1:{server.server_address[1]}"
+
+    def call(path, payload=None, who=None):
+        headers = {"Content-Type": "application/json", **({"Authorization": f"Bearer {tokens[who]}"} if who else {})}
+        req = urllib.request.Request(base + path, data=json.dumps(payload).encode() if payload is not None else None,
+                                     method="POST" if payload is not None else "GET", headers=headers)
+        try:
+            with urllib.request.urlopen(req, timeout=30) as r:
+                return r.status, json.loads(r.read())
+        except urllib.error.HTTPError as e:
+            return e.code, json.loads(e.read())
+
+    try:
+        # an important answer: rounding (three domains, two output types)
+        _, asked = call("/api/questions", {"question": "should we round 2.5 up or down?"})
+        qid = asked["id"]
+        assert asked["importance"] >= 0.3
+
+        # Phase AU: a member's evidence waits for a reviewer
+        status, out = call(f"/api/questions/{qid}/input",
+                           {"statement": "financial reporting rounds half up by regulation",
+                            "justification": "the applicable accounting standard",
+                            "declared_scope": "computed:decimal.ROUND_HALF_UP"}, who="mo")
+        assert status == 200 and out["outcome"] == "checkpointed"
+        assert call(f"/api/checkpoints/{qid}/decision", {"decision": "approve"}, who="mo")[0] == 403  # not a reviewer
+        status, decided = call(f"/api/checkpoints/{qid}/decision", {"decision": "approve"}, who="rita")
+        assert status == 200 and decided["reopen_requested"] is True
+
+        # ...and the worker reopens it, like a first answer (Phase AT), with the input as the reason
+        deadline = time.time() + 30
+        while True:
+            _, q = call(f"/api/questions/{qid}")
+            if len(q["versions"]) == 2:
+                break
+            assert time.time() < deadline, q
+            time.sleep(0.05)
+        reopened = q["versions"][1]
+        assert any("human input from mo, approved by rita" in r for r in reopened["reopen_context"]["reasons"])
+        assert "verification" in reopened
+        assert q["human_inputs"][0]["status"] == "approved"
+
+        # Phase AR: the admitted model isn't benchmark-qualified, so its challenges don't count
+        _, m = call("/api/maintenance")
+        assert m["challengers"]["olmo3-7b"] == {"counts": False, "why": "never run on the judging benchmark"}
+    finally:
+        server.shutdown()
+
+    # Phase AS: on disk, the graph is a journal -- every checkpoint holds only what it added
+    log = CheckpointLog(cas=ContentAddressedStore(tmp_path / "cas"), index_path=tmp_path / "belief-graph.txt")
+    payloads = [log.read_state(h) for h in log._read_index()]
+    assert payloads and all(p.get("journal") == 1 for p in payloads)

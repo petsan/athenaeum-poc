@@ -1420,7 +1420,31 @@ Same rules and stop conditions.
 | AS | **Decision 12: the Belief Graph as an append-only journal.** Each checkpoint holds only the nodes and edges it adds; reads apply new entries incrementally from a cache. Existing full-snapshot logs keep working without a rewrite. Re-measure storage. | **done** — §98 |
 | AT | **Reopens deliberate like first answers.** They still skip verification routing and domain-fidelity re-grounding (noted in §90). Thread `verification` and `fidelity` through the reopen path. | **done** — §99 |
 | AU | **Human input over HTTP.** The importance-gated checkpoint rule (decision 5) exists, but nothing reaches it from the app. Add a token-authenticated endpoint: input enters as a cross-examined claim, is checkpointed or reopens the answer by the existing rules, and is recorded against the submitter's track record. | **done** — §100 |
-| — | End-to-end test extended; live smoke; README refreshed if anything user-visible changed. | open |
+| — | End-to-end test extended; live smoke; README refreshed if anything user-visible changed. | **done** — §101 |
+
+**Batch 11 (AR–AU) complete 2026-09-26.** No owner decision is open.
+
+## 101. End-to-end over batch 11
+
+`test_human_input_through_review_to_reopen` runs over real HTTP with the background worker, and was stable across 3 repeats:
+- a rounding question is important enough (≥ 0.3) that a member's evidence against one of its sources waits at a checkpoint;
+- the member can't clear it (403, not a reviewer);
+- the reviewer approves it, and the worker then reopens the answer with "human input from mo, approved by rita" among its reasons. The reopened version carries `verification` like a first answer (Phase AT), and the input is marked `approved` (Phase AU);
+- `/api/maintenance` reports the admitted model's challenges as not counting, "never run on the judging benchmark" (Phase AR);
+- on disk, every Belief Graph checkpoint is a journal entry (Phase AS).
+
+**Live smoke:** all questions completed, both model-only answers were clean, submits took 2–6 ms, 80 polls peaked at 3 ms, and no problems were reported.
+
+**README** (license notice byte-for-byte unchanged, Mermaid still parses):
+- the judging benchmark, with OLMo 3 7B's measured 77% against the 95% needed;
+- human input: cross-examined, graded, and reopening on approval;
+- the "Respond" button;
+- the graph journal;
+- the test count, now 680+.
+
+The SVG's write box and the Mermaid node now include human input (the render was checked).
+
+**Full live suite: 690 passed, 1 skipped.** 691 collected (690 prior + 1 new end-to-end test).
 
 ## 100. Human input over HTTP — Phase AU
 

@@ -46,7 +46,7 @@ flowchart TB
         reads["Reads: questions, versions,<br/>maintenance, checkpoints, health<br/>(served from a snapshot; never wait)"]
         inbox["Async submit → durable inbox<br/>(202 at once)"]
         sync["Sync submit<br/>(deliberates in the request)"]
-        writes["Reviewer-token writes:<br/>checkpoint decisions, ingestion<br/>(allow-listed hosts only)"]
+        writes["Reviewer-token writes:<br/>human input, checkpoint decisions,<br/>ingestion (allow-listed hosts only)"]
     end
 
     subgraph maint["Maintainer — athenaeum_brain/maintenance.py"]
@@ -143,8 +143,10 @@ a deliberation killed mid-way resumes from its last completed round.
   Nothing is ever overwritten.
 - **Idle evolution** — between questions, committed claims are
   re-challenged against today's agents and grades. The admitted model
-  re-examines model-backed claims too, but until it has proven itself
-  its "no" is recorded only as dissent. The same pass drives knowledge
+  re-examines model-backed claims too, but its "no" counts only once it
+  passes a judging benchmark of labelled answers
+  (`scripts/run_judging_benchmark.py`); until then it is recorded as
+  dissent. OLMo 3 7B currently scores 77% against the 95% needed. The same pass drives knowledge
   consolidation, dispute resolution, domain-drift monitoring, and
   proposals to amend the grading standard (which only a human reviewer
   can approve), and records each claim's fate for per-agent calibration.
@@ -163,10 +165,12 @@ a deliberation killed mid-way resumes from its last completed round.
   triggers a staged review, a re-grounding period, and finally human
   escalation — never a silent behaviour change.
 - **Human input and governance** — human contributions enter as
-  examinable claims, not commands. Consequential changes (to an
-  important question, a leading conclusion, or consolidated knowledge)
+  examinable claims, not commands: each is cross-examined, and its
+  submitter is graded on whether it survives. Consequential ones (on an
+  important question, the leading conclusion, or consolidated knowledge)
   wait at a human checkpoint with role separation and
-  conflict-of-interest checks.
+  conflict-of-interest checks; an approved one reopens the answer with
+  the input as the stated reason.
 - **Evaluation** — ground-truth benchmarks, baselines and ablations,
   calibration and drift tracking, reproducible audits of re-evaluation
   and consolidation, non-compensatory integrity gates, and an
@@ -180,7 +184,7 @@ a deliberation killed mid-way resumes from its last completed round.
 
 ## How it's verified
 
-- **Over 650 automated tests** (`pytest -q`), run on a Proxmox LXC guest,
+- **Over 680 automated tests** (`pytest -q`), run on a Proxmox LXC guest,
   including real sandbox executions, real network fetches, real
   cross-process worker kills, live calls to the model servers, and the
   mobile client's script run under node against a fake DOM.
@@ -219,15 +223,16 @@ says whether background work is moving or has stalled.
 It also has panels showing background maintenance activity and anything
 waiting for a human reviewer. The API validates its input, answers
 every failure with a JSON error, and serves only the client's own files.
-Reading is open; the two write actions (clearing a human-review
-checkpoint, and submitting sources to ingest from allow-listed hosts)
-need a per-reviewer token, minted by `scripts/add_reviewer.py`, whose
-identity the governance rules check.
+Reading is open. The write actions need a per-reviewer token, minted by
+`scripts/add_reviewer.py`, whose identity the governance rules check:
+responding to an answer with evidence (the "Respond" button on a card),
+clearing a human-review checkpoint, and submitting sources to ingest
+from allow-listed hosts.
 
 `python scripts/measure_storage.py` reports how storage grows with use,
-per store, on the same wiring the API runs. The question ledger keeps
-one append-only log per question, so a write costs one question rather
-than the whole history.
+per store, on the same wiring the API runs. A write costs only what it
+adds: the question ledger keeps one append-only log per question, and
+the Belief Graph is an append-only journal.
 
 `client/standalone-demo.html` runs a self-contained version of the
 deliberation demo in any browser, with no backend.
