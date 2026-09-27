@@ -233,7 +233,12 @@ Both were rewritten into every later checkpoint, and the records grew with every
 **What happened:** Human input enters as a claim typed `human_input`. Mathematics re-derived only claims typed `formal`, and Physics only `empirical`, so a person's "17 is not prime" survived cross-examination untouched. It counted as a surviving input to the submitter's track record, and a material one could even reach a checkpoint. progress.md (§29 and the Phase 13 notes) said such a claim *would* be checked "if it happens to match" an agent's pattern; it never was. World News, which checks every claim, was the only exception. Found 2026-09-27 by batch 12's human-input suite, whose golden set includes false claims in the agents' own formats.
 **Root cause:** The claim-type filter meant "claims of my kind from other agents"; nobody asked whether a person's claim of the same content was "of my kind".
 **Fix:** Mathematics also re-derives `human_input` claims; Physics also re-derives them, while its falsifiability check still applies only to claims typed empirical (a human claim's defeat condition comes from the submission envelope). `tests/test_evals_human_input.py` shows the suite fails without the fix.
-**Lesson:** "Examined, never auto-accepted" needs a test that submits a *false* input and expects a challenge. Tests of the flow with inert statements ("a point about this") can't tell examination from omission.
+**Lesson:** "Examined, never auto-accepted" needs a test that submits a *false* input and expects a challenge.
+
+### 44. Every model call generated its full token budget; the GPU path ignored the budget
+**What happened:** `ask_model` keeps only the first line of a completion (`answer_only`, #35), but llama-server was never told to stop there, so every call generated all 96 tokens. The admitted model took about 25 s per answer, whatever the answer's length. The elastic GPU backend also ignored `n_predict` entirely: a challenge's 8-token yes/no would have generated 96 tokens there. No GPU worker is configured today, so that path was latent. Found 2026-09-27 by the `model_answers` suite, whose latencies were identical across questions.
+**Fix:** `ask_model` sends a stop string, `\n` by default, to both backends, and gives the GPU backend its `n_predict`. Measured before adopting it (progress.md §107.3): p95 25.6 s → 6.4 s, accuracy 53 → 54 of 60, no empty answers even on one attempt.
+**Lesson:** When code discards most of what it asks for, ask for less. Per-question latency that doesn't vary with the answer is the tell. Tests of the flow with inert statements ("a point about this") can't tell examination from omission.
 
 ---
 

@@ -205,3 +205,25 @@ def test_the_runner_runs_provenance_on_the_deliberations(tmp_path):
     assert by_name["hard_violations"].status == "PASS" and by_name["abstained"].status == "PASS"
     assert by_name["citation_support"].status == "INSUFFICIENT_DATA"
     assert result.verdict.status == "NOT APPROVED"                  # withheld evidence is never approval
+
+
+def test_preparing_labels_never_loses_the_owners_labels(tmp_path):
+    import subprocess
+    import sys
+    results = tmp_path / "run1" / "eval_results.json"
+    results.parent.mkdir()
+    case = {"suite": "deliberation", "case_id": "q1", "category": "x", "variant": "original", "run": 0,
+            "detail": {"question": "what holds the moon?", "committed": ["the answer to 'what holds the moon?' is Gravity"],
+                       "cited": [["llm:olmo3-7b"]]}}
+    results.write_text(json.dumps({"results": [case]}), encoding="utf-8")
+    out = tmp_path / "labels.json"
+    script = pathlib.Path(__file__).resolve().parents[1] / "scripts" / "prepare_citation_labels.py"
+    run = lambda: subprocess.run([sys.executable, str(script), str(results), "--out", str(out)],   # noqa: E731
+                                 capture_output=True, text=True, timeout=60)
+    assert run().returncode == 0
+    data = json.loads(out.read_text(encoding="utf-8"))
+    assert [(i["id"], i["model"], i["label"]) for i in data["items"]] == [("cs-001", "olmo3-7b", None)]
+    data["items"][0]["label"] = True                                   # the owner labels it
+    out.write_text(json.dumps(data), encoding="utf-8")
+    assert run().returncode == 0 and "1 items, 1 labelled" in run().stdout
+    assert json.loads(out.read_text(encoding="utf-8"))["items"][0]["label"] is True

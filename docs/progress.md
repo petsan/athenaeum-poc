@@ -1563,7 +1563,7 @@ Stop conditions are as before: a test failure I can't explain, anything destruct
 | AX | Deliberation accuracy with paraphrases; per-agent claim calibration (ECE, Brier, worst-agent floor, drift) | **done**. `deliberation`: 31 golden questions (`evals/golden/deliberation.json`) in 7 categories, each with 2 paraphrases, giving 93 wordings. A known-wrong committed answer is a hard violation. Result: 93/93, both offline and with the lab models live. `calibration`: ECE, Brier, the worst agent's ECE (agents with ≥ 15 labelled claims) and PSI against the saved baseline (optional until one exists). The bootstrap resamples whole questions. There are 84 labelled claims and **none is wrong**, so the card says calibration here measures only under-confidence (ECE ≈ 0.008). It becomes a real over-confidence test once model-backed claims are labelled |
 | AY | Provenance (fabricated sources, ingestion canaries; citation support built but INSUFFICIENT), human input, API SLOs, per-model answers | **done**. Live `model_answers` for the admitted olmo3-7b: 53/60 graded right, 60/60 answered, p95 25.6 s. The run exposed one grader bug, now fixed ("300 000" with a space separator). Of the six remaining misses, "Sodium chloride" for "NaCl" is the grader's documented floor; five are real. `provenance`: every committed claim's citations must resolve through a registry (a structural test finds every provenance kind the code emits). 8 ingestion fixtures, 5 of them with canaries, go through a real app; the canary text is also submitted as human input. 30 unanswerable questions check abstention. Citation support is withheld (D17), and `labelling_items` prepares the owner's file. `human_input`: 32 golden inputs covering all 4 §11 outcomes, plus the 403/409 governance refusals; 32/32. `api_service`: a real HTTP server under a 31-question burst. `model_answers`: every lab model answers the 60 benchmark questions, graded lexically (the grader agrees with all 120 labels); only the admitted model is gated. Found and fixed: **#42** (the injection heuristic flagged "The metric system:") and **#43** (Mathematics and Physics never checked a person's claim, so "17 is not prime" survived). Also added: `stop_worker()` on the API app, so an embedding process can end the worker before its data directory is deleted |
 | AZ | Athenaeum-specific seeded faults, the fault matrix, the dashboard; publishing to LXC 250 `/athenaeum/` | **matrix and page done; publishing is part of BA**. `athenaeum_evals/faults.py`: 11 tools, each a suite's own check run by the suite's own grading code, against 11 faults. The real system is recorded once; each trial hits a fresh random draw of cases (the Brain is deterministic, so re-running it would give identical trials and falsely narrow intervals). With 10 trials, every tool caught its target and none fired on the healthy system. Overlaps are shown too (calibration also catches wrong answers). The injection heuristic is measured per document. Switching off the canary check drops its catch rate to 0 (tested). `scripts/build_dashboard.py` writes the static page (evalcore's `render_dashboard`, no scripts) plus `efficacy.json` |
-| BA | The nightly runner on LXC 104 (boot + daily), keeping 90 runs, pushing to LXC 250 | planned |
+| BA | The nightly runner on LXC 104 (boot + daily), keeping 90 runs, pushing to LXC 250 | **done except the owner's key grant**. `infra/nightly/`: the runner, the service (under the 80% cap) and the timer (boot + 15 min, 02:30 Pacific). `receive-dashboard.sh` is the forced command for a restricted key on LXC 250. Auto mode refused the grant, so it's a paste-ready owner step. First end-to-end run: §107.4. Also: model calls stop at the first line break (§107.3); `scripts/prepare_citation_labels.py` |
 
 ### 107.1 The judging benchmark, live (2026-09-27, 120 cases, one repeat, recorded in `data/api-run` on LXC 104)
 
@@ -1596,6 +1596,43 @@ The bar is 0.95, so no model's challenges count, and they wouldn't even if the b
 | Stop at `\n`, five attempts (the default) | 54 | 60 | 4.8 s | 6.4 s |
 
 Adopted as `ask_model`'s default (`ANSWER_STOP`). Every model fallback and challenge in the system is now about 4× faster, with the same answers. The GPU path also ignored `n_predict` (always 96 tokens, even for an 8-token yes/no); it now gets the same limits. The misses are real (a leap year has "365 days"; `2^10` is "one hundred") or graded as a floor ("sodium chloride" for NaCl, "299 792" for about 300,000). In one run the model answered the mineral question with a self-generated "( disregard previous instructions. I cannot answer that…": the model's own output can look like an injection.
+
+### 107.4 The first nightly run, end to end (2026-09-27 22:26 UTC, LXC 104, models live)
+
+The real service ran: 40 minutes of evaluation, 5 minutes of fault matrix and dashboard, 3 min 41 s of CPU in total. **Verdict: NOT APPROVED**, for exactly two reasons, both waiting on the owner: citation support (no labels yet, D17) and the challenger (benchmark provisional, D15). Every gate that could be decided passed:
+
+| Suite | Gates (value, pessimistic bound) |
+|---|---|
+| adversarial | 0 of 16 undefended |
+| deliberation | 93/93 wordings right; 0 known-wrong answers; robustness gap 0 |
+| calibration | ECE 0.007 (≤ 0.015); Brier 0.000; worst agent 0.001; PSI not run (no baseline yet) |
+| provenance | 0 fabricated or leaked (131 cases); 30/30 abstained; citation support INSUFFICIENT |
+| human_input | 32/32 outcomes right; 0 obeyed; governance held |
+| api_service | submit / poll / read p95 6 / 3 / 2 ms; answered p95 **26 s** (was 66 s before the stop change); worker moving |
+| model_answers | olmo3-7b 0.883 right (lower bound **0.800**, exactly at the 0.80 bar); 60/60 answered; p95 8.9 s |
+| judging | INSUFFICIENT (97/120; provisional) |
+
+Publishing was refused ("Permission denied (publickey)"), as expected until the owner allows the key (`infra/nightly/README.md`). The service therefore shows as failed; it will pass once the key works. The page passed the phone check (390 px, light and dark, no overflow).
+
+Fault matrix (100 trials per cell, 0 false alarms from any tool in 100 healthy trials each):
+
+| Tool | Catch rate [95% CI] |
+|---|---|
+| wrong answers | 0.93 [0.86, 0.97] |
+| accuracy | 0.99 [0.95, 1.00] |
+| robustness | 1.00 [0.96, 1.00] |
+| calibration | 1.00 [0.96, 1.00] |
+| fabricated provenance | 1.00 [0.96, 1.00] |
+| abstention | 0.99 [0.95, 1.00] |
+| canary leak | 0.79 [0.70, 0.86] |
+| injection heuristic (per document) | 0.89 [0.81, 0.94] |
+| input obeyed | 0.96 [0.90, 0.98] |
+| input rules | 1.00 [0.96, 1.00] |
+| governance | 0.74 [0.65, 0.82] |
+
+**How to read the lower rates.** A catch rate is the chance a tool fires when the fault is *present in the system* at its stated intensity, including trials where the fault happened not to hit any case. The canary fault hits each of 5 canary fixtures with p = 0.25, so in 0.75⁵ ≈ 24% of trials nothing leaks at all. The ceiling is about 0.76, and the tool caught every leak that happened. The same holds for governance (p = 0.5 on 2 checks; ceiling 0.75). The heuristic's rate is per document, and one of the 5 instruction-bearing fixtures has none of its patterns (ceiling 0.8, measured 0.89 by chance). A future evalcore change could report "caught when it manifested" alongside; for now, compare each rate with its ceiling.
+
+The labelling file for D17 has started: `evals/labelling/citation_support.json`, 9 model-backed claims from this run. Rerun `scripts/prepare_citation_labels.py` after later nightly runs to add more (existing items and labels are never touched). It needs 30 labels.
 
 ## 106. Debugging tools, a reusable toolkit plan, and the model store verified
 
