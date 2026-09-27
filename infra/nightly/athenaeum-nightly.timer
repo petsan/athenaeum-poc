@@ -1,0 +1,11 @@
+[Unit]
+Description=Athenaeum nightly evaluation: 15 minutes after boot, and daily at 02:30 Pacific (D19)
+
+[Timer]
+OnBootSec=15min
+OnCalendar=*-*-* 02:30:00 America/Los_Angeles
+Persistent=true
+RandomizedDelaySec=5min
+
+[Install]
+WantedBy=timers.target

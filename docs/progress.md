@@ -98,7 +98,13 @@ The sections below this one are a chronological log, and the numbering runs roug
     - E1–E4: statistics and gates identical to evalgate 0.2.0's; detectors, judges and calibration; the artifacts, front end and CLI; the fault matrix and dashboard.
     - E5: evalgate 0.3.0 rebased on evalcore. Its CI is green, and LXC 250 was redeployed and ran successfully.
     - E6, part 1: an unrelated pilot, `examples/parcel_quotes`, APPROVED.
-  - **In progress: batch 12 (§107), Athenaeum's evaluation built on evalcore (E6, part 2).** The owner decided D15, D16, D17 and D19 on 2026-09-27 and approved working autonomously for several hours. The decisions are recorded at the top of `docs/proposals/evalgate-integration.md`.
+  - **Batch 12 (§107), Athenaeum's evaluation built on evalcore (E6, part 2): built.** The owner decided D15, D16, D17 and D19 on 2026-09-27 and approved working autonomously for several hours. The decisions are recorded at the top of `docs/proposals/evalgate-integration.md`.
+    - Run it with `/opt/athenaeum-venv/bin/python scripts/run_evals.py` (8 suites) and `scripts/build_dashboard.py` (fault matrix and page).
+    - The nightly timer on LXC 104 runs at boot + 15 min and at 02:30 Pacific (`infra/nightly/`).
+    - **Waiting on the owner:**
+      - allow the dashboard's publishing key on LXC 250 (paste-ready in `infra/nightly/README.md`; auto mode refused the permission grant);
+      - review `src/athenaeum_brain/judging_benchmark.json` (provisional);
+      - decide whether the scheduler should stay round-robin under bursts (§107.2).
   - Its own `progress.md` is authoritative;
 - not blocking: an auto-update mechanism for deployed code, and an off-site backup destination.
 

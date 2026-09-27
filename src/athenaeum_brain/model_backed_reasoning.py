@@ -68,7 +68,8 @@ ANSWER_FRAME = "Q: {question}\nA:"
 
 
 def ask_model(question: str, model_name: str = DEFAULT_MODEL, n_predict: int = 96,
-              timeout_seconds: float = 120.0, max_attempts: int = 5, frame: str = ANSWER_FRAME) -> str | None:
+              timeout_seconds: float = 120.0, max_attempts: int = 5, frame: str = ANSWER_FRAME,
+              stop: tuple = ()) -> str | None:
     """Returns the model's answer -- its completion cut to the answer itself
     (answer_only) -- or None if the backend is unreachable or only ever
     answered with nothing.
@@ -105,7 +106,7 @@ def ask_model(question: str, model_name: str = DEFAULT_MODEL, n_predict: int = 9
     framed_question = frame.format(question=question)
     spec = ModelSpec(name=model_name, vram_gb=0)
     cpu_backend = LlamaCppBackend(endpoints={model_name: MODEL_LAB_ENDPOINTS[model_name]},
-                                   n_predict=n_predict, timeout_seconds=timeout_seconds)
+                                   n_predict=n_predict, timeout_seconds=timeout_seconds, stop=stop)
     # Section 4.3/6.1: an opportunistic GPU worker (elastic_workers.py) is
     # preferred when one is configured AND healthy for this model right
     # now -- checked fresh on every attempt, never assumed from earlier in

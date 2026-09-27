@@ -87,6 +87,7 @@ class LlamaCppBackend:
     # sanity/comparison use while still exercising real generation;
     # callers doing longer real reasoning should raise both this and
     # timeout_seconds together, not just the timeout.
+    stop: tuple = ()      # llama-server stop strings; generation ends at the first one
 
     @property
     def loaded(self) -> set:
@@ -102,7 +103,10 @@ class LlamaCppBackend:
         if spec.name not in self.endpoints:
             raise KeyError(f"'{spec.name}' has no configured endpoint on this backend")
         url = self.endpoints[spec.name]
-        payload = json.dumps({"prompt": prompt, "n_predict": self.n_predict}).encode()
+        body = {"prompt": prompt, "n_predict": self.n_predict}
+        if self.stop:
+            body["stop"] = list(self.stop)
+        payload = json.dumps(body).encode()
         req = urllib.request.Request(
             f"{url}/completion", data=payload,
             headers={"Content-Type": "application/json"}, method="POST",

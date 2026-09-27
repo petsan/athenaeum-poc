@@ -1,0 +1,14 @@
+[Unit]
+Description=Athenaeum nightly evaluation and dashboard (batch 12, BA)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/root/athenaeum-poc/infra/nightly/athenaeum-nightly.sh
+# The 80% cap: two cores on LXC 104, so at most 1.6 of them, at low priority.
+CPUQuota=160%
+MemoryMax=1600M
+Nice=10
+IOSchedulingClass=idle
+TimeoutStartSec=4h

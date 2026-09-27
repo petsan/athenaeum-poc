@@ -8,6 +8,8 @@ Status: **decided 2026-09-27, being built as batch 12 (see `docs/progress.md` §
 - **D19:** a boot + daily timer on LXC 104.
 
 Where this proposal says "evalgate", the implementation uses evalcore, which decides identically.
+
+**Built (2026-09-27):** the 8 suites of §4 (adversarial, judging, deliberation, calibration, provenance, human_input, api_service, model_answers) in `src/athenaeum_evals/`; the fault matrix (§5: 11 tools × 11 faults, `faults.py`) and the dashboard (`scripts/build_dashboard.py`); the nightly runner (`infra/nightly/`). One step is the owner's: allowing the publishing key on LXC 250 (`infra/nightly/README.md`), because auto mode refuses to grant host access. Results and findings are in progress.md §107.
 Written 2026-09-27, from `github.com/petsan/evalgate` at `9baa359` (v0.2.0) and Athenaeum at `410e722`.
 
 ## 1. Summary

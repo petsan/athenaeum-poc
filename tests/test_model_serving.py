@@ -54,3 +54,22 @@ def test_tampered_weights_detected_before_serving(tmp_path):
     registry.cas.corrupt_for_testing(registry.get("a").weights_ref, b"tampered!!")
     with pytest.raises(IntegrityError):
         layer.request("a", "p1")
+
+
+@pytest.mark.parametrize("stop, sent", [((), None), (("\n",), ["\n"])])
+def test_llama_backend_sends_stop_strings_only_when_given(monkeypatch, stop, sent):
+    """Batch 12: generation can end at the first stop string instead of
+    running on to n_predict (measured in progress.md §107.3)."""
+    import io
+    import json
+    import urllib.request
+    from athenaeum_body.model_serving import LlamaCppBackend
+    seen = {}
+
+    def fake_urlopen(req, timeout):
+        seen.update(json.loads(req.data))
+        return io.BytesIO(json.dumps({"content": " Paris"}).encode())
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    backend = LlamaCppBackend(endpoints={"m": "http://x"}, stop=stop)
+    assert backend.infer(ModelSpec(name="m", vram_gb=0), "Q: capital of France?\nA:") == " Paris"
+    assert seen.get("stop") == sent and seen["n_predict"] == 64
