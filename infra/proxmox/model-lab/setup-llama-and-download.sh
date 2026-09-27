@@ -31,6 +31,13 @@
 # it entirely. Applied to every guest's ExecStart, not just OLMo 3's,
 # since any future model's template could hit the same gap.
 #
+# --metrics --slots --log-timestamps --log-prefix (owner, 2026-09-27: use
+# real diagnostics, not curl-and-grep): /metrics is Prometheus text (tokens
+# per second, requests processing and deferred, KV-cache use); /slots shows
+# what each slot is doing right now; journal lines get timestamps. Use these
+# to tell "slow" from "queued" from "stuck" (known-bugs #24 looked healthy
+# on /health while 45x slower).
+#
 # --cache-ram (known-bugs.md #24, found 2026-09-26): recent llama-server
 # builds keep a prompt cache in RAM that may grow to 8192 MiB by default.
 # On a guest sized for its model (4-10 GB) that cache outgrows the
@@ -85,7 +92,7 @@ Description=llama.cpp server -- ${LABEL} (Athenaeum model-lab candidate)
 After=network.target
 
 [Service]
-ExecStart=/opt/llama.cpp/build/bin/llama-server --model ${MODEL_PATH} --host 0.0.0.0 --port ${PORT} -c 4096 --threads \$(nproc) --no-jinja --cache-ram ${CACHE_RAM_MIB}
+ExecStart=/opt/llama.cpp/build/bin/llama-server --model ${MODEL_PATH} --host 0.0.0.0 --port ${PORT} -c 4096 --threads \$(nproc) --no-jinja --cache-ram ${CACHE_RAM_MIB} --metrics --slots --log-timestamps --log-prefix
 Restart=on-failure
 RestartSec=5
 
@@ -94,7 +101,11 @@ WantedBy=multi-user.target
 UNIT
 
 systemctl daemon-reload
-systemctl enable --now llama-server
+systemctl enable llama-server
+# restart, not "enable --now": --now leaves an already-running server on
+# its OLD unit, so a changed ExecStart (new flags) silently never applied
+# (found 2026-09-27: /metrics still 501 after re-running this script)
+systemctl restart llama-server
 sleep 2
 systemctl is-active llama-server
 REMOTE

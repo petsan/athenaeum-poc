@@ -303,6 +303,12 @@ It never touches disks or LVM, never restores over a healthy guest, and only rem
 - Start parallel jobs so the thing that waits is their parent: one tracked background job each, or `&` in the current shell, not in a pipeline.
 - Any operation that can race with another writer needs an integrity check at the end, not just a size check.
 
+### 39. Re-running a service's setup script silently kept the old unit
+**What happened:** `infra/proxmox/model-lab/setup-llama-and-download.sh` rewrites `llama-server.service`, then ran `systemctl daemon-reload` and `systemctl enable --now llama-server`. On 2026-09-27 the script was re-run on all six guests to add `--metrics --slots`. All six reported ready, but `/metrics` returned 501: every server was still the old process with the old flags.
+**Root cause:** `enable --now` starts a service only if it isn't running. A running service keeps its old command line until it is restarted, and `daemon-reload` doesn't change that. The script was idempotent for a fresh guest, not for a changed unit.
+**Fix:** The script now runs `systemctl enable` then `systemctl restart`. All six were restarted and verified in `/proc/<pid>/cmdline`, not in the unit file.
+**Lesson:** When a setup script changes how a service runs, verify the *running process* (its command line, or the new behaviour, like `/metrics` answering), not the file that describes it. This is the same lesson as #27, one layer down.
+
 ---
 
 ## How to use this file

@@ -69,40 +69,40 @@ The sections below this one are a chronological log, and the numbering runs roug
   - Claude Code's auto mode refuses destructive host commands and ACL grants. Give those to the owner as paste-ready commands, and don't work around the refusal.
 
 **Model store (`/mnt/pve/glacier-01/models/<repo name>/<file>`):**
-- The six lab models (in `manifest.tsv`) are complete and SHA-256 verified.
-- `GLM-5.3-Flash-GGUF/UD-Q4_K_XL/`: the owner's own download, 6 files, 186 GB. **All 6 SHA-256 checksums match Hugging Face's (verified 2026-09-27).**
-- `stored-models.tsv` lists the models kept without a guest:
-  - Qwen3.8 27B Q8_0 (done, SHA-256 verified) and Q4_K_M;
-  - Qwen3.8 9B Distill Q4_K_M;
-  - OLMo 3 7B Think Q4_K_M;
-  - Bonsai 27B Q1_0;
-  - Ternary Bonsai 2 27B, PQ2_0 and PTQ1_0.
-- **Both Bonsai models need PrismML's llama.cpp fork**; stock llama.cpp can't serve them.
+- **Every model in the store is complete and SHA-256 verified** against Hugging Face (2026-09-27):
+  - the six lab models (`manifest.tsv`);
+  - the owner's GLM-5.3-Flash UD-Q4_K_XL (6 files, 186 GB);
+  - everything in `stored-models.tsv`, the models kept without a guest: Qwen3.8 27B Q8_0 and Q4_K_M; Qwen3.8 9B Distill Q4_K_M; OLMo 3 7B Think Q4_K_M; Bonsai 27B Q1_0; Ternary Bonsai 2 27B, PQ2_0 and PTQ1_0.
+- **Both Bonsai models need PrismML's llama.cpp fork**; stock llama.cpp can't serve them. None of the stored models is served yet.
 - To download or complete the store: `infra/proxmox/model-lab/download-models-to-host.sh [manifest.tsv|stored-models.tsv]`, as root on the host. It is resumable, and it SHA-256-checks every new download.
 
-**Still running when this was written. Verify each before relying on it:**
-1. **Model guest setup: finished.** All six (111–116) answered `{"status":"ok"}` on 2026-09-27, serving from the mounted store. The full live suite has not been rerun since the rebuild.
-   - Check: `for i in 161 162 163 164 165 166; do curl -s -m5 http://192.168.0.$i:8080/health; echo; done`.
-   - Any guest that isn't `{"status":"ok"}`: re-run `infra/proxmox/model-lab/setup-llama-and-download.sh <ip> <hf_repo> <hf_file> <label>` (values from `manifest.tsv`). It's idempotent.
-   - Run it in the foreground, or as one tracked background job per guest, never `&` inside a pipeline (§105).
-2. **Stored-model downloads** on the host, first pass: `/root/stored-models-download.log` (it was on Qwen 27B Q4_K_M). A second pass for the Bonsai files starts after it: `/root/stored-models-download-2.log`.
-   - To finish or verify: `cd /root/athenaeum-infra/proxmox/model-lab && ./download-models-to-host.sh stored-models.tsv`.
-   - Files from the first pass (the Qwen 27B Q4_K_M, 9B distill, OLMo Think) were downloaded by the script version without the SHA check. Verify them as §105 describes.
-3. **GLM checksum: done.** All 6 files match.
+**Nothing was left running when this was last updated (2026-09-27).**
+- The six model guests (111–116) all serve `{"status":"ok"}` from the mounted store. `/metrics` and `/slots` are enabled (§106).
+- **The full live suite has not been rerun since the rebuild.** Do that first.
+- If a guest is unhealthy: re-run `infra/proxmox/model-lab/setup-llama-and-download.sh <ip> <hf_repo> <hf_file> <label>` (values from `manifest.tsv`). It's idempotent, and it now restarts the server so unit changes take effect (known-bugs #39). Run it in the foreground, or as one tracked background job per guest, never `&` inside a pipeline.
 
 **After a restart, in order:**
 1. Ping the host.
-2. Check the guests' health (above).
-3. Finish or verify the downloads.
-4. Sync 104 and run the **full live** suite. Expect 693 passed, 1 skipped; a different count needs explaining.
-5. Then take the owner's next change.
+2. Check the guests: `for i in 161 162 163 164 165 166; do curl -s -m5 http://192.168.0.$i:8080/health; echo; done`.
+3. Sync 104 and run the **full live** suite. Expect 693 passed, 1 skipped; a different count needs explaining.
+4. Then take the owner's decisions on the two proposals in `docs/proposals/`.
 
-**Open owner decisions (not blocking):**
-- an auto-update mechanism for deployed code;
-- an off-site backup destination.
+**Open owner decisions:**
+- `docs/proposals/evalgate-integration.md` §7 (D13–D19);
+- `docs/proposals/evaltools-extraction.md` §7 (X1–X7): extracting evalgate's tools into a thin, reusable `evalcore` library for unrelated projects;
+- not blocking: an auto-update mechanism for deployed code, and an off-site backup destination.
+
+**Debugging tools: use these, not ad hoc pipelines** (installed 2026-09-27, §106):
+- **Processes:** `pgrep -a -x <name>` (exact name, not `-f`), `pstree -pa <pid>`, `htop`, `killall -e <name>` or `kill <verified pid>`.
+- **Files and I/O:** `lsof -p <pid>` (or `-c <cmd>`), `iostat -dx 1 2`, `iotop`.
+- **System calls:** `strace -f -p <pid>`.
+- **Python** (104 only): `py-spy dump --pid <pid>` or `py-spy top`, a stack without stopping the process. debugpy and pdb++ are in `/opt/debug-venv`, which sees the system packages.
+- **Model servers:** `curl http://<ip>:8080/metrics` (Prometheus: tokens, processing and deferred requests, KV cache), `/slots` (what each slot is doing), and `journalctl -u llama-server` (timestamped). Use `requests_deferred` and `/slots` to tell queued from stuck. `/health` alone looked fine during known-bugs #24's 45x slowdown.
+- Installed on the host and on 104, 106 and 111–116.
 
 **Recurring pitfalls this project has hit (known-bugs.md has the full list):**
-- `pkill -f`/`pgrep -f` match their own command line, including an SSH command or a waiter script that contains the pattern. Target PIDs instead.
+- `pkill -f`/`pgrep -f` match their own command line, including an SSH command or a waiter script that contains the pattern. Use `pgrep -x`, and verify a PID before acting on it (#38).
+- `systemctl enable --now` doesn't restart a running service, so a changed unit never applies. Use `restart` (#39).
 - `tar` into an unprivileged container needs `--no-same-owner`.
 - A rebuilt guest has new SSH host keys: run `ssh-keygen -R <ip>` first.
 - Build llama.cpp with `--target llama-server`; the whole tree is several times slower.
@@ -1528,6 +1528,26 @@ Same rules and stop conditions.
 | — | End-to-end test extended; live smoke; README refreshed if anything user-visible changed. | **done** — §101 |
 
 **Batch 11 (AR–AU) complete 2026-09-26.** No owner decision is open.
+
+## 106. Debugging tools, a reusable toolkit plan, and the model store verified
+
+**Debugging tools** (owner: "install debugging tools, and use those instead"; the owner chose all three kinds):
+- **System:** `htop`, `lsof`, `strace`, `psmisc` (`pstree`, `killall`), `sysstat` (`iostat`) and `iotop`, on the host and on 104, 106 and 111–116. Each command was checked on each machine after the install.
+- **Python on 104:** `/opt/debug-venv` (with `--system-site-packages`, so Athenaeum's apt-installed packages are visible) holds py-spy 0.4.2, debugpy 1.8.22 and pdb++. `py-spy` is linked into `/usr/local/bin`. It was verified by attaching to a live process and reading its stack (104 is privileged, so ptrace works).
+- **Model servers:** llama-server now runs with `--metrics --slots --log-timestamps --log-prefix`, via `setup-llama-and-download.sh`, re-applied to all six guests. Verified in each running process's `/proc/<pid>/cmdline`, and `/metrics` returns 200 on all six.
+- **Found on the way (known-bugs #39):** re-running the setup script left every server on its old flags (`/metrics` 501). `systemctl enable --now` doesn't restart a running service. The script now does `systemctl restart`.
+- **Used for real:** the downloads were confirmed finished with `lsof -c curl` (no model file open for writing) and `iostat` (the disk idle), not with `ps | grep`. §0 lists which tool to use for what.
+
+**Model store: complete and verified.** Every file in `stored-models.tsv` downloaded:
+- The three Bonsai files were checked by the new SHA step as they landed.
+- The three first-pass files (Qwen3.8 27B Q4_K_M, the 9B distill, OLMo 3 Think) were checked by hand afterwards: all OK.
+- With the GLM files and the six lab models, every model on `glacier-01` matches Hugging Face's SHA-256.
+
+**Plan: a thin, reusable evaluation toolkit** (`docs/proposals/evaltools-extraction.md`, plan only):
+- The owner asked for a distillation of just the evaluation tools, for projects unrelated to Athenaeum.
+- The plan is `evalcore`: numpy as the only dependency, no global state, no framework. Its modules: stats (plus `required_n` and minimum detectable effect), gates, verdict, baseline, records, detectors, judges, calibration, efficacy (the fault matrix), a plain-Python front end, and artifacts (results JSON schema v2, so evalgate's viewer reads it unchanged).
+- It is proven by three consumers: evalgate rebased onto it with identical demo numbers; Athenaeum; and an unrelated pilot of the owner's.
+- Phases E1–E6; owner decisions X1–X7, including a license, since evalgate has none.
 
 ## 105. After the storage loss: backups, the model store, the model lab rebuilt
 
