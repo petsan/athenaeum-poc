@@ -1,0 +1,17 @@
+#!/bin/sh
+# Installed to /etc/update-motd.d/ by 06-setup-backups.sh. At every host
+# login, warn if the last athenaeum-poc backup failed, or if the newest
+# backup archive is older than two days (e.g. the timer stopped firing).
+# Silent when all is well.
+STORAGE_DIR="${ATHENAEUM_BACKUP_DIR:-/mnt/pve/glacier-01/dump}"
+if [ -f /var/lib/athenaeum-backup/FAILED ]; then
+    echo
+    echo "*** ATHENAEUM BACKUP FAILED at $(cat /var/lib/athenaeum-backup/FAILED)."
+    echo "*** See: journalctl -u pve-athenaeum-backup.service -n 30"
+fi
+newest=$(ls -1t "$STORAGE_DIR"/vzdump-lxc-*.tar.zst 2>/dev/null | head -1)
+if [ -z "$newest" ]; then
+    echo "*** No athenaeum backup archives in $STORAGE_DIR."
+elif [ -n "$(find "$newest" -mtime +2)" ]; then
+    echo "*** Newest athenaeum backup is more than 2 days old: $newest"
+fi

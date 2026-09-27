@@ -34,7 +34,7 @@ PROXMOX_ROLE=ClaudeAgent-<project-name>
 PROXMOX_POOL=<project-name>-poc
 
 # --- Section 5: storage ---
-PROXMOX_STORAGE=local-thin-multi
+PROXMOX_STORAGE=local-thin-multi-01
 PROXMOX_TEMPLATE_STORAGE=local
 
 # --- Section 6: standing test guest ---
@@ -114,8 +114,8 @@ pveum acl modify /pool/<project-name>-poc --users claude@pve --roles ClaudeAgent
 pveum acl modify /nodes/proxmox01 --tokens 'claude@pve!<project-name>' --roles ClaudeAgent-<project-name>
 pveum acl modify /nodes/proxmox01 --users claude@pve --roles ClaudeAgent-<project-name>
 
-pveum acl modify /storage/local-thin-multi --tokens 'claude@pve!<project-name>' --roles ClaudeAgent-<project-name>
-pveum acl modify /storage/local-thin-multi --users claude@pve --roles ClaudeAgent-<project-name>
+pveum acl modify /storage/local-thin-multi-01 --tokens 'claude@pve!<project-name>' --roles ClaudeAgent-<project-name>
+pveum acl modify /storage/local-thin-multi-01 --users claude@pve --roles ClaudeAgent-<project-name>
 
 pveum acl modify /storage/local --tokens 'claude@pve!<project-name>' --roles ClaudeAgent-<project-name>
 pveum acl modify /storage/local --users claude@pve --roles ClaudeAgent-<project-name>
@@ -149,7 +149,7 @@ The public key gets installed into the guest in Section 6 — there's no guest t
 
 ## 5. Storage
 
-`local-thin-multi` (or whatever LVM-thin/ZFS pool is dedicated to this host) holds guest disks (`rootdir,images` content type). `local` holds templates (`vztmpl` content type) — check what's already downloaded before assuming a fetch is needed:
+`local-thin-multi-01` (`local-thin-multi` until its pool was lost on 2026-09-27, known-bugs.md #37; or whatever LVM-thin/ZFS pool is dedicated to this host) holds guest disks (`rootdir,images` content type). `local` holds templates (`vztmpl` content type) — check what's already downloaded before assuming a fetch is needed:
 ```
 pveam list local
 ```
@@ -165,7 +165,7 @@ If a project genuinely needs its **own dedicated** storage pool separate from ot
 pct create <VMID> local:vztmpl/debian-12-standard_12.12-1_amd64.tar.zst \
   --hostname <project-name>-preflight \
   --cores 2 --memory 2048 \
-  --rootfs local-thin-multi:8 \
+  --rootfs local-thin-multi-01:8 \
   --net0 name=eth0,bridge=vmbr0,ip=<STATIC_IP>/24,gw=192.168.0.1,firewall=0,hwaddr=<PINNED_MAC> \
   --pool <project-name>-poc \
   --unprivileged 0 --features nesting=1,keyctl=1 \

@@ -6,6 +6,108 @@
 
 ---
 
+## 0. RESTART HERE (current state as of 2026-09-27; newest detail is §105, then §104, §103, ...)
+
+The sections below this one are a chronological log, and the numbering runs roughly newest-last up to §87, then batches 10–11 and §102–§105 sit near the end. **This section is the current state.** It should be enough to resume without any other context. Update it at the end of every piece of work.
+
+**Code: done and verified.**
+- Everything is committed on `master` and pushed to `github.com/petsan/athenaeum-poc`.
+- Batches 1–11 are complete. All owner decisions 2–12 are made and implemented (briefs in `docs/owner-decisions.md`).
+- The narrated demo (`demo_brain.py`) covers batches 1–11.
+- Last full live suite: **693 passed, 1 skipped** (§103). Since the rebuild (§105), only the offline suite has run: 672 passed, 2 skipped. The 5 failures all needed the model guests, which were down then.
+- **The owner said the next change "will be pretty big"; it had not been specified when this was written.** Ask for it.
+
+**Standing rules (from the owner, all still in force):**
+- Work in batches: commit and push at the end of every phase. Run an end-to-end test at the end of a batch, then plan the next.
+- Keep `docs/progress.md`, `known-bugs.md` and the other docs current.
+- Never alter `LICENSE` or the README notice line without the owner's explicit approval; the notice must stay byte-identical (check with `cmp`).
+- Never enable `execution_sandbox`. No paid services. Don't touch credentials.
+- Scan every staged diff for secrets before committing.
+- Commit identity is the repo-local `Athenaeum POC <poc@athenaeum.local>`. End commit messages with the Co-Authored-By line.
+- Guest resources: at most 80% of host CPU/RAM (32 threads, about 400 GB).
+- The reviewer tokens file is never committed.
+- **All model files live in `/mnt/pve/glacier-01/models` on the host** (owner, 2026-09-27).
+- Ask before anything destructive on the host.
+
+**Dev and test mechanics:**
+- The Windows workstation (`192.168.0.85`, this repo at `C:\Users\petsa\athenaeum-poc`) has **no Python**; it has node and git-bash.
+- Tests run on **LXC 104** (`root@192.168.0.150`, key `~/.ssh/athenaeum_poc`), which has no git. Sync with:
+  `cd /c/Users/petsa/athenaeum-poc && tar cf - src tests docs client scripts *.md *.yaml *.py pyproject.toml | ssh -i ~/.ssh/athenaeum_poc root@192.168.0.150 'cd /root/athenaeum-poc && tar xf - && find . -name __pycache__ -prune -exec rm -rf {} +'`
+- Full suite: `python3 -m pytest -q -p no:cacheprovider`, about 6 minutes, needs the model guests.
+- Offline suite: `ATHENAEUM_OFFLINE_MODELS=1 python3 -m pytest -q -p no:cacheprovider --ignore=tests/test_model_backed_reasoning.py`.
+- Client smoke: `node tests/client/client_smoke.mjs`.
+- Live checks: `scripts/live_smoke.py`, `scripts/run_judging_benchmark.py`, `scripts/measure_answer_prompts.py`. Model calls take 11–23 s each on the CPU guests, so long live scripts must print progress as they go.
+
+**Infrastructure (host `proxmox01`, `192.168.0.100`, PVE 9, 2× Xeon E5-2690 v2 / 40 threads, 503 GB RAM).** The host is usually powered off between sessions: ping it first.
+
+| VMID | Name | IP | Role | Notes |
+|---|---|---|---|---|
+| 104 | athenaeum-preflight | .150 | test runner | privileged; restored from the 2026-09-25 backup (§104); nodejs reinstalled |
+| 106 | athenaeum-tools | .151 | `pve-ops` CLI plus the API token at `/opt/athenaeum-tools/keys/athenaeum.env` | unprivileged; restored from backup; `pve-ops` redeployed 2026-09-27 |
+| 111–116 | athenaeum-modeltest-* | .161–.166 | one llama-server each, port 8080 | rebuilt 2026-09-27 (§105): models mounted read-only from the host at `/opt/models`; see `infra/proxmox/model-lab/manifest.tsv` |
+| 117 | (olmo3-32b) | — | — | **retired**: the owner said not to rebuild it |
+
+- **Storage:**
+  - Guest disks are on `local-thin-multi-01` (pool `thinpool-01` in VG `volume-group-01`, 820 GB).
+  - The old `local-thin-multi` was lost on 2026-09-27 (known-bugs #37); its entry and ACLs have been removed.
+  - `glacier-01` (`/mnt/pve/glacier-01`, 7.2 TB, ext4 on `/dev/sdi1`) holds the models and the backups.
+  - Don't touch `/dev/sdc` (blank) or `/dev/sdg` (a PV outside any VG).
+  - The host also runs other projects' guests (101, 105, 107, 200–220, 250). Never change them.
+- **Backups:**
+  - A daily `vzdump` of 104 and 106 goes to `glacier-01` (`/mnt/pve/glacier-01/dump`), keeping the last 7. It runs at 03:30, and also 10 minutes after every boot.
+  - A failed run, or a newest archive older than 2 days, prints a warning at every host login (`/etc/update-motd.d/99-athenaeum-backup`).
+  - Installed by `infra/proxmox/06-setup-backups.sh`.
+- **Recovery after storage loss:** `infra/proxmox/07-recover-from-storage-loss.sh`. It is a dry run by default; see `infra/proxmox/README.md` case 2b.
+- **Access:**
+  - Guests: key `~/.ssh/athenaeum_poc`.
+  - API: `ssh root@192.168.0.151 pve-ops -p athenaeum <cmd>`.
+  - **Temporary host root:** key `~/.ssh/proxmox_temp_root`. It works only from `192.168.0.85` and **expires 2026-09-29**. Its host key fingerprint is `SHA256:hfXHivPsL33+zuiODq3++y73nyUxPBQdFPDr7PHz5Rc`, already in `known_hosts`.
+  - Revoke the temporary key when done: delete the `claude-temp-root` line from `/root/.ssh/authorized_keys` on the host, and the key file here.
+  - Claude Code's auto mode refuses destructive host commands and ACL grants. Give those to the owner as paste-ready commands, and don't work around the refusal.
+
+**Model store (`/mnt/pve/glacier-01/models/<repo name>/<file>`):**
+- The six lab models (in `manifest.tsv`) are complete and SHA-256 verified.
+- `GLM-5.3-Flash-GGUF/UD-Q4_K_XL/`: the owner's own download, 6 files, 186 GB. Sizes match to the byte. A SHA-256 check was running.
+- `stored-models.tsv` lists the models kept without a guest:
+  - Qwen3.8 27B Q8_0 (done, SHA-256 verified) and Q4_K_M;
+  - Qwen3.8 9B Distill Q4_K_M;
+  - OLMo 3 7B Think Q4_K_M;
+  - Bonsai 27B Q1_0;
+  - Ternary Bonsai 2 27B, PQ2_0 and PTQ1_0.
+- **Both Bonsai models need PrismML's llama.cpp fork**; stock llama.cpp can't serve them.
+- To download or complete the store: `infra/proxmox/model-lab/download-models-to-host.sh [manifest.tsv|stored-models.tsv]`, as root on the host. It is resumable, and it SHA-256-checks every new download.
+
+**Still running when this was written. Verify each before relying on it:**
+1. **Model guest setup** (llama.cpp build and llama-server): 115 and 116 were serving, 113 was loading its model, and 111, 112 and 114 were still building.
+   - Check: `for i in 161 162 163 164 165 166; do curl -s -m5 http://192.168.0.$i:8080/health; echo; done`.
+   - Any guest that isn't `{"status":"ok"}`: re-run `infra/proxmox/model-lab/setup-llama-and-download.sh <ip> <hf_repo> <hf_file> <label>` (values from `manifest.tsv`). It's idempotent.
+   - Run it in the foreground, or as one tracked background job per guest, never `&` inside a pipeline (§105).
+2. **Stored-model downloads** on the host, first pass: `/root/stored-models-download.log` (it was on Qwen 27B Q4_K_M). A second pass for the Bonsai files starts after it: `/root/stored-models-download-2.log`.
+   - To finish or verify: `cd /root/athenaeum-infra/proxmox/model-lab && ./download-models-to-host.sh stored-models.tsv`.
+   - Files from the first pass (the Qwen 27B Q4_K_M, 9B distill, OLMo Think) were downloaded by the script version without the SHA check. Verify them as §105 describes.
+3. **GLM checksum:** the first of 6 files was OK when this was written.
+
+**After a restart, in order:**
+1. Ping the host.
+2. Check the guests' health (above).
+3. Finish or verify the downloads.
+4. Sync 104 and run the **full live** suite. Expect 693 passed, 1 skipped; a different count needs explaining.
+5. Then take the owner's next change.
+
+**Open owner decisions (not blocking):**
+- an auto-update mechanism for deployed code;
+- an off-site backup destination.
+
+**Recurring pitfalls this project has hit (known-bugs.md has the full list):**
+- `pkill -f`/`pgrep -f` match their own command line, including an SSH command or a waiter script that contains the pattern. Target PIDs instead.
+- `tar` into an unprivileged container needs `--no-same-owner`.
+- A rebuilt guest has new SSH host keys: run `ssh-keygen -R <ip>` first.
+- Build llama.cpp with `--target llama-server`; the whole tree is several times slower.
+- Size isn't integrity: check SHA-256 against Hugging Face's `X-Linked-Etag`.
+- The demo's final banner must print exactly once (known-bugs #16).
+
+---
+
 ## 1. Where we are, in one paragraph
 
 The system is split into **Body** (infrastructure/elasticity, implementation-agnostic) and **Brain** (cognitive logic: five classical Master Agents plus a sixth, Engineering, for coding competence). Both have full design documents. A proof-of-work code slice of the Body's highest-risk mechanics has been built, tested (19/19 passing), and committed to a git repo. Nothing on the Brain side has been implemented yet — it's design-only.
@@ -1423,6 +1525,67 @@ Same rules and stop conditions.
 | — | End-to-end test extended; live smoke; README refreshed if anything user-visible changed. | **done** — §101 |
 
 **Batch 11 (AR–AU) complete 2026-09-26.** No owner decision is open.
+
+## 105. After the storage loss: backups, the model store, the model lab rebuilt
+
+The owner said "do the steps outlined" (§104's list), then asked for more models. Done 2026-09-27, with the temporary host root access described in §104.
+
+**104 re-synced.**
+- 104 was restored from a backup that predates nodejs, so nodejs was reinstalled.
+- Offline suite: 672 passed, 2 skipped, 5 failed. All 5 need live model guests, which were down at the time.
+- Client smoke passes.
+
+**Backups moved to `glacier-01`, with a failure alert** (`06-setup-backups.sh`, re-run on the host):
+- The target is now a parameter (`BACKUP_STORAGE`, default `glacier-01`).
+- The timer's `OnBootSec=10min` is now live (known-bugs #20).
+- `OnFailure=pve-athenaeum-backup-failed.service` writes a marker whenever a run fails. `/etc/update-motd.d/99-athenaeum-backup` prints it at every login, along with any newest archive older than 2 days. The next successful run clears it (`ExecStartPost`).
+- Verified:
+  - A real backup ran: 104 and 106, 390 MB, in `/mnt/pve/glacier-01/dump`.
+  - A simulated failure printed the warning, and clearing it removed the warning.
+  - `systemctl cat` shows `OnBootSec` and `OnFailure`.
+- A failed vzdump exits 255, which fails the unit. That is what the 2026-09-26 failure did, unseen.
+
+**Stale state cleared** with `07-recover-from-storage-loss.sh --apply`:
+- `REMOVE_VMIDS="111 … 117"`; the old configs are saved in `/root/recovery-20260927-020605`.
+- `OLD_STORAGE=local-thin-multi`: the entry and its two ACLs were removed.
+- 104 and 106 were correctly left alone.
+- Other projects' guests were untouched, including the templates the first version of the script misread.
+
+**Infra defaults now point at `local-thin-multi-01`:** `00-`, `01-`, `03-`, `pve-ops` (redeployed on 106; the old copy is at `pve-ops.bak-20260927`), and `deployment-playbook.md`.
+
+**Model store on the host** (owner's rule: all models in `/mnt/pve/glacier-01`):
+- New `model-lab/download-models-to-host.sh`, run as root on the host:
+  - uses curl only;
+  - one folder per HF repo;
+  - resumable, and skips files that are complete;
+  - checks a new download's SHA-256 against HF's `X-Linked-Etag`, deleting and reporting a mismatch;
+  - reads either `manifest.tsv` or the two-column `stored-models.tsv`.
+- The six lab models: done; all six SHA-256 verified independently.
+- `stored-models.tsv`, owner requests, all apache-2.0, each choice explained in the file:
+  - Qwen3.8 27B Q8_0 and Q4_K_M, from `ggml-org`, the only repo with a plain Q4_K_M;
+  - empero-ai Qwen3.8 9B Distill Q4_K_M. No quant was named, so the lab's usual one;
+  - OLMo 3 7B Think Q4_K_M, from the same packager as the lab's OLMo Instruct;
+  - Bonsai 27B Q1_0;
+  - Ternary Bonsai 2 27B, PQ2_0 and PTQ1_0. Its card says neither packing is faster everywhere.
+- The Bonsai models need PrismML's llama.cpp fork (their cards say so; stock llama.cpp rejects the ternary types).
+- **No distill of Bonsai exists on HF.** All 569 "Bonsai" repos were checked. prism-ml's "dspark" files are a speculative-decoding drafter, not a distill. The owner was told.
+- The owner's GLM-5.3-Flash UD-Q4_K_XL (6 files) matches HF's sizes to the byte. A SHA-256 check was started.
+- Verifying a file by hand (the first-pass files were downloaded before the SHA check existed):
+  `f=<repo name>/<file>; curl -sIL https://huggingface.co/<org>/<repo name>/resolve/main/<file> | grep -i x-linked-etag; sha256sum /mnt/pve/glacier-01/models/$f`
+
+**Model lab rebuilt, with models on the host:**
+- `create-model-vms.sh` (from 106, via the API) created 111–116 on `local-thin-multi-01`, sized as in the manifest.
+- New `model-lab/mount-model-store.sh`, run as root on the host, sets `mp0: /mnt/pve/glacier-01/models,mp=/opt/models,ro=1` on each guest. The mount needs root@pam; it's read-only so no guest can alter a model. The guests read the files as "other", so the download script makes them world-readable.
+- `setup-llama-and-download.sh` no longer downloads anything:
+  - it serves `/opt/models/<repo name>/<file>`, and stops early if that file is missing;
+  - it no longer needs pip or `hf`;
+  - it builds only `--target llama-server`. The whole tree reached 30% in the time the server target needs in total.
+- 116 (OLMo 3 7B) was verified serving from the mount: it answered "Paris". The others were still building (see §0).
+
+**Process mistakes this session** (known-bugs #38; the first mistake below is also on the pitfall list in §0):
+1. A `pkill -f make` over SSH killed its own SSH command.
+2. A waiter meant to start the second download pass once the first finished used `pgrep -f` on a pattern that its own command line contained, so it would have waited forever. The replacement looked up the PID with a regex that matched nothing. That made the wait a no-op, and it started a **duplicate download of the same file** at once. The duplicate ran for about 7 seconds before it was killed. The file was then SHA-256 checked and is intact. Since then, every new download is SHA-checked (a damaged file is deleted), and waiters wait on a verified PID.
+3. The six parallel guest setups were started with `&` inside a `while read` pipeline, with `wait` outside it. The launcher returned at once and printed empty results. The remote setups kept running under their own SSH clients, so nothing was lost, but the "done" report was false. Use one tracked background job per guest.
 
 ## 104. Storage loss on the host, and a script for next time
 

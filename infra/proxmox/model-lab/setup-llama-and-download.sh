@@ -1,9 +1,16 @@
 #!/usr/bin/env bash
 # Installs llama.cpp (built from source -- more portable than betting on a
-# specific prebuilt release asset name for this CPU) and downloads ONE
-# model's GGUF onto an already-created guest, then runs it as a systemd
-# service on port 8080. Run once per guest (loop over the manifest, or
-# call directly for a single model).
+# specific prebuilt release asset name for this CPU) on an already-created
+# guest, and runs ONE model as a systemd service on port 8080. Run once per
+# guest (loop over the manifest, or call directly for a single model).
+#
+# Since 2026-09-27 the guest downloads nothing: models live on the host,
+# in /mnt/pve/glacier-01/models/<repo name>/ (owner's decision), put there
+# by download-models-to-host.sh and mounted read-only at /opt/models by
+# mount-model-store.sh. So the model is served from
+# /opt/models/<repo name>/<file>, and this fails early if it isn't there.
+# (Before, each guest downloaded its own copy onto its own disk, and the
+# 2026-09-27 pool loss took every copy with it: known-bugs.md #37.)
 #
 # Usage (single guest):
 #   SSH_PRIVATE_KEY_PATH=~/.ssh/athenaeum_poc \
@@ -41,8 +48,9 @@ LABEL="${4:?}"
 KEY="${SSH_PRIVATE_KEY_PATH:-$HOME/.ssh/athenaeum_poc}"
 PORT="${LLAMA_PORT:-8080}"
 CACHE_RAM_MIB="${LLAMA_CACHE_RAM_MIB:-512}"
+MODEL_PATH="/opt/models/${HF_REPO##*/}/${HF_FILE}"   # the host store, mounted read-only (see top)
 
-echo "=== $LABEL @ $IP -- installing llama.cpp + downloading $HF_REPO/$HF_FILE ==="
+echo "=== $LABEL @ $IP -- installing llama.cpp to serve $HF_REPO/$HF_FILE ==="
 
 ssh -i "$KEY" -o StrictHostKeyChecking=accept-new "root@${IP}" bash -s <<REMOTE
 set -euo pipefail
@@ -50,7 +58,7 @@ export DEBIAN_FRONTEND=noninteractive
 
 echo "--- apt deps ---"
 apt-get update -qq
-apt-get install -y -qq build-essential cmake git python3-pip python3-venv >/dev/null
+apt-get install -y -qq build-essential cmake git >/dev/null
 
 if [ ! -d /opt/llama.cpp ]; then
     echo "--- cloning llama.cpp ---"
@@ -59,19 +67,16 @@ fi
 
 echo "--- building (CPU-only, this takes a few minutes) ---"
 cmake -B /opt/llama.cpp/build -S /opt/llama.cpp -DCMAKE_BUILD_TYPE=Release
-cmake --build /opt/llama.cpp/build --config Release -j\$(nproc)
+# only the server: the whole tree (every tool and example) is several times
+# longer to build on these CPUs, and nothing else is used here
+cmake --build /opt/llama.cpp/build --config Release --target llama-server -j\$(nproc)
 
-echo "--- huggingface_hub CLI ---"
-pip install --break-system-packages -q -U "huggingface_hub[cli]"
-
-echo "--- downloading ${HF_FILE} (resumable if interrupted) ---"
-mkdir -p /opt/models
-# huggingface-cli was deprecated and REMOVED (not just aliased) in
-# recent huggingface_hub releases -- 'hf download' is the current command.
-# Caught for real: the first live run of this script against all six
-# guests failed here with "huggingface-cli is deprecated and no longer
-# works," not something known from training data alone.
-hf download "${HF_REPO}" "${HF_FILE}" --local-dir /opt/models
+echo "--- model, from the host's store (mounted read-only) ---"
+if [ ! -r "${MODEL_PATH}" ]; then
+    echo "${MODEL_PATH} is not readable. On the host, as root: model-lab/download-models-to-host.sh, then model-lab/mount-model-store.sh" >&2
+    exit 1
+fi
+ls -l "${MODEL_PATH}"
 
 echo "--- systemd unit ---"
 cat > /etc/systemd/system/llama-server.service <<UNIT
@@ -80,7 +85,7 @@ Description=llama.cpp server -- ${LABEL} (Athenaeum model-lab candidate)
 After=network.target
 
 [Service]
-ExecStart=/opt/llama.cpp/build/bin/llama-server --model /opt/models/${HF_FILE} --host 0.0.0.0 --port ${PORT} -c 4096 --threads \$(nproc) --no-jinja --cache-ram ${CACHE_RAM_MIB}
+ExecStart=/opt/llama.cpp/build/bin/llama-server --model ${MODEL_PATH} --host 0.0.0.0 --port ${PORT} -c 4096 --threads \$(nproc) --no-jinja --cache-ram ${CACHE_RAM_MIB}
 Restart=on-failure
 RestartSec=5
 

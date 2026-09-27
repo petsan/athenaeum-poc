@@ -27,7 +27,7 @@ IP="${TOOLS_IP:?set TOOLS_IP, e.g. 192.168.0.151}"
 MAC="${TOOLS_MAC:?set TOOLS_MAC, e.g. BC:24:11:AA:BB:CD -- must be unique on the LAN}"
 GATEWAY="${TOOLS_GATEWAY:-192.168.0.1}"
 POOL="${TOOLS_POOL:?set TOOLS_POOL -- which resource pool the tools box lives in}"
-STORAGE="${TOOLS_STORAGE:-local-thin-multi}"
+STORAGE="${TOOLS_STORAGE:-local-thin-multi-01}"   # -01 since the 2026-09-27 pool loss (known-bugs #37)
 SSH_PUBKEY_PATH="${SSH_PUBKEY_PATH:?set SSH_PUBKEY_PATH -- public key to inject as root's authorized_keys}"
 
 DESCRIPTION="${TOOLS_DESCRIPTION:-Athenaeum shared tools container (pve-ops CLI).

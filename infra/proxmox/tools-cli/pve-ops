@@ -89,7 +89,7 @@ cmd_pool() {
 }
 
 cmd_storage() {
-    local storage="${1:-local-thin-multi}"
+    local storage="${1:-local-thin-multi-01}"
     _api GET "/nodes/${PROXMOX_NODE}/storage/${storage}/status" | jq '{total_gb: (.data.total/1073741824|floor), used_gb: (.data.used/1073741824|floor), avail_gb: (.data.avail/1073741824|floor), type: .data.type}'
 }
 
@@ -108,7 +108,7 @@ cmd_create() {
         --data-urlencode "hostname=${hostname}" \
         --data-urlencode "cores=${cores}" \
         --data-urlencode "memory=${mem}" \
-        --data-urlencode "rootfs=local-thin-multi:${disk}" \
+        --data-urlencode "rootfs=local-thin-multi-01:${disk}" \
         --data-urlencode "net0=name=eth0,bridge=vmbr0,ip=${ip}/24,gw=${PROXMOX_GATEWAY:-192.168.0.1},firewall=0,hwaddr=${mac}" \
         --data-urlencode "pool=${PROXMOX_POOL:?set PROXMOX_POOL in the project env file}" \
         --data-urlencode "unprivileged=1" \
@@ -150,7 +150,7 @@ Commands:
   guests                              list all LXC + QEMU guests on the node
   perms <path>                        effective permissions at an ACL path
   pool [name]                         pool status (default: this project's PROXMOX_POOL)
-  storage [name]                      storage free/used (default: local-thin-multi)
+  storage [name]                      storage free/used (default: local-thin-multi-01)
   create VMID HOST IP MAC [C] [M] [D] create an unprivileged LXC guest
   destroy VMID                        stop + destroy a guest
   ssh IP [cmd...]                     ssh to any guest using this project's stored key

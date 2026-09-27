@@ -1,18 +1,24 @@
 [Unit]
-Description=vzdump snapshot backup of athenaeum-poc guests to local storage
+Description=vzdump snapshot backup of athenaeum-poc guests
 # Simplest possible backup: a self-updating (self-pruning) copy of each
-# guest's disk+config on a DIFFERENT underlying storage (local, the
-# host's root filesystem) than where the live disks actually live
-# (local-thin-multi). This is recreate-AND-restore-data protection for
-# accidental guest deletion or LVM-thin pool corruption -- it is NOT
-# off-host/off-site protection; a whole-host failure still loses both
-# copies. See infra/proxmox/README.md for that tradeoff stated plainly.
+# guest's disk+config on a DIFFERENT storage than where the live disks
+# are. Since 2026-09-27 that is glacier-01, a separate 7.2 TB disk (it was
+# `local`, the host's system disk). This is recreate-AND-restore-data
+# protection for accidental guest deletion or loss of the thin pool (which
+# happened, known-bugs.md #37) -- it is NOT off-host/off-site protection;
+# a whole-host failure still loses both copies. See
+# infra/proxmox/README.md for that tradeoff stated plainly.
 Wants=network-online.target
 After=network-online.target
+# a failed run leaves a marker that every host login reports
+OnFailure=pve-athenaeum-backup-failed.service
 
 [Service]
 Type=oneshot
 # --prune-backups keep-last=7 makes each run self-pruning: it deletes
 # older archives for the same guest past the 7 most recent, so this
 # never grows unbounded -- "self-updating," not "self-accumulating."
-ExecStart=/usr/bin/vzdump 104 106 --storage local --mode snapshot --compress zstd --prune-backups keep-last=7
+# 06-setup-backups.sh rewrites this line with the chosen guests and storage.
+ExecStart=/usr/bin/vzdump 104 106 --storage glacier-01 --mode snapshot --compress zstd --prune-backups keep-last=7
+# only reached when the backup succeeded: clears an earlier failure's marker
+ExecStartPost=/bin/rm -f /var/lib/athenaeum-backup/FAILED

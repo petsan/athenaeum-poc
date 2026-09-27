@@ -57,7 +57,7 @@ else
 fi
 
 echo "== ACL grants (both token AND user -- see known-bugs.md entry re: this host's Privilege Separation intersection quirk) =="
-for path in "/pool/${POOL}" "/nodes/${NODE}" "/storage/local-thin-multi" "/storage/local" "/sdn/zones/localnetwork/vmbr0"; do
+for path in "/pool/${POOL}" "/nodes/${NODE}" "/storage/local-thin-multi-01" "/storage/local" "/sdn/zones/localnetwork/vmbr0"; do
     echo "  -> $path"
     pveum acl modify "$path" --tokens "claude@pve!${TOKEN_ID}" --roles "$ROLE"
     pveum acl modify "$path" --users claude@pve --roles "$ROLE"

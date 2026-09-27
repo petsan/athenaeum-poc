@@ -89,14 +89,14 @@ These aren't aspirational — every one of them is here because violating it (or
 
 ## Current status (see `docs/progress.md` for full detail)
 
-- **Start here next session:** `docs/progress.md` §26 — the batch tables
-  ("Approved autonomous batch" = batch 1, A–I, done; "Batch 2" = J–N, in
-  progress) and the list of **pending owner decisions** under batch 2
-  (most urgent: the OLMo 3 guest, known-bugs.md #24). The owner approved
+- **Start here next session:** `docs/progress.md` **§0 "RESTART HERE"**. It
+  is the current state (updated 2026-09-27): what's done, the live guests
+  and storage, access (including a temporary host-root key that expires
+  2026-09-29), work still in flight, the restart checklist, and recurring
+  pitfalls. Everything below this bullet is older background: batches
+  1–11 and every owner decision are done. The owner approved
   unattended batches on 2026-09-26: commit and push at the end of every
-  phase, keep all docs current, stop only on the listed stop conditions.
-  Sync/test mechanics are in §26's "Next-session plan". 2026-09-25/26
-  added §41–§53 (evidence weighting through fingerprints). The repo
+  phase, keep all docs current, stop only on the listed stop conditions. The repo
   carries a proprietary source-available `LICENSE` (Piorun, Inc.) —
   don't alter it or the README notice without the owner's explicit approval.
 - Body: storage/checkpoint/scheduler/concurrency/ingestion (now including

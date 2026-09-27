@@ -1,0 +1,11 @@
+[Unit]
+Description=Record a failed athenaeum-poc backup, so the next login says so
+# Started by pve-athenaeum-backup.service's OnFailure=. The 2026-09-26 03:32
+# backup failed ("Cannot process volume group thinpool") a day before the
+# pool was lost, and nobody saw it (known-bugs.md #37). The marker is shown
+# at every host login by /etc/update-motd.d/99-athenaeum-backup, and removed
+# by the next backup that succeeds.
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c 'mkdir -p /var/lib/athenaeum-backup && date "+%%Y-%%m-%%d %%H:%%M" > /var/lib/athenaeum-backup/FAILED'

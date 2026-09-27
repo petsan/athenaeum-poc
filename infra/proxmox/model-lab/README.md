@@ -73,13 +73,25 @@ name.
    SSH_PUBKEY_PATH=~/.ssh/athenaeum_poc.pub \
      ./create-model-vms.sh
    ```
-2. **Install llama.cpp and download weights** on each (a few minutes per
-   guest -- build from source, then a multi-GB download):
+2. **Download the models to the host, and mount them into the guests.**
+   Since 2026-09-27 every model lives on the host in
+   `/mnt/pve/glacier-01/models/<repo name>/` (owner's decision), not on a
+   guest's own disk: the 2026-09-27 loss of the thin pool took every
+   guest's copy with it (`known-bugs.md` #37). On the host, as root:
+   ```
+   ./download-models-to-host.sh   # resumable; skips files already complete
+   ./mount-model-store.sh         # mp0: <store>,mp=/opt/models,ro=1 on each guest
+   ```
+   The mount is a host bind mount, which only root@pam can set (never the
+   scoped API token). It is read-only, so no guest can alter a model.
+3. **Install llama.cpp** on each (a few minutes per guest, building from
+   source) and serve the mounted model:
    ```
    SSH_PRIVATE_KEY_PATH=~/.ssh/athenaeum_poc ./setup-all.sh
    ```
    Or one at a time: `./setup-llama-and-download.sh <ip> <hf_repo> <hf_file> <label>`.
-3. **Compare.** Each guest serves an OpenAI-compatible API on port 8080
+   It stops early if `/opt/models/<repo name>/<file>` isn't there.
+4. **Compare.** Each guest serves an OpenAI-compatible API on port 8080
    (`llama-server`, from `llama.cpp` itself). `setup-all.sh` prints a
    one-liner to fan the same prompt out to all six and compare responses.
 

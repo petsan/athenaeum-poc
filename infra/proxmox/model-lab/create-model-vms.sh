@@ -35,4 +35,4 @@ while IFS=$'\t' read -r label vmid hostname ip mac cores mem_mb disk_gb hf_repo 
 done < "$MANIFEST"
 
 echo
-echo "All model-lab guests created. Next: run setup-llama-and-download.sh against each one (see model-lab/README.md)."
+echo "All model-lab guests created. Next, on the host as root: download-models-to-host.sh (if not done) and mount-model-store.sh; then setup-all.sh (see model-lab/README.md)."

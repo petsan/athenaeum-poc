@@ -1,0 +1,31 @@
+# Models kept in the host's model store (/mnt/pve/glacier-01/models) with
+# no model-lab guest of their own yet. Download with:
+#   ./download-models-to-host.sh stored-models.tsv
+# Columns (tab-separated): hf_repo hf_file
+#
+# Requested by the owner, 2026-09-27. Repos, filenames, sizes and licenses
+# checked against the live Hugging Face API that day. All apache-2.0 (the
+# base models too). Choices where the request left room:
+# - Qwen3.8 27B: ggml-org's repo (llama.cpp's own), the one with a plain
+#   Q4_K_M; unsloth's has only its "UD" variant.
+# - empero-ai's 9B distill: no quant named, so Q4_K_M, like the lab models.
+# - OLMo 3 Think: the 7B, from the same packager as the OLMo 3 7B Instruct
+#   the lab already runs. A 32B and 3.1 versions also exist.
+
+ggml-org/Qwen3.8-27B-GGUF	Qwen3.8-27B-Q8_0.gguf
+ggml-org/Qwen3.8-27B-GGUF	Qwen3.8-27B-Q4_K_M.gguf
+empero-ai/Qwen3.8-9B-Distill-GGUF	Qwen3.8-9B-Q4_K_M.gguf
+bartowski/allenai_Olmo-3-7B-Think-GGUF	allenai_Olmo-3-7B-Think-Q4_K_M.gguf
+# Bonsai 27B (owner, 2026-09-27): prism-ml's 1-bit model on a Qwen3.6 27B
+# base, apache-2.0. Q1_0 (1.125 bits/weight, 3.5 GB) is its native format,
+# served by PrismML's llama.cpp fork (github.com/PrismML-Eng/llama.cpp)
+# per the model card, not necessarily by upstream llama.cpp. No distill of
+# Bonsai exists on Hugging Face (all 569 "Bonsai" repos checked); its
+# "dspark" files are a speculative-decoding drafter, not a distill.
+prism-ml/Bonsai-27B-gguf	Bonsai-27B-Q1_0.gguf
+# Ternary Bonsai 2 27B (owner, 2026-09-27): prism-ml, Qwen3.8 27B base,
+# apache-2.0, ternary weights. Both packings: the card says neither is
+# faster everywhere (PQ2_0 unpacks cheaper, PTQ1_0 is smaller). Stock
+# llama.cpp REJECTS both as unknown types; they need PrismML's fork.
+prism-ml/Ternary-Bonsai-2-27B-gguf	Ternary-Bonsai-2-27B-PQ2_0.gguf
+prism-ml/Ternary-Bonsai-2-27B-gguf	Ternary-Bonsai-2-27B-PTQ1_0.gguf
