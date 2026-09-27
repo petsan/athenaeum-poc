@@ -70,7 +70,7 @@ The sections below this one are a chronological log, and the numbering runs roug
 
 **Model store (`/mnt/pve/glacier-01/models/<repo name>/<file>`):**
 - The six lab models (in `manifest.tsv`) are complete and SHA-256 verified.
-- `GLM-5.3-Flash-GGUF/UD-Q4_K_XL/`: the owner's own download, 6 files, 186 GB. Sizes match to the byte. A SHA-256 check was running.
+- `GLM-5.3-Flash-GGUF/UD-Q4_K_XL/`: the owner's own download, 6 files, 186 GB. **All 6 SHA-256 checksums match Hugging Face's (verified 2026-09-27).**
 - `stored-models.tsv` lists the models kept without a guest:
   - Qwen3.8 27B Q8_0 (done, SHA-256 verified) and Q4_K_M;
   - Qwen3.8 9B Distill Q4_K_M;
@@ -88,7 +88,7 @@ The sections below this one are a chronological log, and the numbering runs roug
 2. **Stored-model downloads** on the host, first pass: `/root/stored-models-download.log` (it was on Qwen 27B Q4_K_M). A second pass for the Bonsai files starts after it: `/root/stored-models-download-2.log`.
    - To finish or verify: `cd /root/athenaeum-infra/proxmox/model-lab && ./download-models-to-host.sh stored-models.tsv`.
    - Files from the first pass (the Qwen 27B Q4_K_M, 9B distill, OLMo Think) were downloaded by the script version without the SHA check. Verify them as §105 describes.
-3. **GLM checksum:** the first of 6 files was OK when this was written.
+3. **GLM checksum: done.** All 6 files match.
 
 **After a restart, in order:**
 1. Ping the host.
