@@ -1424,6 +1424,30 @@ Same rules and stop conditions.
 
 **Batch 11 (AR–AU) complete 2026-09-26.** No owner decision is open.
 
+## 104. Storage loss on the host, and a script for next time
+
+On 2026-09-27 the thin pool under every Athenaeum guest was lost, and its disks were rebuilt into a new, empty pool, `local-thin-multi-01` (known-bugs #37 has the details).
+
+**Access.** With root on the host deliberately out of reach, the owner granted temporary access. It used a dedicated key, `~/.ssh/proxmox_temp_root`, separate from the guests' key. In `authorized_keys` the key is restricted to `from="192.168.0.85"`, carries `expiry-time="20260929"`, and has forwarding off. The host key's fingerprint was checked against the one the owner read from the console before the first connection. To revoke: delete the `claude-temp-root` line from `/root/.ssh/authorized_keys` and the key here.
+
+**What happened next:**
+- The owner restored 104 and 106 from their 2026-09-25 backups; my attempts to run the restore were refused by Claude Code's safety check.
+- The owner said the 32B guest (117) is not to be rebuilt, and backups should move to `glacier-01`.
+- All models now live in `/mnt/pve/glacier-01` (owner, 2026-09-27).
+
+**`infra/proxmox/07-recover-from-storage-loss.sh`** scripts that recovery, documented in `infra/proxmox/README.md` (new case 2b). Three dry runs on the live host:
+1. The first found two bugs in the script itself: healthy templates reported broken, and a cleanup flag that would have reached other projects' guests. Both are fixed (known-bugs #37).
+2. With the fixes, 104 and 106 are reported healthy and left alone. Only the named model-lab configs would be removed, and the old storage would then be retired.
+3. Without naming them, the old storage stays, because 111–117 still use it.
+
+`bash -n` passes. The script has not been run with `--apply`: the restore it automates had already been done by hand.
+
+**Still to do, each waiting on the owner:**
+- rebuild 111–116 with their models on `glacier-01` (a template change, to be shown first);
+- move the backup target to `glacier-01`, and apply the timer's `OnBootSec` on the live host;
+- clear 111–117's stale configs and the old storage entry (the script does this);
+- re-sync 104's code from git and re-run the suite.
+
 ## 103. The remaining to-do list
 
 The owner asked for this on 2026-09-26 ("please do the following"). Of the six items left, four could be done without further input. Two need the owner to choose something.
