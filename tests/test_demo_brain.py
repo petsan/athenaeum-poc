@@ -20,3 +20,12 @@ def test_demo_brain_runs_and_ends_exactly_once(tmp_path):
     assert "sampled ONE claim, yet reopened: ['c1', 'c2', 'c3']" in result.stdout
     assert result.stdout.count("unit_error: attempt") == 2 and "unit_failed: attempt 3" in result.stdout
     assert "c5 is now: suspended" in result.stdout
+    # batches 6-11 (steps 16-20)
+    assert "its weight at use: {'Physics::olmo3-7b': 0.5}" in result.stdout
+    assert "21/24 -> challenges count? (False" in result.stdout
+    assert "24/24 -> challenges count? (True" in result.stdout
+    assert "reviewer tokens are stored hashed: True" in result.stdout
+    assert ": checkpointed" in result.stdout and "mo tries to approve it: refused (403)" in result.stdout
+    assert "the answer was reopened because: human input from mo, approved by rita" in result.stdout
+    assert "answers reopened by that upgrade: 0" in result.stdout
+    assert "Question Ledger: 6 questions, one append-only log each" in result.stdout

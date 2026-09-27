@@ -210,7 +210,7 @@ Requires Python 3.10+ and PyYAML.
 pip install -e ".[dev]"
 pytest -q                          # live-model tests need the model-lab servers
 ATHENAEUM_OFFLINE_MODELS=1 pytest -q --ignore=tests/test_model_backed_reasoning.py   # no model servers needed
-python demo_brain.py               # narrated deliberation, including a kill/resume
+python demo_brain.py               # narrated tour, kill/resume to human review; no model servers needed
 python -m athenaeum_body.api       # HTTP API + mobile web client (from src/, or with src/ on PYTHONPATH)
 ```
 

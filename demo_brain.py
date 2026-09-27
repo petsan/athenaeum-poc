@@ -309,7 +309,101 @@ finally:
     maintenance_module.make_deliberation_unit = real_factory
 print("c5 is now:", ledger6.get("c5").status, "| recorded error:", m6.failed["c5"]["last_error"])
 
-step("16. Adversarial suite: a real check for every failure mode in the design (Section 8)")
+# --- Added 2026-09-26: batches 6-11 (docs/progress.md §75-§101) ---------------
+import time as _time
+from athenaeum_body.api import build_app, ApiError
+from athenaeum_body.reviewers import add_reviewer, Identity
+from athenaeum_body.model_fitness_store import ModelFitnessStore
+from athenaeum_brain import model_backed_reasoning as mbr
+from athenaeum_brain.belief_graph import record_answer
+from athenaeum_brain.judging_benchmark import run_benchmark, challenger_qualified, QUALIFYING_ACCURACY
+from athenaeum_brain.model_backed_reasoning import CHALLENGE_PROMPT
+
+DATA7 = DATA / "batches-6-11"
+real_ask_model = mbr.ask_model
+def stand_in_model(prompt, *a, **k):
+    """A stand-in for the model servers, so this part of the demo runs anywhere:
+    it answers questions with "Gravity" and judges nothing."""
+    return None if prompt.startswith(CHALLENGE_PROMPT.split("{")[0]) else "Gravity"
+mbr.ask_model = stand_in_model
+try:
+    app = build_app(DATA7 / "api")
+
+    step("16. A model's answer weighs only what the model has earned (Section 6.7)")
+    answer = app[0]("what force holds the moon in orbit?")["answer"]
+    print("committed:", [c["statement"] for c in answer["committed"]])
+    print("its weight at use:", answer["fitness_at_use"], "-- admitted models start at half weight")
+    print("admitted, and standing:", app.maintenance_status()["models"])
+
+    step("17. A model may challenge claims, but only counts once it proves it can judge (decisions 10-11)")
+    def judge(rejects):
+        """A stand-in judge: says 'no' to exactly the answers `rejects` picks."""
+        def ask(prompt, *a, **k):
+            answer_text = prompt.rsplit(' is "', 1)[-1].rstrip('".')
+            return "no" if rejects(answer_text) else "yes"
+        return ask
+    wrong = {"Magnetism", "Berlin", "Mars", "Six", "5", "Oxygen", "50", "Charles Dickens", "Ag", "Five", "Venus", "10"}
+    scores = ModelFitnessStore(CheckpointLog(cas=ContentAddressedStore(DATA7 / "cas"), index_path=DATA7 / "fit.txt"))
+    for label, rejects in [("rejects short numbers, as OLMo 3 7B did live", lambda a: a in wrong or a.isdigit()),
+                           ("judges every case right", lambda a: a in wrong)]:
+        mbr.ask_model = judge(rejects)
+        result = run_benchmark("judge-model")
+        scores.record_judging("judge-model", result)
+        print(f"a judge that {label}: {result['correct']}/{result['total']} -> challenges count?",
+              challenger_qualified(scores, "judge-model"))
+    print(f"(the bar is {QUALIFYING_ACCURACY:.0%}; live, OLMo 3 7B scored 77%, so its challenges stay dissent only)")
+    mbr.ask_model = stand_in_model
+
+    step("18. Human input is examined, and waits for a reviewer when it matters (Section 11)")
+    for rid, role in (("mo", "member"), ("rita", "reviewer")):
+        token = add_reviewer(DATA7 / "api" / "reviewers.json", rid, role)
+    print("reviewer tokens are stored hashed:", token not in (DATA7 / "api" / "reviewers.json").read_text())
+    asked = app[0]("should we round 2.5 up or down?")
+    qid = asked["id"]
+    out = app.submit_input(Identity("mo", "member"), qid, {
+        "statement": "financial reporting rounds half up by regulation",
+        "justification": "the applicable accounting standard", "declared_scope": "computed:decimal.ROUND_HALF_UP"})
+    print(f"mo's evidence on {qid} (importance {asked['importance']:.2f}): {out['outcome']}")
+    try:
+        app.decide_checkpoint(Identity("mo", "member"), qid, {"decision": "approve"})
+    except ApiError as e:
+        print(f"mo tries to approve it: refused ({e.status})")
+    decided = app.decide_checkpoint(Identity("rita", "reviewer"), qid, {"decision": "approve"})
+    print("rita approves it; reopen requested:", decided["reopen_requested"])
+    deadline = _time.time() + 30
+    while len(app[2](qid)["versions"]) < 2 and _time.time() < deadline:
+        _time.sleep(0.05)
+    reopened = app[2](qid)["versions"][-1]
+    print("the answer was reopened because:", [r for r in reopened["reopen_context"]["reasons"] if "human input" in r][0])
+finally:
+    mbr.ask_model = real_ask_model
+
+step("19. A source's upgrade reopens nothing; only a downgrade can (Section 7.2)")
+log8 = lambda name: CheckpointLog(cas=ContentAddressedStore(DATA7 / "cas"), index_path=DATA7 / f"{name}.txt")
+rep8, ledger8 = ReputabilityStore(log8("rep8")), QuestionLedger(log8("ledger8"))
+m8 = Maintainer(idle=IdleContext(ledger=ledger8, reputability=rep8), log_for=log8,
+                belief_graph=BeliefGraphStore(log8("graph8")),
+                policy=MaintenancePolicy(idle_every_questions=100, importance_threshold=0.0))
+for i, n in enumerate((101, 103, 107, 109, 113, 127), start=1):
+    m8.submit_question(f"u{i}", f"is {n} prime?")
+    m8.run()
+print("after six uses, the primality source is:", rep8.current_grade("computed:trial_division")["grade"])
+print("answers reopened by that upgrade:", sum(len(ledger8.get(f"u{i}").versions) - 1 for i in range(1, 7)))
+
+step("20. Storage: every write costs only what it adds")
+graph9 = BeliefGraphStore(log8("graph9"))
+sizes = []
+for i in range(30):
+    record_answer(graph9, f"s{i}", {"question": f"q{i}?", "dissent": [], "committed": [
+        {"statement": f"claim {i}", "issuing_agent": "Mathematics", "claim_type": "formal",
+         "supporting_provenance": [f"source-{i}", "shared-source"]}]}, version=0)
+    entry = graph9.log.all_entries()[-1]
+    sizes.append(graph9.log.cas._path_for(entry.payload_ref).stat().st_size)
+print(f"Belief Graph: answer 2 cost {sizes[1]} bytes, answer 30 cost {sizes[-1]} bytes"
+      f" -- the graph grew to {len(graph9.nodes())} nodes, the write didn't")
+print(f"Question Ledger: {len(list(ledger8._dir.iterdir()))} questions, one append-only log each")
+
+step("21. Adversarial suite: a real check for every failure mode in the design (Section 8)")
 suite = run_adversarial_suite()
 print(f"{suite['passed']}/{suite['total']} passed")
 

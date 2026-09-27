@@ -1424,6 +1424,19 @@ Same rules and stop conditions.
 
 **Batch 11 (AR–AU) complete 2026-09-26.** No owner decision is open.
 
+## 102. The narrated demo covers batches 6–11
+
+The owner asked for this ("let's do 6", item 6 of the what's-left list). `demo_brain.py` gains five steps, and the adversarial suite moves to step 21 as the finale:
+- **16.** A model-backed answer is committed with `fitness_at_use` 0.5. Admitted models start at half weight, and `/api/maintenance` lists OLMo 3 7B as `provisional`.
+- **17.** Two stand-in judges take the real judging benchmark. One rejects short numbers, the error pattern OLMo 3 7B showed live, and scores 21/24; its challenges don't count. The other scores 24/24 and qualifies. The step also cites the live 77%.
+- **18.** Human input goes through `build_app`. Reviewer tokens are stored hashed. A member's evidence on the rounding question (importance 0.50) is checkpointed. The member's own approve is refused with 403. The reviewer's approve makes the background worker reopen the answer, with the input quoted among its reasons.
+- **19.** Six primality answers upgrade their source to `foundational`, and no answer is reopened (decision 9).
+- **20.** Storage: Belief Graph write 2 is 1405 bytes and write 30 is 1434 bytes, while the graph grows to 121 nodes (decision 12). The ledger holds one log per question (decision 8).
+
+Steps 16–18 run against a labelled stand-in for `ask_model`, as step 15 does for its injected fault, so the demo never depends on the model guests. The real function is restored in `finally`. The final banner was moved, not duplicated (known-bugs #16). `tests/test_demo_brain.py` pins each new step's key outcome.
+
+**Full live suite: 690 passed, 1 skipped.** 691 collected; no new tests, only new assertions in the demo test.
+
 ## 101. End-to-end over batch 11
 
 `test_human_input_through_review_to_reopen` runs over real HTTP with the background worker, and was stable across 3 repeats:
