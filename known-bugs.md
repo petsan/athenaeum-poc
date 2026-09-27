@@ -266,6 +266,20 @@ Real, reproduced behaviours that are wrong or weak but deliberately not fixed in
 **Fix:** Every guest's `ExecStart` now matches the template exactly (`… --no-jinja --cache-ram 512`), rewritten idempotently and verified in the running processes' arguments, not just in the unit files.
 **Lesson:** "The script does X" is not "every host has X". After changing a provisioning template, either re-run it everywhere or verify each live host against it — and state in docs which one actually happened. A `sed` anchored on something assumed to be present fails silently where it isn't; verify the result, not the command's exit code.
 
+### 37. The thin pool holding every Athenaeum guest's disk was lost; recovery was by hand
+**What happened:** On 2026-09-27 the owner reported the thin pool configuration destroyed. On the host, the volume group `thinpool` (pool `thindata`, storage `local-thin-multi`) no longer existed. Its disks had been reused for a new, empty pool, `thinpool-01` in `volume-group-01`, registered as `local-thin-multi-01`. All nine Athenaeum guests (104, 106, 111–117) pointed at disks that were gone. The pool was already failing on 2026-09-26: that night's 03:32 backup failed with `Cannot process volume group thinpool`, even though the guests kept running that day. So the newest good backups were from 2026-09-25, about 19:30. 104 and 106 were restored from them by the owner. The model-lab guests (111–117) had never been backed up, so they must be rebuilt.
+**Root cause:** Not established. The old pool's volume group became unprocessable before its disks were reused; `/dev/sdc`, now blank, may be a disk that left it, but that is not verified. Two things made it worse than necessary: backups covered only 104 and 106, and a failed nightly backup alerted no one.
+**Fix:** `infra/proxmox/07-recover-from-storage-loss.sh` scripts the recovery (dry run by default). Given the replacement storage, it:
+- sets it to hold container disks and grants the project role on it;
+- restores every broken guest from its newest backup whose log says it finished;
+- lists guests with no backup;
+- retires the old storage entry once nothing uses it.
+
+It never touches disks or LVM, never restores over a healthy guest, and only removes the configs named in `REMOVE_VMIDS`. Its first dry run on the live host found two bugs in the script itself, both fixed before use:
+- it called another project's healthy templates "broken", because their LVs are never activated, so "device node exists" was the wrong test;
+- an all-or-nothing flag would have removed other projects' stale configs.
+**Lesson:** A backup that only covers some guests means the rest must be rebuildable, and the model-lab guests' models are the slow part: that is one reason models now live on `glacier-01` (owner, 2026-09-27). And "the nightly job ran" isn't "the nightly job succeeded": the failed 2026-09-26 backup was a day's warning nobody saw. A recovery script that can touch every guest on a shared host must be dry-run there first, and must be scoped by explicit lists, not by "everything that looks broken".
+
 ---
 
 ## Recurring process mistake (not a code bug — a workflow one)
