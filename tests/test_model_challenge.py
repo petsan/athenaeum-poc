@@ -16,6 +16,7 @@ from athenaeum_brain.claims import Claim
 from athenaeum_brain.model_backed_reasoning import DEFAULT_MODEL, CHALLENGE_PROMPT, model_challenge
 from athenaeum_brain.model_fitness import admit_model, model_standing, ESTABLISHED_AFTER
 from athenaeum_brain.idle_evolution import IdleContext, make_idle_evolution_unit
+from athenaeum_brain import judging_benchmark as jb
 from athenaeum_brain.judging_benchmark import BENCHMARK_VERSION, PROMPT_VERSION
 
 MODEL_CLAIM = "gravity holds the moon in orbit"
@@ -55,6 +56,7 @@ def test_only_a_plain_no_is_a_challenge(monkeypatch, verdict, challenges):
 
 class World:
     def __init__(self, tmp, monkeypatch, verdict):
+        self.monkeypatch = monkeypatch
         self.model = Model(verdict)
         monkeypatch.setattr(model_backed_reasoning, "ask_model", self.model)
         self.cas = ContentAddressedStore(tmp / "cas")
@@ -79,12 +81,16 @@ class World:
             self.fitness.record_outcome("Physics", DEFAULT_MODEL, "corroborated")
         assert model_standing(self.fitness, DEFAULT_MODEL) == "established"
 
-    def qualify(self, accuracy=1.0, **versions):
-        """Records a judging-benchmark result (owner decision 11)."""
+    def qualify(self, accuracy=1.0, reviewed=True, **versions):
+        """Records a judging-benchmark result (owner decisions 11 and D15): a
+        Wilson verdict on the case accuracy, on a benchmark the owner has
+        reviewed (or, with reviewed=False, one still provisional)."""
+        n = len(jb.cases())
         self.fitness.record_judging(DEFAULT_MODEL, {
-            "model": DEFAULT_MODEL, "accuracy": accuracy,
+            "model": DEFAULT_MODEL, "accuracy": accuracy, **jb.score(round(accuracy * n), n),
             "benchmark_version": versions.get("benchmark_version", BENCHMARK_VERSION),
             "prompt_version": versions.get("prompt_version", PROMPT_VERSION)})
+        self.monkeypatch.setattr(jb, "reviewed", lambda: reviewed)
 
     def cycle(self, n=1):
         log = self.log(f"idle-{n}")
@@ -107,7 +113,8 @@ def test_a_provisional_models_challenge_is_dissent_only(tmp_path, monkeypatch):
     assert len(w.model.challenges_asked) == 1                         # the deterministic claim isn't put to it
 
 
-@pytest.mark.parametrize("how", ["established only", "stale benchmark", "stale prompt", "low score"])
+@pytest.mark.parametrize("how", ["established only", "stale benchmark", "stale prompt", "low score",
+                                 "provisional benchmark"])
 def test_a_challenge_does_not_count_without_a_current_passing_benchmark(tmp_path, monkeypatch, how):
     """Owner decision 11 (batch 11) replaced 'established' as the bar:
     standing earned by the model's own answers says nothing about its judging."""
@@ -119,6 +126,8 @@ def test_a_challenge_does_not_count_without_a_current_passing_benchmark(tmp_path
         w.qualify(prompt_version="an-older-prompt")
     elif how == "low score":
         w.qualify(accuracy=0.81)
+    elif how == "provisional benchmark":            # a perfect score, but the owner hasn't reviewed the items
+        w.qualify(reviewed=False)
     result = w.cycle()
     assert result["status_counts"]["disputed"] == 1 and result["status_counts"]["challenged"] == 0
 

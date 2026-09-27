@@ -35,9 +35,11 @@ The sections below this one are a chronological log, and the numbering runs roug
 **Dev and test mechanics:**
 - The Windows workstation (`192.168.0.85`, this repo at `C:\Users\petsa\athenaeum-poc`) has **no Python**; it has node and git-bash.
 - Tests run on **LXC 104** (`root@192.168.0.150`, key `~/.ssh/athenaeum_poc`), which has no git. Sync with:
-  `cd /c/Users/petsa/athenaeum-poc && tar cf - src tests docs client scripts *.md *.yaml *.py pyproject.toml | ssh -i ~/.ssh/athenaeum_poc root@192.168.0.150 'cd /root/athenaeum-poc && tar xf - && find . -name __pycache__ -prune -exec rm -rf {} +'`
-- Full suite: `python3 -m pytest -q -p no:cacheprovider`, about 6 minutes, needs the model guests.
-- Offline suite: `ATHENAEUM_OFFLINE_MODELS=1 python3 -m pytest -q -p no:cacheprovider --ignore=tests/test_model_backed_reasoning.py`.
+  `cd /c/Users/petsa/athenaeum-poc && tar cf - src tests docs client scripts evals *.md *.yaml *.py pyproject.toml | ssh -i ~/.ssh/athenaeum_poc root@192.168.0.150 'cd /root/athenaeum-poc && tar xf - && find . -name __pycache__ -prune -exec rm -rf {} +'`
+- **Since batch 12, run Athenaeum with `/opt/athenaeum-venv/bin/python`, not `python3`.** The venv uses `--system-site-packages` (the apt pytest and pyyaml) and adds evalcore (pinned `v0.1.1` in `pyproject.toml`). The runtime imports evalcore, so bare `python3` now fails.
+- Full suite: `/opt/athenaeum-venv/bin/python -m pytest -q -p no:cacheprovider`, about 6 minutes, needs the model guests.
+- Offline suite: `ATHENAEUM_OFFLINE_MODELS=1 /opt/athenaeum-venv/bin/python -m pytest -q -p no:cacheprovider --ignore=tests/test_model_backed_reasoning.py --ignore=tests/test_model_serving_real.py -k "not b1_single_agent and not falls_back_to_cpu"`.
+- The release evaluation: `/opt/athenaeum-venv/bin/python scripts/run_evals.py [--suites adversarial,judging] [--out evals/out]`.
 - Client smoke: `node tests/client/client_smoke.mjs`.
 - Live checks: `scripts/live_smoke.py`, `scripts/run_judging_benchmark.py`, `scripts/measure_answer_prompts.py`. Model calls take 11–23 s each on the CPU guests, so long live scripts must print progress as they go.
 
@@ -96,7 +98,7 @@ The sections below this one are a chronological log, and the numbering runs roug
     - E1–E4: statistics and gates identical to evalgate 0.2.0's; detectors, judges and calibration; the artifacts, front end and CLI; the fault matrix and dashboard.
     - E5: evalgate 0.3.0 rebased on evalcore. Its CI is green, and LXC 250 was redeployed and ran successfully.
     - E6, part 1: an unrelated pilot, `examples/parcel_quotes`, APPROVED.
-  - **Next: E6, part 2: Athenaeum using evalcore directly (X7).** That still needs the owner's answers to D14–D19 of `docs/proposals/evalgate-integration.md` that remain relevant: D15 (grow the judging benchmark to ≥ 110 cases), D16 (where the dashboard lives), D17 (judge and labels), D19 (nightly schedule). D13 (the harness shape) and D18 are superseded by X7 and E5.
+  - **In progress: batch 12 (§107), Athenaeum's evaluation built on evalcore (E6, part 2).** The owner decided D15, D16, D17 and D19 on 2026-09-27 and approved working autonomously for several hours. The decisions are recorded at the top of `docs/proposals/evalgate-integration.md`.
   - Its own `progress.md` is authoritative;
 - not blocking: an auto-update mechanism for deployed code, and an off-site backup destination.
 
@@ -1536,6 +1538,26 @@ Same rules and stop conditions.
 | — | End-to-end test extended; live smoke; README refreshed if anything user-visible changed. | **done** — §101 |
 
 **Batch 11 (AR–AU) complete 2026-09-26.** No owner decision is open.
+
+## 107. Batch 12: Athenaeum's evaluation on evalcore (planned 2026-09-27, autonomous)
+
+The owner approved several hours of independent work, with these decisions:
+- the judging benchmark is drafted to ≥ 110 cases, counted as provisional until the owner reviews it (D15);
+- the dashboard goes on the LXC 250 report host (D16);
+- judge-scored gates stay INSUFFICIENT until the owner labels ≥ 30 items per task (D17);
+- nightly runs use a boot + daily timer (D19).
+
+Stop conditions are as before: a test failure I can't explain, anything destructive on the host, credentials, the license or README notice, paid services, the 80% resource cap. A phase ends with its tests green, a commit and push, and updated docs.
+
+| Phase | Scope | Status |
+|---|---|---|
+| 0 | Health: the full live suite after the model-lab rebuild; evalcore CI on GitHub; phone-width check with device emulation | **done**: live suite 693 passed, 1 skipped, plus the client smoke. evalcore CI is green on Ubuntu 3.10–3.12 and Windows 3.11. Windows CI exposed cp1252 decoding in evalcore and evalgate; both now use UTF-8 for all I/O, enforced by an AST test (`tests/test_encoding.py`). evalcore **v0.1.1** tagged. At 390 px wide the phone check showed no overflow, in light or dark |
+| AV | `evals/` on evalcore; a venv on LXC 104; the 16 adversarial checks as hard gates, each shown to catch a planted violation | **done**: `src/athenaeum_evals/` (`adversarial`, `judging`, `runner`) and `scripts/run_evals.py`. The venv is `/opt/athenaeum-venv` (see §0). The adversarial suite gives **APPROVED** (15 of 15 §8 rows checked) |
+| AW | The judging benchmark as a judge-validation (`validates_judge`) suite with Wilson bounds; the runtime qualification uses evalcore's rule; the benchmark grown to ≥ 110 cases (provisional); a live re-run on the six lab models | **code done**. The benchmark has 120 cases (60 items), in `judging_benchmark.json`, with review status **provisional**. A case counts only if every repeat is right, and it passes only if the Wilson lower bound is ≥ 0.95, i.e. at most 1 miss in 120. Demo: 103/120 gives 0.785 and fails; 120/120 gives 0.969 but does not qualify while the benchmark is provisional. Offline suite: 702 passed. Writing the cases turned up two Brain bugs, now fixed: #40 (rounding ignored the requested precision) and #41 ("which came first" got no chronology claim). The live re-run is in progress |
+| AX | Deliberation accuracy with paraphrases; per-agent claim calibration (ECE, Brier, worst-agent floor, drift) | planned |
+| AY | Provenance (fabricated sources, ingestion canaries; citation support built but INSUFFICIENT), human input, API SLOs, per-model answers | planned |
+| AZ | Athenaeum-specific seeded faults, the fault matrix, the dashboard; publishing to LXC 250 `/athenaeum/` | planned |
+| BA | The nightly runner on LXC 104 (boot + daily), keeping 90 runs, pushing to LXC 250 | planned |
 
 ## 106. Debugging tools, a reusable toolkit plan, and the model store verified
 

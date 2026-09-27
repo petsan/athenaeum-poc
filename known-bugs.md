@@ -211,6 +211,18 @@ Both were rewritten into every later checkpoint, and the records grew with every
 **Fix (batch 5, Phase W):** `Maintainer.tick` catches a failing round. It restores that unit's namespace from the last checkpoint, because a handler may have changed it before raising, then resubmits the unit from its last completed round. After `MaintenancePolicy.max_round_failures` attempts (3), counted persistently so a restart doesn't reset them, the unit is given up: dropped from the registry, recorded under `failed` with its last error, and a question is marked `suspended`. The API returns the error with the question and lists failed units, and the client shows both. Pinned by `tests/test_maintenance_failures.py`.
 **Lesson:** For any queue that removes an item before processing it, ask what happens to the item when processing throws. "Log and keep going" protects the worker, not the work.
 
+### 40. Rounding ignored the requested precision, and rounded the precision itself
+**What happened:** "Round 0.125 to two decimal places" committed "0.125 rounds to 0" from *both* Mathematics and Engineering, when the answers are 0.13 (half-up) and 0.12 (half-to-even). Written as "to 2 decimal places", the "2" was also rounded, as a value ("2 rounds to 2"). The answers were confident, committed and wrong. Found 2026-09-27 by probing the loop while building batch 12's deliberation suite; no test had asked for a precision.
+**Root cause:** Both agents quantized every numeric token in the question to `Decimal("1")`. The code only ever handled the one question that exercised it ("how should we round 2.5?"), and nothing checked a second phrasing.
+**Fix:** `agents.rounding_request(question)` reads the precision ("to N decimal places", "to N dp", "to the nearest tenth/hundredth/thousandth/whole number"), removes that phrase, then collects the values. `round_to` quantizes to it. Answers to integer rounding are byte-identical to before. `tests/test_rounding_and_chronology_fixes.py`.
+**Lesson:** A deterministic agent is only as right as the questions it has been asked. Golden cases need *variations* of each capability (precision, units, phrasing), not one canonical example. That is what the deliberation suite's paraphrases are for.
+
+### 41. "Which came first, X or Y?" got no answer
+**What happened:** World News answered "did X happen before Y?" but produced no claim at all for "which came first, X or Y?". The model fallback wasn't reached either, because the agent's deterministic path saw the two events and returned nothing. Found by the same probe.
+**Root cause:** The chronology claim fired only on the words before/after/when/order/timeline.
+**Fix:** It also fires on first, earlier, later, precede(d) and follow(ed). Four phrasings are tested.
+**Lesson:** Keyword routing needs paraphrase tests; this is the robustness gap the evaluation's paraphrase gate measures (known-bugs #28 was the same family).
+
 ---
 
 ## Open known limitations (found, not yet fixed)

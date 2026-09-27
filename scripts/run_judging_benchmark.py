@@ -4,8 +4,9 @@
 
 Prints the score and every miss. With --record, appends the result to that
 data dir's model-fitness store (the API's is data/api-run), which is what
-decides whether the model's re-examination challenges count: only a score
-at or above the threshold, for the current benchmark and prompt versions.
+decides whether the model's re-examination challenges count: only a Wilson
+lower bound at or above the bar, for the current benchmark and prompt
+versions, on a benchmark the owner has reviewed.
 """
 import argparse
 import sys
@@ -26,8 +27,12 @@ def main(argv=None) -> dict:
     p.add_argument("--record", type=Path, default=None, help="data dir whose model-fitness store records the result")
     args = p.parse_args(argv)
     result = run_benchmark(args.model, repeats=args.repeats)
-    print(f"{args.model}: {result['correct']}/{result['total']} = {result['accuracy']:.0%} "
-          f"(needs {result['threshold']:.0%}) -> {'QUALIFIES' if result['passed'] else 'does not qualify'}")
+    bar = "passes the bar" if result["passed"] else "does not pass the bar"
+    print(f"{args.model}: {result['cases_right']}/{result['cases']} cases right on every repeat "
+          f"({result['correct']}/{result['total']} judgments), Wilson lower bound {result['wilson_low']:.3f} "
+          f"(needs {result['threshold']:.2f}) -> {bar}")
+    if not result["reviewed"]:
+        print("  the benchmark is provisional (awaiting the owner's review): no model's challenges count yet")
     for miss in result["misses"]:
         truth = "correct" if miss["is_correct"] else "incorrect"
         print(f"  miss: {miss['judged']} the {truth} answer {miss['answer']!r} to {miss['question']!r}")

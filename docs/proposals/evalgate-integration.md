@@ -1,6 +1,13 @@
 # Proposal: bring evalgate's ideas into Athenaeum, with a dashboard that shows how well each tool works
 
-Status: **proposal, for the owner's decision. Nothing here is built yet.**
+Status: **decided 2026-09-27, being built as batch 12 (see `docs/progress.md` §107).** The owner's decisions:
+- **D13, D14 and D18 are superseded.** X7 has Athenaeum use **evalcore** directly (evalgate's extracted core, `github.com/petsan/evalcore`, public), so there is no evalgate harness and no private repo to install.
+- **D15:** I draft the judging benchmark to ≥ 110 cases and verify every answer myself. The cases run and report, but they are marked **provisional**: model challenges don't start counting until the owner has reviewed the file.
+- **D16:** the dashboard goes on the LXC 250 report host (`/athenaeum/`), pushed from LXC 104 with a new SSH key limited to that folder.
+- **D17:** judge-scored gates are built but stay INSUFFICIENT until a judge is validated against ≥ 30 of the owner's labels per task. I prepare the labelling file.
+- **D19:** a boot + daily timer on LXC 104.
+
+Where this proposal says "evalgate", the implementation uses evalcore, which decides identically.
 Written 2026-09-27, from `github.com/petsan/evalgate` at `9baa359` (v0.2.0) and Athenaeum at `410e722`.
 
 ## 1. Summary

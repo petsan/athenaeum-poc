@@ -317,6 +317,7 @@ from athenaeum_body.model_fitness_store import ModelFitnessStore
 from athenaeum_brain import model_backed_reasoning as mbr
 from athenaeum_brain.belief_graph import record_answer
 from athenaeum_brain.judging_benchmark import run_benchmark, challenger_qualified, QUALIFYING_ACCURACY
+from athenaeum_brain.judging_benchmark import cases as judging_cases
 from athenaeum_brain.model_backed_reasoning import CHALLENGE_PROMPT
 
 DATA7 = DATA / "batches-6-11"
@@ -335,23 +336,26 @@ try:
     print("its weight at use:", answer["fitness_at_use"], "-- admitted models start at half weight")
     print("admitted, and standing:", app.maintenance_status()["models"])
 
-    step("17. A model may challenge claims, but only counts once it proves it can judge (decisions 10-11)")
+    step("17. A model may challenge claims, but only counts once it proves it can judge (decisions 10-11, D15)")
+    labels = {f'The answer to "{q}" is "{a}".': (a, ok) for q, a, ok in judging_cases()}
+
     def judge(rejects):
-        """A stand-in judge: says 'no' to exactly the answers `rejects` picks."""
+        """A stand-in judge: says 'no' to exactly the (answer, is_correct) pairs `rejects` picks."""
         def ask(prompt, *a, **k):
-            answer_text = prompt.rsplit(' is "', 1)[-1].rstrip('".')
-            return "no" if rejects(answer_text) else "yes"
+            answer, ok = next(v for key, v in labels.items() if key in prompt)
+            return "no" if rejects(answer, ok) else "yes"
         return ask
-    wrong = {"Magnetism", "Berlin", "Mars", "Six", "5", "Oxygen", "50", "Charles Dickens", "Ag", "Five", "Venus", "10"}
     scores = ModelFitnessStore(CheckpointLog(cas=ContentAddressedStore(DATA7 / "cas"), index_path=DATA7 / "fit.txt"))
-    for label, rejects in [("rejects short numbers, as OLMo 3 7B did live", lambda a: a in wrong or a.isdigit()),
-                           ("judges every case right", lambda a: a in wrong)]:
+    for label, rejects in [("rejects short numeric answers, as OLMo 3 7B did live",
+                            lambda a, ok: not ok or a.isdigit()),
+                           ("judges every case right", lambda a, ok: not ok)]:
         mbr.ask_model = judge(rejects)
         result = run_benchmark("judge-model")
         scores.record_judging("judge-model", result)
-        print(f"a judge that {label}: {result['correct']}/{result['total']} -> challenges count?",
-              challenger_qualified(scores, "judge-model"))
-    print(f"(the bar is {QUALIFYING_ACCURACY:.0%}; live, OLMo 3 7B scores 77-79%, so its challenges stay dissent only)")
+        print(f"a judge that {label}: {result['cases_right']}/{result['cases']} cases, Wilson lower bound "
+              f"{result['wilson_low']:.3f} -> challenges count?", challenger_qualified(scores, "judge-model"))
+    print(f"(the bar is a Wilson lower bound of {QUALIFYING_ACCURACY:.2f}, which {len(judging_cases())} cases can "
+          f"prove with one miss; and until the owner reviews the benchmark, no model's challenges count)")
     mbr.ask_model = stand_in_model
 
     step("18. Human input is examined, and waits for a reviewer when it matters (Section 11)")

@@ -1,6 +1,9 @@
-"""Owner decision 11 (batch 11, Phase AR): a challenger model qualifies on a
-judging benchmark -- balanced, labelled, versioned -- not on the standing of
-its own answers."""
+"""Owner decisions 11 and D15 (batch 12, phase AW): a challenger model qualifies
+on a judging benchmark -- balanced, labelled, versioned, reviewed -- judged on
+the Wilson lower bound (evalcore), not on a point estimate and not on the
+standing of its own answers."""
+import json
+
 import pytest
 from athenaeum_body.storage.content_addressed import ContentAddressedStore
 from athenaeum_body.storage.checkpoint import CheckpointLog
@@ -22,23 +25,53 @@ def judge_by(rule):
     return ask_model
 
 
+def perfect(q, a, ok):
+    return "yes" if ok else "no"
+
+
 @pytest.fixture
 def store(tmp_path):
     return ModelFitnessStore(CheckpointLog(cas=ContentAddressedStore(tmp_path / "cas"), index_path=tmp_path / "f.txt"))
 
 
-def test_the_benchmark_is_balanced_and_versioned():
+def test_the_benchmark_is_balanced_versioned_and_provisional():
     cases = jb.cases()
-    assert len(cases) == 24 and sum(ok for _, _, ok in cases) == 12
-    assert len({q for q, _, _ in cases}) == 12                      # each question judged both ways
+    assert len(cases) == 120 and sum(ok for _, _, ok in cases) == 60
+    assert len({q for q, _, _ in cases}) == 60                      # each question judged both ways
     assert len(jb.BENCHMARK_VERSION) == len(jb.PROMPT_VERSION) == 16
+    assert not any("continents" in q for q, _, _ in cases)          # convention-dependent: removed
+    assert jb.REVIEW["status"] == "provisional" and not jb.reviewed()
+    assert jb.misses_allowed() == 1                                 # 120 cases prove 0.95 with one miss
 
 
-def test_a_perfect_judge_qualifies(monkeypatch):
-    monkeypatch.setattr(model_backed_reasoning, "ask_model", judge_by(lambda q, a, ok: "yes" if ok else "no"))
+def test_a_perfect_judge_passes_on_the_wilson_bound(monkeypatch):
+    monkeypatch.setattr(model_backed_reasoning, "ask_model", judge_by(perfect))
     result = jb.run_benchmark(DEFAULT_MODEL, repeats=2)
-    assert (result["correct"], result["total"], result["accuracy"], result["passed"]) == (48, 48, 1.0, True)
-    assert result["misses"] == [] and result["prompt_version"] == jb.PROMPT_VERSION
+    assert (result["correct"], result["total"], result["cases_right"], result["cases"]) == (240, 240, 120, 120)
+    assert result["passed"] and result["wilson_low"] >= jb.QUALIFYING_ACCURACY and result["misses"] == []
+    assert result["reviewed"] is False
+
+
+@pytest.mark.parametrize("wrong, passes", [(1, True), (2, False)])
+def test_one_miss_is_allowed_two_are_not(monkeypatch, wrong, passes):
+    doubted = [(q, a) for q, a, ok in jb.cases() if ok][:wrong]    # (question, answer): "100" answers two questions
+    monkeypatch.setattr(model_backed_reasoning, "ask_model",
+                        judge_by(lambda q, a, ok: "no" if (not ok or (q, a) in doubted) else "yes"))
+    result = jb.run_benchmark(DEFAULT_MODEL)
+    assert result["cases_right"] == 120 - wrong and result["passed"] is passes
+
+
+def test_a_case_counts_only_if_every_repeat_was_right(monkeypatch):
+    seen = {}
+
+    def flaky(q, a, ok):                        # right the first time, wrong the second, on one case
+        seen[(q, a)] = seen.get((q, a), 0) + 1
+        if (q, a) == ("what is 2 + 2?", "4") and seen[(q, a)] == 2:
+            return "no"
+        return perfect(q, a, ok)
+    monkeypatch.setattr(model_backed_reasoning, "ask_model", judge_by(flaky))
+    result = jb.run_benchmark(DEFAULT_MODEL, repeats=2)
+    assert result["correct"] == 239 and result["cases_right"] == 119
 
 
 def test_the_measured_no_bias_does_not_qualify(monkeypatch):
@@ -47,7 +80,7 @@ def test_the_measured_no_bias_does_not_qualify(monkeypatch):
     monkeypatch.setattr(model_backed_reasoning, "ask_model",
                         judge_by(lambda q, a, ok: "no" if (not ok or a in doubted) else "yes"))
     result = jb.run_benchmark(DEFAULT_MODEL)
-    assert result["correct"] == 21 and result["accuracy"] == 0.875 and not result["passed"]
+    assert result["cases_right"] == 117 and not result["passed"]
     assert {m["answer"] for m in result["misses"]} == doubted
     assert all(m["is_correct"] and m["judged"] == "challenged" for m in result["misses"])
 
@@ -58,19 +91,35 @@ def test_an_unreachable_model_cannot_pass_by_accepting_everything(monkeypatch):
     assert result["accuracy"] == 0.5 and not result["passed"]
 
 
-def test_qualification_needs_a_current_passing_result(store):
+def test_qualification_needs_a_current_passing_reviewed_result(store, monkeypatch):
     assert jb.challenger_qualified(None, DEFAULT_MODEL) == (False, "no fitness store to read a benchmark result from")
     assert jb.challenger_qualified(store, DEFAULT_MODEL) == (False, "never run on the judging benchmark")
     current = {"benchmark_version": jb.BENCHMARK_VERSION, "prompt_version": jb.PROMPT_VERSION}
-    store.record_judging(DEFAULT_MODEL, {**current, "accuracy": 0.875})
-    assert jb.challenger_qualified(store, DEFAULT_MODEL) == (False, "scored 88%, below the 95% needed")
-    store.record_judging(DEFAULT_MODEL, {**current, "accuracy": 1.0})
-    assert jb.challenger_qualified(store, DEFAULT_MODEL) == (True, "scored 100% on the current benchmark")
-    store.record_judging(DEFAULT_MODEL, {**current, "prompt_version": "older", "accuracy": 1.0})
+    store.record_judging(DEFAULT_MODEL, {**current, "accuracy": 1.0})             # a pre-Wilson record
+    assert jb.challenger_qualified(store, DEFAULT_MODEL)[1] == "recorded before the Wilson rule; run it again"
+    store.record_judging(DEFAULT_MODEL, {**current, **jb.score(112, 120)})
+    ok, why = jb.challenger_qualified(store, DEFAULT_MODEL)
+    assert not ok and why.startswith("112/120 cases, Wilson lower bound 0.8") and "below the 0.95 needed" in why
+    store.record_judging(DEFAULT_MODEL, {**current, **jb.score(120, 120)})
+    ok, why = jb.challenger_qualified(store, DEFAULT_MODEL)
+    assert not ok and why.endswith("but the benchmark is provisional (awaiting the owner's review)")
+    monkeypatch.setattr(jb, "reviewed", lambda: True)
+    assert jb.challenger_qualified(store, DEFAULT_MODEL) == (
+        True, "120/120 cases, Wilson lower bound 0.969 on the current, reviewed benchmark")
+    store.record_judging(DEFAULT_MODEL, {**current, **jb.score(120, 120), "prompt_version": "older"})
     assert jb.challenger_qualified(store, DEFAULT_MODEL)[1] == "the challenge prompt has changed since its last run"
-    store.record_judging(DEFAULT_MODEL, {**current, "benchmark_version": "older", "accuracy": 1.0})
+    store.record_judging(DEFAULT_MODEL, {**current, **jb.score(120, 120), "benchmark_version": "older"})
     assert jb.challenger_qualified(store, DEFAULT_MODEL)[1] == "the benchmark has changed since its last run"
-    assert len(store.judging_history(DEFAULT_MODEL)) == 4          # every run kept
+    assert len(store.judging_history(DEFAULT_MODEL)) == 5          # every run kept
+
+
+def test_review_status_is_read_fresh(tmp_path, monkeypatch):
+    data = json.loads(jb.DATA.read_text(encoding="utf-8"))
+    data["review"]["status"] = "reviewed"
+    copy = tmp_path / "judging_benchmark.json"
+    copy.write_text(json.dumps(data), encoding="utf-8")
+    monkeypatch.setattr(jb, "DATA", copy)
+    assert jb.reviewed()                                            # no restart needed after approval
 
 
 def test_the_api_reports_each_challengers_status(tmp_path, monkeypatch):
@@ -88,7 +137,8 @@ def test_the_script_records_a_result(tmp_path, monkeypatch, capsys):
     spec = importlib.util.spec_from_file_location("run_judging_benchmark", path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    monkeypatch.setattr(model_backed_reasoning, "ask_model", judge_by(lambda q, a, ok: "yes" if ok else "no"))
+    monkeypatch.setattr(model_backed_reasoning, "ask_model", judge_by(perfect))
     module.main(["--repeats", "1", "--record", str(tmp_path)])
     out = capsys.readouterr().out
-    assert "24/24 = 100%" in out and "QUALIFIES" in out and "(True, 'scored 100% on the current benchmark')" in out
+    assert "120/120 cases" in out and "Wilson lower bound 0.969" in out and "passes the bar" in out
+    assert "provisional (awaiting the owner's review)" in out

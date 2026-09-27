@@ -70,6 +70,48 @@ def all_agents() -> list:
     return [cls() for cls in _REGISTRY]
 
 
+_WORD_DIGITS = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6}
+_PLACES = re.compile(r"\bto\s+(\d+|one|two|three|four|five|six)\s+(?:decimal\s+places?|decimals?|dp)\b", re.I)
+_NEAREST = re.compile(r"\bto\s+the\s+nearest\s+(tenth|hundredth|thousandth|integer|whole\s+number|unit)\b", re.I)
+_NEAREST_PLACES = {"tenth": 1, "hundredth": 2, "thousandth": 3}
+
+
+def rounding_request(question: str):
+    """What a rounding question asks for: (decimal places, the values to round).
+
+    "round 0.125 to two decimal places" asks for 0.125 to 2 places. Found by
+    the batch 12 deliberation suite: both rounding agents ignored the
+    precision and always rounded to an integer ("0.125 rounds to 0"), and a
+    precision written as a digit ("to 2 decimal places") was itself rounded
+    as a value. The precision phrase is read, then removed before the values
+    are collected; with no precision given, it is 0 places, as before."""
+    from decimal import Decimal
+    places, text = 0, question
+    m = _PLACES.search(text)
+    if m:
+        word = m.group(1).lower()
+        places = int(word) if word.isdigit() else _WORD_DIGITS[word]
+        text = text[:m.start()] + text[m.end():]
+    else:
+        m = _NEAREST.search(text)
+        if m:
+            places = _NEAREST_PLACES.get(m.group(1).lower(), 0)
+            text = text[:m.start()] + text[m.end():]
+    values = []
+    for token in text.replace("?", "").split():
+        try:
+            Decimal(token)
+        except Exception:
+            continue
+        values.append(token)
+    return places, values
+
+
+def round_to(token: str, places: int, rounding) -> str:
+    from decimal import Decimal
+    return str(Decimal(token).quantize(Decimal(1).scaleb(-places), rounding=rounding))
+
+
 def _is_prime(n: int) -> bool:
     if n < 2:
         return False
@@ -122,13 +164,10 @@ class MasterOfMathematics:
                 supporting_provenance=["computed:trial_division"],
             ))
         if mentions(question, ("round",)):
-            for token in question.replace("?", "").split():
-                try:
-                    from decimal import Decimal, ROUND_HALF_UP
-                    val = Decimal(token)
-                except Exception:
-                    continue
-                rounded = val.quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+            from decimal import ROUND_HALF_UP
+            places, values = rounding_request(question)
+            for token in values:
+                rounded = round_to(token, places, ROUND_HALF_UP)
                 claims.append(Claim(
                     question_id=question_id, round=1, issuing_agent=self.name,
                     subject=token,
@@ -253,13 +292,10 @@ class MasterOfEngineering:
         if not mentions(question, ("round",)):
             return []
         claims = []
-        from decimal import Decimal, ROUND_HALF_EVEN
-        for token in question.replace("?", "").split():
-            try:
-                val = Decimal(token)
-            except Exception:
-                continue
-            rounded = val.quantize(Decimal("1"), rounding=ROUND_HALF_EVEN)
+        from decimal import ROUND_HALF_EVEN
+        places, values = rounding_request(question)
+        for token in values:
+            rounded = round_to(token, places, ROUND_HALF_EVEN)
             claims.append(Claim(
                 question_id=question_id, round=1, issuing_agent=self.name,
                 subject=token,
@@ -719,7 +755,10 @@ class MasterOfWorldNews:
         event_a, event_b = events
         date_a, date_b = self._EVENTS[event_a], self._EVENTS[event_b]
         claims = []
-        if mentions(q, ("before", "after", "when", "order", "timeline")):
+        # The ordinary ways of asking about order. "Which came first, X or Y?"
+        # got no claim at all before batch 12's deliberation suite asked it.
+        if mentions(q, ("before", "after", "when", "order", "timeline", "first", "earlier", "later",
+                        "precede", "preceded", "follow", "followed")):
             order = "before" if date_a < date_b else "after"
             claims.append(Claim(
                 question_id=question_id, round=1, issuing_agent=self.name,
