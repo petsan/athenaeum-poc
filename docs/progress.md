@@ -90,7 +90,7 @@ The sections below this one are a chronological log, and the numbering runs roug
 **Open owner decisions:**
 - `docs/proposals/evalgate-integration.md` §7 (D13–D19);
 - `evalcore` (the reusable evaluation toolkit from `docs/proposals/evaltools-extraction.md`): **decided (X1–X7) and being built**.
-  - It lives in its own private repo, `github.com/petsan/evalcore`, at `C:\Users\petsa\evalcore`, with tests in `/opt/evalcore-venv` on LXC 104.
+  - It lives in its own repo, `github.com/petsan/evalcore`, at `C:\Users\petsa\evalcore`, with tests in `/opt/evalcore-venv` on LXC 104.
   - It is now **public** (owner's decision). Commits use the GitHub noreply address. Tagged `v0.1.0`.
   - Done:
     - E1–E4: statistics and gates identical to evalgate 0.2.0's; detectors, judges and calibration; the artifacts, front end and CLI; the fault matrix and dashboard.
