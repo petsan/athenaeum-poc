@@ -223,6 +223,18 @@ Both were rewritten into every later checkpoint, and the records grew with every
 **Fix:** It also fires on first, earlier, later, precede(d) and follow(ed). Four phrasings are tested.
 **Lesson:** Keyword routing needs paraphrase tests; this is the robustness gap the evaluation's paraphrase gate measures (known-bugs #28 was the same family).
 
+### 42. The injection heuristic flagged ordinary prose containing "system:"
+**What happened:** The §12.3 instruction-like-content heuristic flagged "The solar system has eight planets. The metric system: a kilometre is 1000 metres." as suspicious. A flag is not harmless: it records one "challenged" outcome against the source's reputability. Found 2026-09-27 by batch 12's provenance suite, whose clean ingestion fixtures measure the heuristic's false alarms.
+**Root cause:** The pattern `system\s*:` matched anywhere, but a prompt's "System:" is a speaker label, which starts a turn.
+**Fix:** "system:" now counts only where a turn could start: the beginning of the text, after a sentence end or a newline, or after an opening bracket (`[system]:`, `<system>:`). Every existing injection example still matches. Tested in `tests/test_evals_provenance.py`.
+**Lesson:** An advisory detector still needs a measured false-alarm rate, because "advisory" signals feed scores that do have consequences.
+
+### 43. A person's false "17 is not prime" was never checked
+**What happened:** Human input enters as a claim typed `human_input`. Mathematics re-derived only claims typed `formal`, and Physics only `empirical`, so a person's "17 is not prime" survived cross-examination untouched. It counted as a surviving input to the submitter's track record, and a material one could even reach a checkpoint. progress.md (§29 and the Phase 13 notes) said such a claim *would* be checked "if it happens to match" an agent's pattern; it never was. World News, which checks every claim, was the only exception. Found 2026-09-27 by batch 12's human-input suite, whose golden set includes false claims in the agents' own formats.
+**Root cause:** The claim-type filter meant "claims of my kind from other agents"; nobody asked whether a person's claim of the same content was "of my kind".
+**Fix:** Mathematics also re-derives `human_input` claims; Physics also re-derives them, while its falsifiability check still applies only to claims typed empirical (a human claim's defeat condition comes from the submission envelope). `tests/test_evals_human_input.py` shows the suite fails without the fix.
+**Lesson:** "Examined, never auto-accepted" needs a test that submits a *false* input and expects a challenge. Tests of the flow with inert statements ("a point about this") can't tell examination from omission.
+
 ---
 
 ## Open known limitations (found, not yet fixed)

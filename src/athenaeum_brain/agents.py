@@ -187,7 +187,9 @@ class MasterOfMathematics:
     def cross_examine(self, claim: Claim, question_id: str) -> Claim | None:
         """Independently re-derive another agent's numeric claim; challenge
         if the computation disagrees (Section 3.3)."""
-        if claim.issuing_agent == self.name or claim.claim_type != "formal":
+        # A person's "17 is not prime" is re-derived like an agent's: human
+        # input is examined, never taken on trust (§11, known-bugs #43).
+        if claim.issuing_agent == self.name or claim.claim_type not in ("formal", "human_input"):
             return None
         import re
         m = re.match(r"(\d+) is (not )?prime", claim.statement)
@@ -510,13 +512,15 @@ class MasterOfPhysics:
         )
 
     def cross_examine(self, claim: Claim, question_id: str) -> Claim | None:
-        if claim.issuing_agent == self.name or claim.claim_type != "empirical":
+        if claim.issuing_agent == self.name or claim.claim_type not in ("empirical", "human_input"):
             return None
         # Section 2.2 / Section 8 ("unfalsifiable claims presented as
         # physical/empirical"): an empirical claim must say what observation
         # would defeat it. One that can't be falsified isn't asserted as
-        # empirical; it's sent to Philosophy's jurisdiction instead.
-        if is_vacuous_defeat(claim.defeat_condition):
+        # empirical; it's sent to Philosophy's jurisdiction instead. (Human
+        # input is only re-derived below, known-bugs #43: its defeat
+        # condition is set by the submission envelope, not the person.)
+        if claim.claim_type == "empirical" and is_vacuous_defeat(claim.defeat_condition):
             return Claim(
                 question_id=question_id, round=2, issuing_agent=self.name,
                 statement=(f"claim '{claim.statement}' is typed empirical but states no condition under which "

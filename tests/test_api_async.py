@@ -98,3 +98,16 @@ def test_question_text_is_readable_before_and_after_it_is_answered(tmp_path):
     app.maintainer.run()
     assert get_question("q-1")["status"] == "completed" and get_question("q-1")["question"] == "is 17 prime?"
     assert submit("is 21 prime?")["id"] == "q-2" and get_question("q-2")["question"] == "is 21 prime?"
+
+
+def test_the_worker_can_be_stopped_before_its_data_goes(tmp_path):
+    """An embedding process (the API evaluation, batch 12) must be able to end
+    the worker before deleting the data directory it writes to."""
+    app = build_app(tmp_path)
+    qid = app.submit_async("is 17 prime?")["id"]
+    deadline = time.time() + 30
+    while app[2](qid)["status"] != "completed" and time.time() < deadline:
+        time.sleep(0.05)
+    assert app.worker_thread[0].is_alive()
+    app.stop_worker()
+    assert not app.worker_thread[0].is_alive()

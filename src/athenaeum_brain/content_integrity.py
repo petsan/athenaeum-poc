@@ -21,7 +21,9 @@ _INSTRUCTION_LIKE_PATTERNS = [
     r"you (must|should|will) now",
     r"as (the|an) (system|ai|assistant)\b",
     r"new instructions?\s*:",
-    r"system\s*:",
+    # a speaker label, so only where a turn could start: "The metric system:
+    # a kilometre..." is prose, not a prompt (known-bugs #42)
+    r"(?:^|[.!?]\s+|\n\s*)[\[<(]?\s*system\s*[\]>)]?\s*:",
     r"override (the )?(previous|system|prior)",
 ]
 _COMPILED = [re.compile(p, re.IGNORECASE) for p in _INSTRUCTION_LIKE_PATTERNS]

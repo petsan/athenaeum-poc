@@ -251,11 +251,22 @@ def build_app(data_dir: Path) -> App:
                 worker_thread[0].start()
         work_available.set()
 
+    stopping = threading.Event()
+
+    def stop_worker(timeout: float = 30.0) -> None:
+        """Ends the worker after its current round (an embedding process
+        or an evaluation shutting down; `serve()` never needs it). Returns
+        once the thread has exited, so the data directory can go."""
+        stopping.set()
+        work_available.set()
+        if worker_thread:
+            worker_thread[0].join(timeout)
+
     def worker() -> None:
         """One thread drives the Maintainer, one round at a time, taking the
         lock per round so synchronous requests interleave; reads and async
         submissions never wait for it (the snapshot and the inbox)."""
-        while True:
+        while not stopping.is_set():
             with lock:
                 try:
                     _drain_inbox_locked()
@@ -542,7 +553,7 @@ def build_app(data_dir: Path) -> App:
     app.submit_async, app.get_version, app.maintenance_status = submit_async, get_version, maintenance_status
     app.maintainer, app.worker_thread, app.checkpoints = maintainer, worker_thread, checkpoints
     app.reviewers, app.decide_checkpoint, app.submit_ingestion = reviewers, decide_checkpoint, submit_ingestion
-    app.submit_input = submit_input
+    app.submit_input, app.stop_worker = submit_input, stop_worker
     app.lock = lock   # a test seam: holding it stands in for a round in progress
     return app
 
@@ -730,6 +741,7 @@ def make_handler(data_dir: Path):
     BoundHandler.decide_checkpoint = staticmethod(app.decide_checkpoint)
     BoundHandler.submit_ingestion = staticmethod(app.submit_ingestion)
     BoundHandler.submit_input = staticmethod(app.submit_input)
+    BoundHandler.app = app      # for an embedding process: e.g. app.stop_worker() before shutdown
     return BoundHandler
 
 
