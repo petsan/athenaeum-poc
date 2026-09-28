@@ -123,6 +123,11 @@ def parse_question_request(raw: bytes) -> tuple[str, bool]:
     return question, body.get("async") is True
 
 
+def _with(lock, fn):
+    with lock:
+        return fn()
+
+
 class App(tuple):
     """(submit_question, list_questions, get_question, health) -- the shape
     callers have always unpacked -- plus the async path as attributes:
@@ -268,17 +273,22 @@ def build_app(data_dir: Path) -> App:
         submissions never wait for it (the snapshot and the inbox)."""
         while not stopping.is_set():
             with lock:
-                try:
-                    _drain_inbox_locked()
-                    maintainer.tick()
-                except Exception as e:  # a failing round is the Maintainer's to retry; this catches
-                    # anything else (e.g. a completed unit's follow-ups) so the worker never dies silently
-                    maintainer.emit({"kind": "error", "error": repr(e)})
-                busy = bool(maintainer.scheduler._heap)
-                _refresh_locked()
+                busy = _round_locked()
             if not busy:
                 work_available.wait(timeout=1.0)
                 work_available.clear()
+
+    def _round_locked() -> bool:
+        """Caller holds `lock`. One worker round; True while work remains."""
+        try:
+            _drain_inbox_locked()
+            maintainer.tick()
+        except Exception as e:  # a failing round is the Maintainer's to retry; this catches
+            # anything else (e.g. a completed unit's follow-ups) so the worker never dies silently
+            maintainer.emit({"kind": "error", "error": repr(e)})
+        busy = bool(maintainer.scheduler._heap)
+        _refresh_locked()
+        return busy
 
     # --- reads (batch 8, Phase AF) ---------------------------------------------
     # The lock is held for a whole worker round (model calls included) and a
@@ -288,14 +298,47 @@ def build_app(data_dir: Path) -> App:
     # snapshot taken after the last completed write. Writers refresh it while
     # they still hold the lock. The snapshot is replaced wholesale, never
     # mutated, so a reader can serialize what it got without copying.
+    #
+    # A rebuild reads every question and store, and most rounds change none
+    # of it (a deliberation's middle rounds write only its own unit state), so
+    # it happens only when what the view is built from has changed (batch 14).
     snapshot: dict = {}
     snapshot_lock = threading.Lock()
+    snapshot_stats = {"rebuilt": 0, "skipped": 0}
+    built_from: list = [None]
 
     def _refresh_locked() -> None:
         """Caller holds `lock`."""
+        sources = _sources_locked()
+        if snapshot and sources == built_from[0]:
+            snapshot_stats["skipped"] += 1
+            return
+        fresh = _build_view_locked()
+        with snapshot_lock:
+            snapshot.clear()
+            snapshot.update(fresh)
+        built_from[0] = sources
+        snapshot_stats["rebuilt"] += 1
+
+    def _sources_locked() -> tuple:
+        """Caller holds `lock`. Everything `_build_view_locked` reads, reduced to
+        what changes when it does: each store's latest checkpoint (a stat of a
+        cached index, so another process's writes count too), and the
+        Maintainer's in-memory state the view shows. Its own log is left out:
+        every round writes to it, and the view reads only the parts named here."""
+        m, cps = maintainer, maintainer.idle.checkpoints
+        return (ledger.version(), model_fitness.log.latest_snapshot_id(),
+                cps.log.latest_snapshot_id() if cps else None, human_inputs.log.latest_snapshot_id(),
+                m.cycles, len(m.scheduler._heap), m.events_emitted,
+                json.dumps(m.pending_amendments, sort_keys=True, default=repr),
+                tuple((k, v.get("question"), v.get("last_error")) for k, v in sorted(m.failed.items())),
+                tuple((k, u.get("question")) for k, u in sorted(m._m["units"].items())))
+
+    def _build_view_locked() -> dict:
+        """Caller holds `lock`. Everything a reader can see, built from the stores."""
         entries = sorted((_with_question(q) for q in ledger._state()["questions"].values()),
                          key=lambda e: _number(e["id"]))
-        fresh = {
+        return {
             "questions": entries,
             "by_id": {e["id"]: e for e in entries},
             "maintenance": {"idle_cycles": maintainer.cycles, "queued_units": len(maintainer.scheduler._heap),
@@ -309,9 +352,6 @@ def build_app(data_dir: Path) -> App:
             "checkpoints": _checkpoints_locked(),
             "human_inputs": _inputs_by_question_locked(),
         }
-        with snapshot_lock:
-            snapshot.clear()
-            snapshot.update(fresh)
 
     def _number(qid: str) -> int:
         tail = qid.rsplit("-", 1)[-1]
@@ -555,6 +595,12 @@ def build_app(data_dir: Path) -> App:
     app.reviewers, app.decide_checkpoint, app.submit_ingestion = reviewers, decide_checkpoint, submit_ingestion
     app.submit_input, app.stop_worker = submit_input, stop_worker
     app.lock = lock   # a test seam: holding it stands in for a round in progress
+    # test seams (batch 14): one worker round without the thread, and the
+    # snapshot readers get against a view built fresh from the stores
+    app.run_round = lambda: _with(lock, _round_locked)
+    app.snapshot_view = lambda: _with(snapshot_lock, lambda: dict(snapshot))
+    app.fresh_view = lambda: _with(lock, _build_view_locked)
+    app.snapshot_stats = snapshot_stats
     return app
 
 

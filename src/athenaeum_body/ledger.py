@@ -102,6 +102,13 @@ class QuestionLedger:
         callers still read."""
         return {"questions": {qid: self._entry(qid) for qid in self._ids()}}
 
+    def version(self) -> tuple:
+        """Changes whenever the index or any question's entry does: each log's
+        latest snapshot id, read from its cached index (a stat when nothing
+        changed), so it costs far less than reading the entries."""
+        ids = self._ids()
+        return self.log.latest_snapshot_id(), tuple(self._log_for(q).latest_snapshot_id() for q in ids)
+
     def count(self) -> int:
         return len(self._ids())
 

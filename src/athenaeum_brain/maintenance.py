@@ -114,6 +114,7 @@ class Maintainer:
             "idle_since_last_question": False, "pending_amendments": {},
         })
         self.events: list[dict] = []        # what happened recently, in order (bounded: emit)
+        self.events_emitted = 0             # ever, in this process: says the window moved
         self.recovered: list[str] = []
         # progress, in memory only (batch 8, Phase AG): read by the API's health
         # check without its lock, so plain attributes rebound, never mutated
@@ -284,6 +285,7 @@ class Maintainer:
         not a full history: the Maintainer lives as long as its process, and
         the durable record is in the stores (batch 7, Phase AD)."""
         self.events.append(event)
+        self.events_emitted += 1
         overflow = len(self.events) - self.policy.event_history
         if overflow > 0:
             del self.events[:overflow]
