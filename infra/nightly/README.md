@@ -22,9 +22,9 @@ Enabling the timer on a guest that booted more than 15 minutes earlier starts a 
 
 The publishing key is `/root/.ssh/athenaeum_dashboard` (ed25519, no passphrase, comment `athenaeum-dashboard@lxc104`). LXC 250's host key is pinned in `/root/.ssh/known_hosts`; it was checked against the key already trusted for that host.
 
-## One step for the owner: allow the key on LXC 250
+## Allowing the key on LXC 250 (done 2026-09-27, at the owner's request)
 
-Auto mode refuses to grant access to a host, so this is yours to run. From the Windows machine (Git Bash), in the repo:
+Auto mode first refused this grant; the owner then chose to have Claude run it. Tested: a publish succeeded ("published 5 files"), a shell command with the key was refused, and evalgate's index still served. To redo it, from the Windows machine (Git Bash), in the repo:
 
 ```sh
 scp -i ~/.ssh/evalgate_deploy infra/nightly/receive-dashboard.sh root@192.168.0.104:/tmp/athenaeum-receive-dashboard

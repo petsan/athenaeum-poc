@@ -100,9 +100,8 @@ The sections below this one are a chronological log, and the numbering runs roug
     - E6, part 1: an unrelated pilot, `examples/parcel_quotes`, APPROVED.
   - **Batch 12 (§107), Athenaeum's evaluation built on evalcore (E6, part 2): built.** The owner decided D15, D16, D17 and D19 on 2026-09-27 and approved working autonomously for several hours. The decisions are recorded at the top of `docs/proposals/evalgate-integration.md`.
     - Run it with `/opt/athenaeum-venv/bin/python scripts/run_evals.py` (8 suites) and `scripts/build_dashboard.py` (fault matrix and page).
-    - The nightly timer on LXC 104 runs at boot + 15 min and at 02:30 Pacific (`infra/nightly/`).
+    - The nightly timer on LXC 104 runs at boot + 15 min and at 02:30 Pacific (`infra/nightly/`), and publishes the dashboard to http://192.168.0.104/athenaeum/ (LXC 250; key allowed 2026-09-27).
     - **Waiting on the owner:**
-      - allow the dashboard's publishing key on LXC 250 (paste-ready in `infra/nightly/README.md`; auto mode refused the permission grant);
       - review `src/athenaeum_brain/judging_benchmark.json` (provisional);
       - decide whether the scheduler should stay round-robin under bursts (§107.2).
   - Its own `progress.md` is authoritative;
@@ -1612,7 +1611,7 @@ The real service ran: 40 minutes of evaluation, 5 minutes of fault matrix and da
 | model_answers | olmo3-7b 0.883 right (lower bound **0.800**, exactly at the 0.80 bar); 60/60 answered; p95 8.9 s |
 | judging | INSUFFICIENT (97/120; provisional) |
 
-Publishing was refused ("Permission denied (publickey)"), as expected until the owner allows the key (`infra/nightly/README.md`). The service therefore shows as failed; it will pass once the key works. The page passed the phone check (390 px, light and dark, no overflow).
+Publishing was refused ("Permission denied (publickey)"), as expected until the owner allows the key (`infra/nightly/README.md`). The service therefore showed as failed. The owner then had the key allowed (2026-09-27), and a test publish succeeded: the page is at http://192.168.0.104/athenaeum/. The page passed the phone check (390 px, light and dark, no overflow).
 
 Fault matrix (100 trials per cell, 0 false alarms from any tool in 100 healthy trials each):
 
@@ -1643,7 +1642,7 @@ Batch 12 is complete (commits 0335497 → ab338ee). Proposed next, in order, eac
 4. **The grader's floor.** After the owner's benchmark review, add accepted aliases to items (e.g. "sodium chloride" for NaCl, "299 792" for about 300,000), so `model_answers` stops under-counting.
 5. **Model-backed calibration.** Once citation labels exist, feed labelled model-backed claims into the calibration suite, where over-confidence can finally show.
 
-Owner decisions that unblock things: the LXC 250 key (§107.4), reviewing `judging_benchmark.json` (D15), labelling `citation_support.json` (D17), and the scheduler under bursts (§107.2).
+Owner decisions that unblock things: reviewing `judging_benchmark.json` (D15), labelling `citation_support.json` (D17), and the scheduler under bursts (§107.2).
 
 ## 106. Debugging tools, a reusable toolkit plan, and the model store verified
 
