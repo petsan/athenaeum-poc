@@ -1,197 +1,138 @@
 # Athenaeum
 
-A slow, deep-reasoning, memory-resident, evolving knowledge system split into
-**Body** (infrastructure/elasticity) and **Brain** (cognitive logic: six
-classical Master Agents plus World News, a seventh, deliberately added
-2026-09-22 — see `brain-design.md` Section 2.0b). This repo is a
-proof-of-work implementation, not the finished system — read
-`docs/progress.md` before doing anything else.
+A slow, deep-reasoning, memory-resident knowledge system in two halves:
+**Body** (`src/athenaeum_body/`: storage, scheduling, model serving, API) and
+**Brain** (`src/athenaeum_brain/`: seven Master Agents deliberating, with
+reputability, model fitness and idle re-examination). Evaluation is in
+`src/athenaeum_evals/`, built on evalcore (`github.com/petsan/evalcore`).
+This repo is a proof of work, not the finished system.
 
-## Guiding principles
+**Start every session with `docs/progress.md` §0 "RESTART HERE".** It holds
+the current state: hosts, guests, access, test counts, what's next, open
+decisions and recurring pitfalls. This file holds the rules, which change
+rarely. If the two disagree about state, §0 wins; if they disagree about a
+rule, ask the owner.
 
-These aren't aspirational — every one of them is here because violating it (or nearly violating it) actually cost real time or nearly caused real damage somewhere in this project's history. Re-read this list, not just the hard constraints below, before doing anything nontrivial.
+## Owner's rules (standing until the owner changes them)
 
-1. **Verify empirically, don't trust — not even your own prior notes.** "Should work" isn't "works." A host that's routinely powered off between sessions means every session starts by checking real state, not recalling it — see "Suggested first move" below. `known-bugs.md` exists specifically because "it mostly worked" was repeatedly mistaken for "it worked as designed" (bug #19: a script that silently corrupted storage config still produced a working backup).
-2. **Least privilege by default, expanded only when a specific error demands it.** Every scoped Proxmox token/role here started minimal and grew one privilege at a time, each addition traceable to an actual permission-denied error, never "grant broadly to save a round trip." `Sys.Modify` is deliberately withheld from the automation token even where it would be convenient — the two operations that genuinely need it (identity bootstrap, host-level firewall persistence) are host-only scripts run by a human, on purpose.
-3. **Root-cause, not workaround.** Isolate to a minimal reproduction before accepting a fix (the `RLIMIT_CPU`/`unshare --fork` crash was proven with a two-line repro before trusting the finding; the Docker `FORWARD`-chain diagnosis came from watching actual packets on the wire, not guessing). A fix that "seems to work" without a known mechanism is a coincidence until proven otherwise.
-4. **Infrastructure and decisions live in the repo (or memory), not just in chat.** Nothing about this project's Proxmox setup, its known bugs, or its open work should depend on any specific conversation surviving — `deployment-playbook.md`, `infra/proxmox/`, `known-bugs.md`, and `docs/progress.md` are the actual source of truth, kept current as work happens, not reconstructed from memory after the fact.
-5. **State scope honestly — what's fixed, what's tested, and what's still just reasoned-through.** A fix gets called "closed" only once it's been observed working, not once it's been designed correctly (see the cold-boot checklist item this principle exists to unblock). Backup/DR claims say plainly what they don't cover (no off-host protection here) rather than letting "backups exist" be read as "fully protected."
-6. **Confirm before consequential or hard-to-reverse actions**, especially anything touching shared state, security posture, or broad credentials — this repo's own hard constraints below (resource caps, no bare-host deploys, sandbox stays disabled) are instances of this principle, not exceptions to it.
-7. **Keep the checkpoint current, every session.** `docs/progress.md` Section 26, `known-bugs.md`, and `CLAUDE.md`'s own "Current status" get updated as part of finishing a task, not as an afterthought — a stale checkpoint is worse than no checkpoint, because it's trusted.
+### Hands off without explicit approval
+- **`LICENSE` and the README notice line** (Piorun, Inc.). Never alter them;
+  the notice must stay byte-identical (check with `cmp`). A README body
+  refresh is a draft until the owner reviews it (`README.draft.md`, not committed).
+- **`execution_sandbox.enabled` stays `false`**, until every scenario in
+  `security-review-sandbox.md` passes on the actual host, verified by
+  `scripts/preflight_check.py`.
+- **No paid or metered services, ever** (enforced by `disallow_paid_apis` in `config.py`).
+- **Credentials:** don't read, print, copy or explore them. The reviewer
+  tokens file is never committed. If auto mode refuses an action as
+  credential exploration or an ACL change, don't work around it. Give the
+  owner a paste-ready command and say why.
+- **Other projects' guests** on a shared host are never touched
+  (on proxmox-01: 101, 105, 107, 200–220, 250). On proxmox-01, don't touch
+  `/dev/sdc` or `/dev/sdg`.
 
-## Read these first, in this order
+### Hosts and resources
+- **proxmox-01 (`192.168.0.100`): no more tests of any kind** (owner,
+  2026-09-28). That includes pytest, `run_evals.py`, live smoke scripts,
+  benchmarks and the nightly timer, which is disabled. Access continues:
+  inspection, backups and migration work are fine.
+- **proxmox-02** (3× GV100, 96 GB VRAM total; 128 GB RAM; Xeon W-2155;
+  10 TB NVMe) is where testing moves. Its access, test runner and model
+  store are recorded in progress.md §0 once set up; until then, don't
+  assume any of them.
+- Deploy inside a VM or LXC, never on a Proxmox host OS.
+- Guests may use at most **80% of a host's CPU and RAM**. Check the real
+  specs; don't trust design-doc placeholders.
+- Creating, changing and destroying *our own* guests is allowed during
+  development. Anything else destructive on a host needs the owner's OK
+  first.
+- Model files live in the host's designated model store (proxmox-01:
+  `/mnt/pve/glacier-01/models`). Verify integrity with SHA-256 against
+  Hugging Face, not by file size.
+- A host may be powered off between sessions; that's normal. Ping it
+  first, and verify guest state rather than recalling it.
 
-1. **`docs/progress.md`** — resumable session-history checkpoint. What's
-   built, what's tested, what's still open. This is the single most
-   important file in the repo for picking up cold — **Section 26 is a
-   maintained checklist of actual open work**, not scattered prose; check
-   there first for "what's next" instead of re-deriving it from the
-   narrative sections above it.
-2. **`known-bugs.md`** — twenty-nine real bugs hit during development (plus a list of open known limitations), each
-   with root cause and generalizable lesson. Read the relevant section
-   before touching sandboxing/namespace code, checkpoint/content-addressed
-   storage, any narrated demo script (`demo.py`, `demo_brain.py`), or any
-   Proxmox guest-networking issue (entry 18 — check `iptables -L FORWARD`
-   before any other theory).
-3. **`docs/body-design.md`** and **`docs/brain-design.md`** — the actual
-   design intent. The code in `src/athenaeum_body/` and `src/athenaeum_brain/`
-   implements a deliberate subset of these; when in doubt about *why*
-   something is shaped a certain way, or what a not-yet-built piece is
-   supposed to become, these are the source of truth, not the code.
-4. **`security-review-sandbox.md`** — required reading before any change
-   to `src/athenaeum_body/sandbox.py`. `execution_sandbox.enabled` stays
-   `false` until every scenario in this document passes on the actual
-   target environment — re-run `scripts/preflight_check.py` on any new
-   host before assuming the existing scorecard carries over.
-5. **`acceptance-criteria.md`**, **`schemas.md`**, **`tech-stack.md`** —
-   supporting reference: what "done" means for the highest-risk tasks,
-   field-level shapes for the core stores, and the committed tech
-   decisions (Python, flat-file CAS, SHA-256, YAML config).
-6. **`deployment-playbook.md`** and **`infra/proxmox/`** — required
-   reading before any new Proxmox access setup or new guest creation on
-   this host. The playbook is the narrative; `infra/proxmox/` is the same
-   thing as executable scripts (`README.md` there maps each script to
-   the playbook section it implements). Distilled from the first live
-   deployment session (see `known-bugs.md` 17–18): scoped token/role/ACL
-   creation (including the token+user grant-pairing gotcha and the
-   `VM.Audit` omission that silently broke guest listing), the
-   standing-guest template, and the mandatory `iptables -L FORWARD` check
-   before chasing any other networking theory. A shared, multi-project
-   tools container (`athenaeum-tools`, `192.168.0.151`) now holds a CLI
-   (`pve-ops`) with credentials preinstalled — prefer
-   `ssh root@192.168.0.151 pve-ops -p athenaeum <command>` over re-deriving
-   raw API calls for routine operations.
+### How work is paced
+- **Batches of small phases.** Each phase: implement → new tests → full
+  suite on the test runner → update docs → secret-scan the staged diff →
+  commit and push to `master`. At the end of a batch, run an end-to-end
+  test, then plan the next batch.
+- Unattended batches are approved. **Stop and ask only on:** a test
+  failure you can't explain, a hard-to-reverse design gap, a change to
+  what an existing test or gate means, a host that is down, or anything
+  covered by "Hands off" above.
+- **Update `docs/progress.md` right before handing control back to the
+  owner, after every step**, not only at the end of a batch. §0 must
+  always be enough to resume cold.
+- Keep `known-bugs.md` (every real bug: what happened, root cause, fix,
+  lesson), `docs/brain-session-log.md` (design Q&A) and this file current
+  as part of finishing work, not afterwards.
+- **Ask all open questions at once**, up front, each with a
+  recommendation. Then work without further check-ins.
+- After an intended golden-data change, re-save the evaluation baseline
+  yourself, but only from an APPROVED run, and log the reason and the
+  commit in progress.md.
 
-## Hard constraints — do not violate these
+### Git
+- Default branch is `master` (the owner may say "main").
+- Commit identity: the repo-local `Athenaeum POC <poc@athenaeum.local>`
+  (evalcore uses the owner's GitHub noreply address). End every commit
+  message with the `Co-Authored-By` line.
+- evalcore is public. Tag a release for every change Athenaeum depends on,
+  and pin the tag in `pyproject.toml`. evalgate-0.2.0 parity must keep
+  passing.
 
-- **Resource cap on this Proxmox host: use at most 80% of total CPU/RAM**
-  for any VM or LXC created here (raised from 50% by explicit user
-  decision, 2026-09-23 — see `docs/progress.md` §38). Check real specs
-  first (`lscpu`, `free -h`, or the Proxmox API) — don't assume the placeholder
-  numbers in `docs/design.md` (40 cores / 512GB / 10 GPUs) match this
-  actual box.
-- **Deploy inside a VM or LXC — never directly on the Proxmox host OS.**
-- **`execution_sandbox.enabled` stays `false`** in `config.defaults.yaml`
-  unless every scenario in `security-review-sandbox.md` has a passing
-  automated test on *this specific* host, verified via
-  `scripts/preflight_check.py`, not assumed from the reference
-  environment's scorecard.
-- **No paid or metered external services, ever** — this is a hard
-  invariant enforced in `config.py` itself (`disallow_paid_apis`), not
-  just a policy.
-- Before marking any task "done," run the actual test suite
-  (on LXC 104 with `/opt/athenaeum-venv/bin/python -m pytest -q`; last full live run 850 passed + 1 skipped — the skip is the
-  GPU-worker test when no worker is online — on 2026-09-28, `docs/progress.md` §109) and update `docs/progress.md` — don't
-  let the checkpoint file go stale. If the model-lab guests are down or
-  degraded (known-bugs.md #24), verify non-model changes with
-  `ATHENAEUM_OFFLINE_MODELS=1 pytest -q --ignore=tests/test_model_backed_reasoning.py`
-  and say plainly which live-model tests were not run.
+### Reporting
+- Report what was observed, not what should be true. Test counts are real
+  counts, and a count different from the expected one gets explained.
+- Say plainly what wasn't run or verified, and don't credit a change with
+  an effect you didn't measure.
 
-## Current status (see `docs/progress.md` for full detail)
+## Mechanics that bite (details and history: progress.md §0, known-bugs.md)
 
-- **Start here next session:** `docs/progress.md` **§0 "RESTART HERE"**. It
-  is the current state (updated 2026-09-27): what's done, the live guests
-  and storage, access (including a temporary host-root key that expires
-  2026-09-29), work still in flight, the restart checklist, and recurring
-  pitfalls. Everything below this bullet is older background: batches
-  1–11 and every owner decision are done. The owner approved
-  unattended batches on 2026-09-26: commit and push at the end of every
-  phase, keep all docs current, stop only on the listed stop conditions. The repo
-  carries a proprietary source-available `LICENSE` (Piorun, Inc.) —
-  don't alter it or the README notice without the owner's explicit approval.
-- Body: storage/checkpoint/scheduler/concurrency/ingestion (now including
-  a real `fetch_url()` network fetch, not just `FixtureSource`)/model-
-  serving-router/sandbox/distributed worker dispatch (`distributed_worker.py`,
-  real cross-process, network-based, proven against an actual killed
-  worker process) all implemented and tested against everything this
-  sandboxed dev environment could validate.
-- Brain: deliberation loop, all **seven** Master Agents now implemented
-  as deterministic toy agents (Mathematics, Logic, Engineering, Physics,
-  Philosophy, Theology, World News — see brain-design.md Section 2.0b for
-  the seventh's rationale), registered via `agents.py`'s `@master_agent`
-  decorator so adding another domain needs no edit to `rounds.py`,
-  Reputability Engine,
-  Model Fitness tracking, knowledge consolidation, domain fidelity
-  monitoring, Output Types (Research/Forecast/Recommendation, §5.4), Human
-  Input Pipeline and governance (§11), Content Integrity enforcement
-  (§12, verified by construction), and Evaluation Infrastructure (§9b —
-  ground-truth benchmarks, a 6-case adversarial suite, calibration
-  tracking, baselines/ablations, non-compensatory integrity gates) all
-  implemented. Engineering's `verify_code()`/`verify_claim()` run real,
-  unmocked code in the Body's sandbox — the first Master Agent capability
-  that's genuinely real end-to-end, not a stand-in. No real LLM backend
-  yet for most reasoning — `model_serving.py` now has a real
-  `LlamaCppBackend` (2026-09-23) talking to six live model-lab guests
-  (`infra/proxmox/model-lab/`, one CPU-quantized open-weight model each:
-  OLMo-2-1B, Qwen2.5-Coder-1.5B, Qwen2.5-1.5B, Phi-3.5-mini, Granite-3.1-2B,
-  Mistral-7B-v0.3), proven end-to-end including `evaluation.py`'s
-  previously-blocked B1 baseline. **Six of seven Master Agents now have a
-  real OLMo 3 fallback** (`model_backed_reasoning.py` — swapped from OLMo
-  2 on 2026-09-23, see `docs/progress.md` §38) for when their own
-  narrow deterministic computation finds nothing — Logic is the one
-  deliberate exception (§2.2: never asserts first-order claims, so no
-  fallback path exists for it at all). Deterministic computation still
-  always wins when it finds something; the fallback only fires on a
-  genuine "nothing to say" gap. `docs/infra-topology.md` (brainbox XSmall/Medium/Large/
-  XLarge sizing convention, CPU-RAM-only pending GPU nodes) and
-  `docs/brain-session-log.md` (running decision log) added 2026-09-22 —
-  see `docs/progress.md` §§27–34 for the full session.
-- **A real, elastic GPU worker pool now exists outside the Proxmox host**
-  (`src/athenaeum_body/elastic_workers.py`, `elastic_workers.yaml`,
-  `infra/elastic-workers/windows-gpu-worker/`, 2026-09-23) — independently
-  owned machines (starting with one Windows desktop's RTX 3070 Ti running
-  OLMo 3 7B at ~84 tok/s) that can be brought online/offline at will;
-  health is checked live on every call, never cached, and both
-  `ModelServingLayer.request()` and `model_backed_reasoning.ask_model()`
-  fall back to the CPU model-lab guests transparently the instant a
-  worker goes dark — see `docs/progress.md` §39 and
-  `docs/brain-session-log.md` for the design reasoning.
-- **Proxmox is live and access is set up** (see `deployment-playbook.md`,
-  `infra/proxmox/`, and the project's own memory notes) — a scoped API
-  token, a standing test LXC (VMID 104, `athenaeum-preflight`,
-  `192.168.0.150`, privileged+nesting for sandbox testing) with working
-  SSH, and real specs confirmed (2× Xeon E5-2690 v2, 40 threads, ~504GB
-  RAM, PVE 9.2.20). `scripts/preflight_check.py` has been run for real on
-  this host: `RLIMIT_CPU` still crashes `unshare --fork` here (matches the
-  original reference environment, wall-clock kill remains primary CPU-time
-  enforcement — no code change needed). Fork containment briefly reopened
-  on this host (cgroups v2 only, `sandbox.py` had assumed v1) and is now
-  fixed and re-verified — see `known-bugs.md` entry 17. **Full `pytest -q`
-  suite has been run for real in that LXC — 113/113.**
-- A shared, multi-project tools container (VMID 106, `athenaeum-tools`,
-  `192.168.0.151`) holds `pve-ops`, a CLI with credentials preinstalled;
-  both guests auto-start on host boot (`onboot: 1`); the Docker
-  `FORWARD`-chain networking fix and a daily `vzdump` backup (to `local`,
-  self-pruned to 7 copies) both persist via systemd units. All of this is
-  scripted, not just done once by hand — see `infra/proxmox/README.md`.
-  This host is routinely powered OFF between sessions by design (see
-  "Suggested first move" below) — none of the above has been drilled
-  through an actual full power-cycle yet, only reasoned through; worth
-  treating as "should work" until it's been observed working after a
-  real cold boot.
+- The Windows workstation has **no Python** (node and git-bash only).
+  Tests run on the test runner guest, synced by `tar | ssh` (it has no
+  git), with the venv's Python (`/opt/athenaeum-venv/bin/python`), never
+  bare `python3`. The exact commands are in §0.
+- Offline mode for non-model changes: `ATHENAEUM_OFFLINE_MODELS=1`. Say
+  which live-model tests weren't run.
+- Kill a process only by a PID you saved and checked, never with
+  `pkill -f`/`pgrep -f` on a pattern your own command line contains (#38).
+  One tracked background job per task, never `&` inside a pipeline.
+- `systemctl enable --now` doesn't restart a running service; use
+  `restart` (#39). `systemctl is-active -q` is false while a oneshot is
+  `activating`, so wait loops must compare the state string.
+- Long live scripts print progress as they go: a model call can take
+  10–25 s on CPU.
+- A rebuilt guest has new SSH host keys (`ssh-keygen -R <ip>` first). Use
+  `tar --no-same-owner` into unprivileged containers. Build llama.cpp with
+  `--target llama-server`.
+- Guest networking problem? Check `iptables -L FORWARD` before any other
+  theory (known-bugs #18).
 
-## Suggested first move in a new session
+## Principles (each one learned the hard way here)
 
-Read `docs/progress.md`. Proxmox access is already set up (see
-`deployment-playbook.md`); if starting infra work from scratch on a
-*different* host or project, follow that playbook rather than
-re-deriving the setup.
+1. **Verify, don't trust**, not even your own notes. "Should work" isn't "works."
+2. **Least privilege.** Grow a token or role one permission at a time, each
+   traceable to a real denial.
+3. **Root cause, not workaround.** Reproduce minimally before trusting a fix.
+4. **The repo is the record.** Infrastructure lives in `infra/` and
+   `deployment-playbook.md`, and decisions in `docs/`, so nothing depends
+   on a conversation surviving.
+5. **State scope honestly:** fixed vs. tested vs. only reasoned through.
+6. **Confirm before hard-to-reverse actions** on shared state, security
+   posture or credentials.
 
-**This Proxmox host is routinely powered OFF between sessions by design**
-(it's a test box, not production — the user turns it off when not
-actively working). This is the normal start-of-session state, not an
-incident. Before assuming anything about current guest/network state:
-1. Check reachability first (`ping 192.168.0.100` or similar) — if it's
-   down, that's expected, not a problem to diagnose. Ask the user to
-   power it on if Proxmox-related work is actually needed this session.
-2. Once it's up, don't trust prior-session memory notes about "what's
-   running" at face value — `onboot: 1` means both guests (104, 106)
-   *should* autostart, and the Docker `FORWARD`-chain fix *should*
-   reapply via its systemd unit, but "should" isn't "verified this
-   boot." Run `infra/proxmox/05-verify.sh` (or the equivalent manual
-   checks: ping the guest, SSH in, check `systemctl status
-   pve-docker-bridge-fix.service`) before building on top of an assumed
-   state.
-3. This is exactly why `infra/proxmox/` and `deployment-playbook.md`
-   exist as the durable record instead of only this session's own
-   memory — verify against them, don't just recall them.
+## Where things are
+
+- `docs/progress.md`: the current state (§0) plus a chronological log.
+  `docs/owner-decisions.md` holds the decision briefs.
+- `docs/body-design.md`, `docs/brain-design.md`: design intent. When the
+  code and the design differ, the design says what it should become.
+- `known-bugs.md`: read the relevant entries before touching sandboxing,
+  checkpoint storage, demo scripts or guest networking.
+- `security-review-sandbox.md`: read before any change to `sandbox.py`.
+- `deployment-playbook.md`, `infra/proxmox/` (scripts, recovery, model
+  lab), `infra/nightly/` (the evaluation timer).
+- `acceptance-criteria.md`, `schemas.md`, `tech-stack.md`: what "done"
+  means, store shapes, and committed tech choices.

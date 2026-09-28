@@ -6,9 +6,9 @@
 
 ---
 
-## 0. RESTART HERE (current state as of 2026-09-28; newest detail is §109, then §108, §107, §106, ...)
+## 0. RESTART HERE (current state as of 2026-09-28; newest detail is §110, then §109, §108, §107, §106, ...)
 
-The sections below this one are a chronological log. The numbering runs roughly newest-last up to §87; batches 10–11 and §102–§105 sit near the end; §109 (batch 14), §108 (batch 13) and §107 (batch 12) come just before §106. **This section is the current state.** It should be enough to resume without any other context. Update it at the end of every piece of work.
+The sections below this one are a chronological log. The numbering runs roughly newest-last up to §87; batches 10–11 and §102–§105 sit near the end; §110 (the proxmox-02 move), §109 (batch 14), §108 (batch 13) and §107 (batch 12) come just before §106. **This section is the current state.** It should be enough to resume without any other context. Update it at the end of every piece of work.
 
 **Code: done and verified (2026-09-28).**
 - Everything is committed on `master` and pushed to `github.com/petsan/athenaeum-poc`. evalcore (`github.com/petsan/evalcore`, public) is at **v0.1.4**; evalgate-work is clean.
@@ -20,8 +20,8 @@ The sections below this one are a chronological log. The numbering runs roughly 
   - offline suite: **827 passed, 1 skipped, 3 deselected**;
   - full live suite: **850 passed, 1 skipped** (batch 14, 2026-09-28);
   - evalcore: 1,658 passed; its CI is green.
-- The nightly timer on LXC 104 runs at 02:30 Pacific and publishes http://192.168.0.104/athenaeum/. The last end-to-end run (§109.1) was NOT APPROVED for one reason: citation support waits on 30 owner labels. Judging (0.808) is informational now, and all 14 regression gates passed.
-- **Next: batch 15 (§109.2).** It starts with the owner marking the 51 new items on the labelling page. The batch 14 decisions (2026-09-28) still stand: judging is informational; the labelling pool takes real model misses; Claude re-saves the baseline itself after an intended golden-data change, only from an APPROVED run, and logs it; the snapshot optimisation is done (§109).
+- The nightly timer on LXC 104 is **disabled** (2026-09-28: no tests on proxmox-01); it published http://192.168.0.104/athenaeum/. The last end-to-end run (§109.1) was NOT APPROVED for one reason: citation support waits on 30 owner labels. Judging (0.808) is informational now, and all 14 regression gates passed.
+- **Next: the move to proxmox-02 on 2026-09-29 (§110).** Waiting on the owner's answers in §110.3. **No tests of any kind on proxmox-01** (owner, 2026-09-28); the nightly timer on LXC 104 is disabled. Batch 15 (§109.2) comes after the move; it also waits on the owner marking 51 items on the labelling page.
 - **Owner reminders:**
   - evalgate 0.2.0 has the same degenerate `psi` as evalcore's (documented in evalcore 0.1.3, repo untouched);
   - the evalgate copy in Downloads: `git pull` was started by the owner on 2026-09-28;
@@ -38,6 +38,9 @@ The sections below this one are a chronological log. The numbering runs roughly 
 - The reviewer tokens file is never committed.
 - **All model files live in `/mnt/pve/glacier-01/models` on the host** (owner, 2026-09-27).
 - Ask before anything destructive on the host.
+- **No tests of any kind on proxmox-01** (owner, 2026-09-28). Testing moves to proxmox-02 (§110).
+- **Update this file right before handing control back, after every step** (owner, 2026-09-28).
+- CLAUDE.md is the rules file; this section is the state.
 
 **Dev and test mechanics:**
 - The Windows workstation (`192.168.0.85`, this repo at `C:\Users\petsa\athenaeum-poc`) has **no Python**; it has node and git-bash.
@@ -93,12 +96,12 @@ The sections below this one are a chronological log. The numbering runs roughly 
 **After a restart, in order:**
 1. Ping the host.
 2. Check the guests: `for i in 161 162 163 164 165 166; do curl -s -m5 http://192.168.0.$i:8080/health; echo; done`.
-3. Sync 104 and run the **full live** suite with `/opt/athenaeum-venv/bin/python -m pytest -q -p no:cacheprovider`. Expect **850 passed, 1 skipped** (batch 14). Record the real count here; a different one needs explaining.
-4. Check last night's run: `journalctl -u athenaeum-nightly -n 30` on 104, and the page at http://192.168.0.104/athenaeum/.
+3. **Not on proxmox-01 any more.** On the new test runner (§110), sync and run the **full live** suite with `/opt/athenaeum-venv/bin/python -m pytest -q -p no:cacheprovider`. Expect **850 passed, 1 skipped** (batch 14). Record the real count here; a different one needs explaining.
+4. The nightly timer is off until it moves to proxmox-02 (§110).
 5. Sync the owner's marks from the labelling page (`scripts/apply_citation_labels.py`), then start batch 15 (§109.2).
 
 **Open owner decisions:**
-- none; batch 15 waits on the owner's marks, not a decision;
+- the proxmox-02 questions in §110.3 (Q1–Q6);
 - D13–D19 of `docs/proposals/evalgate-integration.md`: all settled (D13, D14 and D18 superseded by X7; D15, D16, D17 and D19 decided).
 - `evalcore` (the reusable evaluation toolkit from `docs/proposals/evaltools-extraction.md`): **decided (X1–X7) and built**.
   - It lives in its own repo, `github.com/petsan/evalcore`, at `C:\Users\petsa\evalcore`, with tests in `/opt/evalcore-venv` on LXC 104.
@@ -1558,6 +1561,52 @@ Same rules and stop conditions.
 | — | End-to-end test extended; live smoke; README refreshed if anything user-visible changed. | **done** — §101 |
 
 **Batch 11 (AR–AU) complete 2026-09-26.** No owner decision is open.
+
+## 110. Moving to proxmox-02 (planned 2026-09-28, migration 2026-09-29)
+
+**Owner, 2026-09-28:**
+1. A key set to expire on 2026-09-29 will be deleted by the owner. Which key is open (see the questions below). Claude's read-only check of the host's `authorized_keys` and API tokens was refused by auto mode as credential exploration, and wasn't worked around.
+2. New ground rule: update this file right before handing control back, after every step (now in CLAUDE.md).
+3. CLAUDE.md rewritten as the rules file: every standing rule from the owner, grouped. The current state stays here in §0.
+4. **proxmox-02:** 3× NVIDIA GV100 (96 GB VRAM total, so 32 GB each), 128 GB registered DDR4, Xeon W-2155 (10 cores/20 threads), 10 TB NVMe.
+5. Full access to proxmox-01 continues.
+6. Be ready to migrate on 2026-09-29.
+7. **No more tests on proxmox-01.** Done at once: the nightly timer on LXC 104 is disabled (`systemctl disable --now athenaeum-nightly.timer`; nothing was running). The unit files are untouched. The daily vzdump backup on the host isn't a test, so it stays.
+
+### 110.1 What has to exist on proxmox-02
+
+| Piece | On proxmox-01 today | On proxmox-02 |
+|---|---|---|
+| Test runner | LXC 104 (Debian; `/opt/athenaeum-venv` with evalcore v0.1.4, `/opt/evalcore-venv`, nodejs, debug tools; `/root/athenaeum-poc` with `evals/runs/` history and `data/api-run`, the recorded judging results) | A new guest. Restore 104's vzdump from glacier-01, or build it fresh; see Q4 |
+| Tools and API | LXC 106: `pve-ops` plus the proxmox-01 API token | proxmox-02 needs its own scoped token (role and ACL per `deployment-playbook.md`), created by the owner. Credentials are never copied by Claude |
+| Model servers | 6 CPU guests (111–116), one llama-server each, models mounted read-only | GPU serving: llama.cpp built with CUDA. **GV100 is Volta (sm_70).** Check that the CUDA toolkit still targets sm_70; my understanding is that CUDA 13 dropped Volta, so plan on 12.x. Build with `--target llama-server` |
+| Model store | `/mnt/pve/glacier-01/models` (7.2 TB ext4; every file SHA-256 verified) | A directory on the 10 TB NVMe (Q5). Copy with rsync over SSH, then SHA-256 verify each file against `manifest.tsv` and `stored-models.tsv` |
+| Nightly evaluation | `infra/nightly/` on 104, publishing to LXC 250 on proxmox-01 | Same units on the new runner. Publishing to LXC 250 across hosts is fine, since that's not a test; it needs the restricted key re-granted by the owner |
+| Backups | daily vzdump of 104/106 to glacier-01, keep 7 | `06-setup-backups.sh` adapted to proxmox-02's storage. Off-host copies are still an open (non-blocking) decision |
+
+**Capacity (80% cap):** 16 of 20 threads, about 102 GB RAM. VRAM isn't covered by the cap as written; Q6 asks.
+- **What fits in VRAM:** each lab model today is under 8 GB, so all six fit on one GPU. Qwen3.8 27B Q8_0 (~29 GB) fits on one GV100.
+- **GLM-5.3-Flash (186 GB) does not fit** in 96 GB of VRAM, even with the 128 GB of RAM added.
+- **Bonsai** still needs PrismML's fork.
+
+### 110.2 Order of work on the day (each step is checked before the next)
+1. Owner: proxmox-02's IP; access (a host root key restricted to `192.168.0.85` like before, plus a scoped API token); the answers below.
+2. Read-only survey: `pveversion`, `lscpu`, `free -h`, `nvidia-smi` (if a driver is installed), `lsblk`, storages, IOMMU groups. Record it here.
+3. Storage: create the model store and the guest storage on the NVMe (Q5).
+4. GPU access for guests (Q3), then one GPU guest serving one lab model. Check it with `/health` and one timed completion before building the rest.
+5. Copy the models and verify them (SHA-256).
+6. Test runner: restore or build it (Q4); sync the repo; offline suite, then full live suite pointed at the GPU servers. `model_lab_registry.py` needs the new endpoints; that's a code change with tests.
+7. Nightly units, backups, and the §0 rewrite for the new host.
+
+### 110.3 Open questions for the owner (asked 2026-09-28)
+- **Q1. Which key expires on 2026-09-29?** Is it the host root key `proxmox_temp_root` (§0 says it never expires), or another one, such as a Proxmox API token? If it's the root key, host work on proxmox-01 after that needs a replacement, or paste-ready commands for the owner.
+- **Q2. Access to proxmox-02:** its IP, and the same pattern as before (a root key restricted to `192.168.0.85`, plus a scoped API token the owner creates)?
+- **Q3. GPUs to guests:** the NVIDIA driver on the host with GPUs shared into LXCs (recommended: one driver, guests share the three cards, llama-server per guest), or PCI passthrough to VMs (one GPU per VM, stronger isolation, no host driver)?
+- **Q4. Test runner:** restore LXC 104 from its vzdump (recommended: same packages, venvs and run history in one step), or build fresh from `infra/proxmox/` scripts (tests the scripts, slower)?
+- **Q5. Model store on proxmox-02:** a directory on the NVMe, e.g. `/mnt/pve/<nvme-storage>/models`, with the same rule that all models live there? Which models to copy: the six lab models plus Qwen3.8 27B Q8_0 (fits one GPU) are recommended; GLM-5.3-Flash (186 GB) can't be served there.
+- **Q6. Capacity cap on proxmox-02:** keep 80% of CPU/RAM (16 threads, ~102 GB)? Does it apply to VRAM too?
+
+**Not moving:** LXC 250 (the report host) and the other projects' guests stay on proxmox-01. The Windows elastic GPU worker (RTX 3070 Ti) is unaffected.
 
 ## 109. Batch 14: judging informational, wrong answers for the labels, fewer snapshot rebuilds (2026-09-28, autonomous)
 
