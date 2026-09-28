@@ -1,0 +1,73 @@
+{
+  "dataset_hashes": {
+    "answer_aliases.json": "000df1f0cbe3",
+    "deliberation.json": "e9b822f16dee",
+    "human_input.json": "881f4c053a04"
+  },
+  "system_info": {
+    "model_answers": {
+      "name": "lab models",
+      "model_id": "olmo3-7b",
+      "models": "olmo3-7b, qwen-coder-1.5b, qwen2.5-1.5b, phi-3.5-mini, granite-2b, mistral-7b",
+      "prompt_version": "Q: {question}\nA:"
+    }
+  },
+  "metrics": {
+    "deliberation.correct": {
+      "value": 1.0,
+      "direction": ">="
+    },
+    "deliberation.robustness_gap": {
+      "value": 0.0,
+      "direction": "<="
+    },
+    "calibration.ece": {
+      "value": 0.007499999999999951,
+      "direction": "<="
+    },
+    "calibration.brier": {
+      "value": 0.00036071428571428637,
+      "direction": "<="
+    },
+    "calibration.worst_agent_ece": {
+      "value": 0.0008333333333333526,
+      "direction": "<="
+    },
+    "human_input.outcome_right": {
+      "value": 1.0,
+      "direction": ">="
+    },
+    "api_service.submit_p95_s": {
+      "value": 0.005854615999851376,
+      "direction": "<="
+    },
+    "api_service.poll_p95_s": {
+      "value": 0.0026005597930634393,
+      "direction": "<="
+    },
+    "api_service.read_p95_s": {
+      "value": 0.0015494634935748763,
+      "direction": "<="
+    },
+    "api_service.answer_p95_s": {
+      "value": 56.255107035001856,
+      "direction": "<="
+    },
+    "api_service.worker_moving": {
+      "value": 1.0,
+      "direction": ">="
+    },
+    "model_answers.admitted_right": {
+      "value": 0.9166666666666666,
+      "direction": ">="
+    },
+    "model_answers.admitted_answered": {
+      "value": 1.0,
+      "direction": ">="
+    },
+    "model_answers.p95_latency_s": {
+      "value": 8.310555618853673,
+      "direction": "<="
+    }
+  }
+}
