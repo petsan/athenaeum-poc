@@ -23,8 +23,9 @@ GOLDEN = ROOT / "evals" / "golden"
 BASELINE = ROOT / "evals" / "baselines" / "baseline.json"
 
 SUITES = {m.KEY: m for m in (adversarial, deliberation, calibration, provenance, human_input, api_service, model_answers, judging)}
-# The suites that can reach a verdict today: judging waits on a qualifying
-# model, provenance on the owner's citation labels (D17). The baseline is
+# The suites that can reach a verdict today: judging is informational and
+# waits on a qualifying model (batch 14), provenance on the owner's citation
+# labels (D17). The baseline is
 # saved from these (owner decision, batch 13): run_evals.py --suites decidable --save-baseline
 DECIDABLE = [k for k in SUITES if k not in (judging.KEY, provenance.KEY)]
 

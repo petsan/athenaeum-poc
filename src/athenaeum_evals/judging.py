@@ -9,6 +9,11 @@ The metric is withheld (INSUFFICIENT_DATA, never a pass) when:
 - there is no result, or it is for older items or prompts; or
 - the benchmark is provisional: the owner hasn't reviewed it yet (D15).
 Every other suite's judge-scored gates depend on this one passing.
+
+The suite is informational (owner decision, batch 14): its gate is shown on
+the card but never decides the verdict. No lab model qualifies yet, and the
+runtime already ignores an unqualified challenger's challenges, so a miss
+here is a capability status, not a release defect.
 """
 from __future__ import annotations
 
@@ -33,6 +38,7 @@ SUITE = Suite(
     suite_gates=[GateSpec("challenger_agreement", f"Admitted challenger ({DEFAULT_MODEL}) judges right",
                           ">=", jb.QUALIFYING_ACCURACY, min_n=1)],
     validates_judge=True,
+    informational=True,
 )
 SYSTEM_INFO = {"name": "challenger", "model_id": DEFAULT_MODEL, "prompt_version": jb.PROMPT_VERSION}
 

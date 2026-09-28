@@ -58,3 +58,21 @@ def test_the_runner_reads_the_store(tmp_path, monkeypatch):
     gate = next(g for g in result.gates if g.name == "challenger_agreement")
     assert gate.status == "INSUFFICIENT_DATA" and "provisional" in gate.detail     # the benchmark isn't reviewed yet
     assert result.verdict.status == "NOT APPROVED"
+
+
+def test_judging_is_informational_and_never_decides_the_verdict(tmp_path):
+    """Owner decision, batch 14: an unqualified challenger is a capability
+    status, not a release defect."""
+    from evalcore import CaseResult, SuiteMetric
+    from evalcore.run import Evaluation
+    assert judging.SUITE.informational
+    toy = Suite(key="toy", title="Toy", per_case_gates=[GateSpec("accuracy", "Accuracy", ">=", 0.9)])
+    ev = Evaluation([toy, judging.SUITE])
+    for i in range(40):
+        ev.record(CaseResult("toy", f"c{i}", "g", "original", 0, metrics={"accuracy": 1.0}))
+    low, high = 0.729, 0.87
+    ev.set_metric(judging.KEY, "challenger_agreement", SuiteMetric(97 / 120, low, high, n=120))
+    result = ev.finish(tmp_path)
+    gate = next(g for g in result.gates if g.name == "challenger_agreement")
+    assert gate.status == "FAIL" and result.verdict.status == "APPROVED"
+    assert any("Informational, not in the verdict: judging" in r for r in result.verdict.reasons)
