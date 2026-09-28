@@ -103,10 +103,11 @@ The sections below this one are a chronological log, and the numbering runs roug
     - The nightly timer on LXC 104 runs at boot + 15 min and at 02:30 Pacific (`infra/nightly/`), and publishes the dashboard to http://192.168.0.104/athenaeum/ (LXC 250; key allowed 2026-09-27).
     - **Owner answers, 2026-09-27 (after batch 12):**
       - LXC 250 key: Claude ran the grant at the owner's request. Publishing works.
-      - Scheduler: **finish short questions first.** A unit runs to completion unless its next round waits on a model, and then it yields. To build in batch 13.
+      - Scheduler: **finish short questions first.** A unit keeps running until a round of it calls a model, and then it yields. Built in batch 13 (§108 BB).
       - Baseline: **save one from the six decidable suites** (all but judging and provenance) once such a run is APPROVED. To build in batch 13.
       - Judging benchmark: **approved as drafted** (`review.status` "reviewed"), relying on the drafter's checks. A model whose Wilson bound clears 0.95 now counts; none does yet.
-      - Citation labels: **a labelling page** for the owner once `evals/labelling/citation_support.json` has 30 or more items (9 so far).
+      - Citation labels: **a labelling page** for the owner, built now (in batch 13 the owner chose not to wait for 30 items).
+  - **In progress: batch 13 (§108)**, autonomous, steps BB–BG. Each step ends with tests green, a commit and push, and updated docs.
   - Its own `progress.md` is authoritative;
 - not blocking: an auto-update mechanism for deployed code, and an off-site backup destination.
 
@@ -1546,6 +1547,22 @@ Same rules and stop conditions.
 | — | End-to-end test extended; live smoke; README refreshed if anything user-visible changed. | **done** — §101 |
 
 **Batch 11 (AR–AU) complete 2026-09-26.** No owner decision is open.
+
+## 108. Batch 13: faster bursts, a baseline, sharper tool rates (2026-09-27, autonomous)
+
+The owner's answers before starting:
+- **yield rule:** a unit gives way only after a round that called a model;
+- **performance fixes:** only if saved data stays compatible (otherwise write it up and ask);
+- **labelling page:** build it now, with the 9 answers so far.
+
+| Step | Scope | Status |
+|---|---|---|
+| BB | Quick questions finish first: `MultiUnitScheduler(yield_policy=...)`; `maintenance.YieldAfterModelCall` compares `model_backed_reasoning.model_calls()` before and after each round | **done**. Live API burst (31 golden questions): median time until answered **26 s → 0.6 s**, fastest 0.1 s. The p95 stays about 30 s, set by the few questions whose agents call a model; those still take turns. Without a policy the scheduler is unchanged (round-robin). One recovery test assumed round-robin interleaving; it now checks the same property (a part-way question resumes after a crash, and each is answered once) under the new order |
+| BC | A baseline from the six decidable suites; PSI reference sample | planned |
+| BD | evalcore v0.1.2: "caught when it manifested" in `run_matrix`, shown on the dashboard | planned |
+| BE | Profile a deliberation round; fix only if saved data stays compatible | planned |
+| BF | Accepted aliases for `model_answers` grading, kept outside the benchmark's versioned items | planned |
+| BG | The citation labelling page (a published artifact that saves labels), folded into `citation_support.json` | planned |
 
 ## 107. Batch 12: Athenaeum's evaluation on evalcore (planned 2026-09-27, autonomous)
 

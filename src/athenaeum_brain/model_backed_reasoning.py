@@ -26,6 +26,7 @@ from __future__ import annotations
 import contextlib
 import contextvars
 import re
+import threading
 from athenaeum_body.model_lab_registry import MODEL_LAB_ENDPOINTS
 from athenaeum_body.model_serving import LlamaCppBackend, ModelSpec, BackendUnavailable
 from athenaeum_body.elastic_workers import build_elastic_gpu_backend
@@ -71,6 +72,16 @@ ANSWER_FRAME = "Q: {question}\nA:"
 # 25.6 s -> 6.4 s, 53 -> 54 graded right, 60/60 answered even on one attempt.
 ANSWER_STOP = ("\n",)
 
+# Every call that reaches a model (a configured endpoint) is counted, so the
+# scheduler can tell a round that waited on a model from one that didn't
+# (maintenance.YieldAfterModelCall).
+_calls_lock = threading.Lock()
+_model_calls = 0
+
+
+def model_calls() -> int:
+    return _model_calls
+
 
 def ask_model(question: str, model_name: str = DEFAULT_MODEL, n_predict: int = 96,
               timeout_seconds: float = 120.0, max_attempts: int = 5, frame: str = ANSWER_FRAME,
@@ -108,6 +119,9 @@ def ask_model(question: str, model_name: str = DEFAULT_MODEL, n_predict: int = 9
     future one) to remember to retry or frame prompts individually."""
     if model_name not in MODEL_LAB_ENDPOINTS:
         return None
+    global _model_calls
+    with _calls_lock:
+        _model_calls += 1
     framed_question = frame.format(question=question)
     spec = ModelSpec(name=model_name, vram_gb=0)
     cpu_backend = LlamaCppBackend(endpoints={model_name: MODEL_LAB_ENDPOINTS[model_name]},

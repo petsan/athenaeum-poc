@@ -60,6 +60,22 @@ from .reopening import rate_and_store_importance, reopen_if_material
 from .audits import reevaluation_audit, consolidation_audit
 from .evaluation import calibration_drift
 from .reevaluation import IMPORTANCE_THRESHOLD
+from . import model_backed_reasoning
+
+
+class YieldAfterModelCall:
+    """The scheduler's yield rule (owner decision, 2026-09-27): a unit keeps
+    its place in the queue, and so runs its next round at once, unless the
+    round it just ran called a model. Under a burst, a quick deterministic
+    question then finishes in one go instead of waiting for every other
+    question's rounds; slow model-backed units still take turns, so no single
+    one can hold the queue for more than one model call at a time."""
+
+    def before_round(self, unit) -> None:
+        self._calls = model_backed_reasoning.model_calls()
+
+    def after_round(self, unit) -> bool:
+        return model_backed_reasoning.model_calls() != self._calls
 
 
 @dataclass
@@ -88,7 +104,8 @@ class Maintainer:
         log = self.log_for("maintainer")
         latest = log.read_latest()
         shared = latest["shared_state"] if latest and "shared_state" in latest else {}
-        self.scheduler = MultiUnitScheduler(SingleUnitRunner(log, shared_state=shared))
+        self.scheduler = MultiUnitScheduler(SingleUnitRunner(log, shared_state=shared),
+                                            yield_policy=YieldAfterModelCall())
         # Everything the Maintainer must remember across a restart lives in the
         # scheduler's own checkpointed state, and is written the moment it
         # changes (_save), not just at the next round boundary.

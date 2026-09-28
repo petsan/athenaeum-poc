@@ -53,11 +53,14 @@ def test_mid_way_questions_resume_and_each_is_answered_once(tmp_path):
     for qid, q in QUESTIONS.items():
         m.submit_question(qid, q)
     for _ in range(5):
-        m.tick()  # interleaved: several questions part-way through
+        m.tick()  # q1 finishes in 4 rounds (quick questions run through, batch 13); q2 is part-way
+    unfinished = sorted(q for q in QUESTIONS if m.ledger.get(q).status != "completed")
+    part_way = [u for _, _, u in m.scheduler._heap if u.round_index > 0]
+    assert unfinished == ["q2", "q3"] and [u.id for u in part_way] == ["q2"]
     del m      # the crash
 
     m2 = host.maintainer(idle_every_questions=99)
-    assert sorted(m2.recovered) == sorted(QUESTIONS)
+    assert sorted(m2.recovered) == unfinished
     m2.run()
     assert _statements(m2, "q1") == ["17 is prime"]
     assert _statements(m2, "q3") == ["21 is not prime"]
