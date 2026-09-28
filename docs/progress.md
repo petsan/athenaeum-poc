@@ -24,7 +24,6 @@ The sections below this one are a chronological log. The numbering runs roughly 
   - the judging gate: olmo3-7b scored 0.808 against the 0.95 bar.
 - **Next: batch 14 (§108.2).** It starts with the owner's answer on the judging gate. **Ask it first:** keep judging as a release gate (every nightly REJECTED until a model qualifies), or make it informational. Claude recommended informational: the runtime already ignores an unqualified challenger.
 - **Owner reminders:**
-  - revoke the temporary root key (it expires 2026-09-29);
   - evalgate 0.2.0 has the same degenerate `psi` as evalcore's (documented in evalcore 0.1.3, repo untouched);
   - `git pull` the evalgate copy in Downloads;
   - mark answers on the labelling page (https://claude.ai/artifact/5yiqY91tivAJnRvMD2dEf1; 9 answers; the gate needs 30).
@@ -75,7 +74,7 @@ The sections below this one are a chronological log. The numbering runs roughly 
 - **Access:**
   - Guests: key `~/.ssh/athenaeum_poc`.
   - API: `ssh root@192.168.0.151 pve-ops -p athenaeum <cmd>`.
-  - **Temporary host root:** key `~/.ssh/proxmox_temp_root`. It works only from `192.168.0.85` and **expires 2026-09-29**. Its host key fingerprint is `SHA256:hfXHivPsL33+zuiODq3++y73nyUxPBQdFPDr7PHz5Rc`, already in `known_hosts`.
+  - **Host root key:** `~/.ssh/proxmox_temp_root`. It works only from `192.168.0.85`. **It has no expiry**: the owner confirmed on 2026-09-28 that it is set never to expire and is fine with that for now. It is still a root key, so use it only for host work that needs it. Its host key fingerprint is `SHA256:hfXHivPsL33+zuiODq3++y73nyUxPBQdFPDr7PHz5Rc`, already in `known_hosts`.
   - Revoke the temporary key when done: delete the `claude-temp-root` line from `/root/.ssh/authorized_keys` on the host, and the key file here.
   - Claude Code's auto mode refuses destructive host commands and ACL grants. Give those to the owner as paste-ready commands, and don't work around the refusal.
 
@@ -1777,7 +1776,7 @@ The owner said "do the steps outlined" (§104's list), then asked for more model
 
 On 2026-09-27 the thin pool under every Athenaeum guest was lost, and its disks were rebuilt into a new, empty pool, `local-thin-multi-01` (known-bugs #37 has the details).
 
-**Access.** With root on the host deliberately out of reach, the owner granted temporary access. It used a dedicated key, `~/.ssh/proxmox_temp_root`, separate from the guests' key. In `authorized_keys` the key is restricted to `from="192.168.0.85"`, carries `expiry-time="20260929"`, and has forwarding off. The host key's fingerprint was checked against the one the owner read from the console before the first connection. To revoke: delete the `claude-temp-root` line from `/root/.ssh/authorized_keys` and the key here.
+**Access.** With root on the host deliberately out of reach, the owner granted temporary access. It used a dedicated key, `~/.ssh/proxmox_temp_root`, separate from the guests' key. In `authorized_keys` the key is restricted to `from="192.168.0.85"`, carries `expiry-time="20260929"`, and has forwarding off. The host key's fingerprint was checked against the one the owner read from the console before the first connection. To revoke: delete the `claude-temp-root` line from `/root/.ssh/authorized_keys` and the key here. **Correction (2026-09-28):** the owner reports that the key as installed is set never to expire; they accept that for now.
 
 **What happened next:**
 - The owner restored 104 and 106 from their 2026-09-25 backups; my attempts to run the restore were refused by Claude Code's safety check.
