@@ -22,10 +22,10 @@ def test_demo_brain_runs_and_ends_exactly_once(tmp_path):
     assert "c5 is now: suspended" in result.stdout
     # batches 6-11 (steps 16-20)
     assert "its weight at use: {'Physics::olmo3-7b': 0.5}" in result.stdout
-    # batch 12 (AW): 120 cases, the Wilson bound, and a provisional benchmark (D15)
+    # batch 12 (AW): 120 cases and the Wilson bound; the owner approved the benchmark (D15)
     assert "short numeric answers" in result.stdout and "below the 0.95 needed" in result.stdout
-    assert "120/120 cases, Wilson lower bound 0.969 -> challenges count? (False" in result.stdout
-    assert "but the benchmark is provisional (awaiting the owner's review)" in result.stdout
+    assert "120/120 cases, Wilson lower bound 0.969 -> challenges count? (True" in result.stdout
+    assert "on the current, reviewed benchmark" in result.stdout
     assert "reviewer tokens are stored hashed: True" in result.stdout
     assert ": checkpointed" in result.stdout and "mo tries to approve it: refused (403)" in result.stdout
     assert "the answer was reopened because: human input from mo, approved by rita" in result.stdout

@@ -101,9 +101,12 @@ The sections below this one are a chronological log, and the numbering runs roug
   - **Batch 12 (§107), Athenaeum's evaluation built on evalcore (E6, part 2): built.** The owner decided D15, D16, D17 and D19 on 2026-09-27 and approved working autonomously for several hours. The decisions are recorded at the top of `docs/proposals/evalgate-integration.md`.
     - Run it with `/opt/athenaeum-venv/bin/python scripts/run_evals.py` (8 suites) and `scripts/build_dashboard.py` (fault matrix and page).
     - The nightly timer on LXC 104 runs at boot + 15 min and at 02:30 Pacific (`infra/nightly/`), and publishes the dashboard to http://192.168.0.104/athenaeum/ (LXC 250; key allowed 2026-09-27).
-    - **Waiting on the owner:**
-      - review `src/athenaeum_brain/judging_benchmark.json` (provisional);
-      - decide whether the scheduler should stay round-robin under bursts (§107.2).
+    - **Owner answers, 2026-09-27 (after batch 12):**
+      - LXC 250 key: Claude ran the grant at the owner's request. Publishing works.
+      - Scheduler: **finish short questions first.** A unit runs to completion unless its next round waits on a model, and then it yields. To build in batch 13.
+      - Baseline: **save one from the six decidable suites** (all but judging and provenance) once such a run is APPROVED. To build in batch 13.
+      - Judging benchmark: **approved as drafted** (`review.status` "reviewed"), relying on the drafter's checks. A model whose Wilson bound clears 0.95 now counts; none does yet.
+      - Citation labels: **a labelling page** for the owner once `evals/labelling/citation_support.json` has 30 or more items (9 so far).
   - Its own `progress.md` is authoritative;
 - not blocking: an auto-update mechanism for deployed code, and an off-site backup destination.
 
@@ -1642,7 +1645,7 @@ Batch 12 is complete (commits 0335497 → ab338ee). Proposed next, in order, eac
 4. **The grader's floor.** After the owner's benchmark review, add accepted aliases to items (e.g. "sodium chloride" for NaCl, "299 792" for about 300,000), so `model_answers` stops under-counting.
 5. **Model-backed calibration.** Once citation labels exist, feed labelled model-backed claims into the calibration suite, where over-confidence can finally show.
 
-Owner decisions that unblock things: reviewing `judging_benchmark.json` (D15), labelling `citation_support.json` (D17), and the scheduler under bursts (§107.2).
+The owner answered the open questions the same day (see §0): the benchmark is approved, a baseline comes from the decidable suites (this replaces item 3's proposal), the scheduler finishes short questions first (this replaces item 2's "stays until the owner decides"), and citation labels come through a labelling page once there are 30 items.
 
 ## 106. Debugging tools, a reusable toolkit plan, and the model store verified
 

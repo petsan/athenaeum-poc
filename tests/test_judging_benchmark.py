@@ -34,17 +34,20 @@ def store(tmp_path):
     return ModelFitnessStore(CheckpointLog(cas=ContentAddressedStore(tmp_path / "cas"), index_path=tmp_path / "f.txt"))
 
 
-def test_the_benchmark_is_balanced_versioned_and_provisional():
+def test_the_benchmark_is_balanced_versioned_and_its_review_recorded():
     cases = jb.cases()
     assert len(cases) == 120 and sum(ok for _, _, ok in cases) == 60
     assert len({q for q, _, _ in cases}) == 60                      # each question judged both ways
     assert len(jb.BENCHMARK_VERSION) == len(jb.PROMPT_VERSION) == 16
     assert not any("continents" in q for q, _, _ in cases)          # convention-dependent: removed
-    assert jb.REVIEW["status"] == "provisional" and not jb.reviewed()
+    assert jb.REVIEW["status"] in ("provisional", "reviewed")
+    assert jb.reviewed() == (jb.REVIEW["status"] == "reviewed")
+    assert jb.REVIEW["reviewed_by"] if jb.reviewed() else jb.REVIEW["reviewed_by"] is None   # who approved it, when it is
     assert jb.misses_allowed() == 1                                 # 120 cases prove 0.95 with one miss
 
 
 def test_a_perfect_judge_passes_on_the_wilson_bound(monkeypatch):
+    monkeypatch.setattr(jb, "reviewed", lambda: False)             # the review state is set by each test, not the file
     monkeypatch.setattr(model_backed_reasoning, "ask_model", judge_by(perfect))
     result = jb.run_benchmark(DEFAULT_MODEL, repeats=2)
     assert (result["correct"], result["total"], result["cases_right"], result["cases"]) == (240, 240, 120, 120)
@@ -100,6 +103,7 @@ def test_qualification_needs_a_current_passing_reviewed_result(store, monkeypatc
     store.record_judging(DEFAULT_MODEL, {**current, **jb.score(112, 120)})
     ok, why = jb.challenger_qualified(store, DEFAULT_MODEL)
     assert not ok and why.startswith("112/120 cases, Wilson lower bound 0.8") and "below the 0.95 needed" in why
+    monkeypatch.setattr(jb, "reviewed", lambda: False)
     store.record_judging(DEFAULT_MODEL, {**current, **jb.score(120, 120)})
     ok, why = jb.challenger_qualified(store, DEFAULT_MODEL)
     assert not ok and why.endswith("but the benchmark is provisional (awaiting the owner's review)")
@@ -115,11 +119,12 @@ def test_qualification_needs_a_current_passing_reviewed_result(store, monkeypatc
 
 def test_review_status_is_read_fresh(tmp_path, monkeypatch):
     data = json.loads(jb.DATA.read_text(encoding="utf-8"))
-    data["review"]["status"] = "reviewed"
     copy = tmp_path / "judging_benchmark.json"
-    copy.write_text(json.dumps(data), encoding="utf-8")
     monkeypatch.setattr(jb, "DATA", copy)
-    assert jb.reviewed()                                            # no restart needed after approval
+    for status in ("provisional", "reviewed", "provisional"):          # no restart needed either way
+        data["review"]["status"] = status
+        copy.write_text(json.dumps(data), encoding="utf-8")
+        assert jb.reviewed() == (status == "reviewed")
 
 
 def test_the_api_reports_each_challengers_status(tmp_path, monkeypatch):
@@ -137,6 +142,7 @@ def test_the_script_records_a_result(tmp_path, monkeypatch, capsys):
     spec = importlib.util.spec_from_file_location("run_judging_benchmark", path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
+    monkeypatch.setattr(jb, "reviewed", lambda: False)
     monkeypatch.setattr(model_backed_reasoning, "ask_model", judge_by(perfect))
     module.main(["--repeats", "1", "--record", str(tmp_path)])
     out = capsys.readouterr().out

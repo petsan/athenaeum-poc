@@ -53,6 +53,7 @@ def test_the_runner_reads_the_store(tmp_path, monkeypatch):
     store.record_judging(DEFAULT_MODEL,
                          {**CURRENT, **jb.score(120, 120), "misses": []})
     monkeypatch.setattr(judging, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(jb, "reviewed", lambda: False)             # a provisional benchmark, whatever the file says
     result = runner.run(tmp_path / "out", ["judging"])
     gate = next(g for g in result.gates if g.name == "challenger_agreement")
     assert gate.status == "INSUFFICIENT_DATA" and "provisional" in gate.detail     # the benchmark isn't reviewed yet

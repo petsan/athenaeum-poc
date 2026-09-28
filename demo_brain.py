@@ -355,7 +355,7 @@ try:
         print(f"a judge that {label}: {result['cases_right']}/{result['cases']} cases, Wilson lower bound "
               f"{result['wilson_low']:.3f} -> challenges count?", challenger_qualified(scores, "judge-model"))
     print(f"(the bar is a Wilson lower bound of {QUALIFYING_ACCURACY:.2f}, which {len(judging_cases())} cases can "
-          f"prove with one miss; and until the owner reviews the benchmark, no model's challenges count)")
+          f"prove with one miss; the benchmark must also be owner-reviewed, as it has been since 2026-09-27)")
     mbr.ask_model = stand_in_model
 
     step("18. Human input is examined, and waits for a reviewer when it matters (Section 11)")

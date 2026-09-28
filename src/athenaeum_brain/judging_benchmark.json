@@ -1,9 +1,9 @@
 {
   "about": "The judging benchmark for challenger models (owner decisions 11 and D15). Each item is a question with one correct and one incorrect answer; each is judged as a claim. Answers must be unambiguous: a question whose answer depends on convention does not belong here.",
   "review": {
-    "status": "provisional",
+    "status": "reviewed",
     "drafted": "2026-09-27, by Claude (batch 12, phase AW); every answer checked by the drafter",
-    "reviewed_by": null,
+    "reviewed_by": "Piotr (owner), 2026-09-27: approved as drafted, relying on the drafter's checks, without an item-by-item review",
     "how_to_approve": "Check each item. Fix or delete any you disagree with, then set status to \"reviewed\" and reviewed_by to your name. Until then no model's challenges count, whatever it scores."
   },
   "removed": [
