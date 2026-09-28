@@ -19,7 +19,8 @@ Three kinds of case, one suite:
 
 Citation support (does a cited source say what the claim says?) is
 judge-scored, so it waits on a validated judge and the owner's labels
-(D17): the metric is withheld, and `labelling_items` prepares the file.
+(D17): the metric is withheld, and `labelling_items` and `answer_items`
+prepare the file.
 """
 from __future__ import annotations
 
@@ -226,5 +227,27 @@ def labelling_items(source_results) -> list[dict]:
             models = [e.split(":", 1)[1] for e in cited if e.startswith("llm:")]
             if models:
                 items.append({"id": f"{r.case_id}/{r.variant}/{len(items) + 1}", "question": r.detail.get("question"),
-                              "claim": statement, "model": models[0], "label": None, "note": ""})
+                              "claim": statement, "model": models[0], "label": None, "note": "",
+                              "source": DELIBERATION_SOURCE})
+    return items
+
+
+DELIBERATION_SOURCE, ANSWER_SOURCE = "deliberation claim", "benchmark answer"
+
+
+def answer_items(model_answer_results) -> list[dict]:
+    """The lab models' answers to benchmark questions that the lexical grader
+    marked not right, for the owner to label (batch 14). Deliberation mostly
+    commits right answers, and a judge checked only against right answers
+    can say yes to everything and score 100%; these give the pool wrong
+    ones. The grader is a floor and misses some right answers too, so the
+    owner still marks every item, and the item names its source, never the
+    grader's verdict. An empty answer has no claim to mark."""
+    items = []
+    for r in model_answer_results:
+        answer = (r.detail.get("answer") or "").strip()
+        if answer and r.metrics.get("right") == 0.0:
+            items.append({"id": f"{r.case_id}/{len(items) + 1}", "question": r.detail.get("question"),
+                          "claim": answer, "model": r.category, "label": None, "note": "",
+                          "source": ANSWER_SOURCE})
     return items

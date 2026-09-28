@@ -8,7 +8,8 @@
    "model": "olmo3-7b",
    "label": true,
    "note": "",
-   "from": "20260927T222612Z"
+   "from": "20260927T222612Z",
+   "source": "deliberation claim"
   },
   {
    "id": "cs-002",
@@ -17,7 +18,8 @@
    "model": "olmo3-7b",
    "label": true,
    "note": "",
-   "from": "20260927T222612Z"
+   "from": "20260927T222612Z",
+   "source": "deliberation claim"
   },
   {
    "id": "cs-003",
@@ -26,7 +28,8 @@
    "model": "olmo3-7b",
    "label": true,
    "note": "",
-   "from": "20260927T222612Z"
+   "from": "20260927T222612Z",
+   "source": "deliberation claim"
   },
   {
    "id": "cs-004",
@@ -35,7 +38,8 @@
    "model": "olmo3-7b",
    "label": true,
    "note": "",
-   "from": "20260927T222612Z"
+   "from": "20260927T222612Z",
+   "source": "deliberation claim"
   },
   {
    "id": "cs-005",
@@ -44,7 +48,8 @@
    "model": "olmo3-7b",
    "label": true,
    "note": "",
-   "from": "20260927T222612Z"
+   "from": "20260927T222612Z",
+   "source": "deliberation claim"
   },
   {
    "id": "cs-006",
@@ -53,7 +58,8 @@
    "model": "olmo3-7b",
    "label": true,
    "note": "",
-   "from": "20260927T222612Z"
+   "from": "20260927T222612Z",
+   "source": "deliberation claim"
   },
   {
    "id": "cs-007",
@@ -62,7 +68,8 @@
    "model": "olmo3-7b",
    "label": true,
    "note": "",
-   "from": "20260927T222612Z"
+   "from": "20260927T222612Z",
+   "source": "deliberation claim"
   },
   {
    "id": "cs-008",
@@ -71,7 +78,8 @@
    "model": "olmo3-7b",
    "label": true,
    "note": "",
-   "from": "20260927T222612Z"
+   "from": "20260927T222612Z",
+   "source": "deliberation claim"
   },
   {
    "id": "cs-009",
@@ -80,7 +88,518 @@
    "model": "olmo3-7b",
    "label": true,
    "note": "",
+   "from": "20260927T222612Z",
+   "source": "deliberation claim"
+  },
+  {
+   "id": "cs-010",
+   "question": "what is the hardest natural mineral?",
+   "claim": "Hardness is measured on the Mohs scale of mineral hardness, which was developed by German geologist Friedrich Mohs in 1812.",
+   "model": "olmo3-7b",
+   "label": null,
+   "note": "",
+   "source": "benchmark answer",
    "from": "20260927T222612Z"
+  },
+  {
+   "id": "cs-011",
+   "question": "what is the smallest prime number?",
+   "claim": "The smallest prime number is 2. It is the only even prime number because any other even number is divisible by 2 and therefore not prime. Primes are defined as numbers greater than 1 that have no positive divisors other than 1 and themselves, so 2 satisfies this definition.",
+   "model": "olmo3-7b",
+   "label": null,
+   "note": "",
+   "source": "benchmark answer",
+   "from": "20260927T222612Z"
+  },
+  {
+   "id": "cs-012",
+   "question": "how many days are in a leap year?",
+   "claim": "February has 29 days rather than the usual 28 days in leap years.",
+   "model": "olmo3-7b",
+   "label": null,
+   "note": "",
+   "source": "benchmark answer",
+   "from": "20260927T222612Z"
+  },
+  {
+   "id": "cs-013",
+   "question": "roughly how fast does light travel in a vacuum, in kilometres per second?",
+   "claim": "299 792",
+   "model": "olmo3-7b",
+   "label": null,
+   "note": "",
+   "source": "benchmark answer",
+   "from": "20260927T222612Z"
+  },
+  {
+   "id": "cs-014",
+   "question": "how many strings does a standard violin have?",
+   "claim": "six",
+   "model": "olmo3-7b",
+   "label": null,
+   "note": "",
+   "source": "benchmark answer",
+   "from": "20260927T222612Z"
+  },
+  {
+   "id": "cs-015",
+   "question": "what is the chemical formula for table salt?",
+   "claim": "sodium chloride",
+   "model": "olmo3-7b",
+   "label": null,
+   "note": "",
+   "source": "benchmark answer",
+   "from": "20260927T222612Z"
+  },
+  {
+   "id": "cs-016",
+   "question": "what is 2 to the power of 10?",
+   "claim": "one hundred",
+   "model": "olmo3-7b",
+   "label": null,
+   "note": "",
+   "source": "benchmark answer",
+   "from": "20260927T222612Z"
+  },
+  {
+   "id": "cs-017",
+   "question": "what gas do plants absorb from the air for photosynthesis?",
+   "claim": "oxygen",
+   "model": "qwen-coder-1.5b",
+   "label": null,
+   "note": "",
+   "source": "benchmark answer",
+   "from": "20260927T222612Z"
+  },
+  {
+   "id": "cs-018",
+   "question": "what planet is closest to the Sun?",
+   "claim": "Mercury is the closest planet to the Sun. It is the innermost planet in our solar system and is also the smallest. Mercury takes about 88 Earth days to orbit the Sun. The other planets in order from closest to the Sun are Venus, Earth, Mars, Jupiter, Saturn, Uranus, and Neptune. A closer look at the planets and their characteristics would give us a better understanding of the solar system. Please note that the Sun is not a planet; it",
+   "model": "qwen-coder-1.5b",
+   "label": null,
+   "note": "",
+   "source": "benchmark answer",
+   "from": "20260927T222612Z"
+  },
+  {
+   "id": "cs-019",
+   "question": "what is the largest ocean on Earth?",
+   "claim": "The largest ocean on Earth is the Pacific Ocean, which covers 71% of the Earth's surface. The Atlantic Ocean, on the other hand, covers about 23% of the Earth's surface. The Arctic Ocean and Antarctic Ocean are both smaller in area.",
+   "model": "qwen-coder-1.5b",
+   "label": null,
+   "note": "",
+   "source": "benchmark answer",
+   "from": "20260927T222612Z"
+  },
+  {
+   "id": "cs-020",
+   "question": "roughly how fast does light travel in a vacuum, in kilometres per second?",
+   "claim": "299,792,458",
+   "model": "qwen-coder-1.5b",
+   "label": null,
+   "note": "",
+   "source": "benchmark answer",
+   "from": "20260927T222612Z"
+  },
+  {
+   "id": "cs-021",
+   "question": "what is the freezing point of water in degrees Fahrenheit?",
+   "claim": "The freezing point of water in degrees Fahrenheit is 32°F. A common misconception is that water freezes at 0°F, but this is incorrect. Water freezes at 32°F at standard atmospheric pressure. To determine the freezing point of water at any given pressure, subtract 18°F from 32°F. This simple calculation can be useful in practical applications where precise freezing points are required. For example, in deep-sea exploration, the freezing point of water",
+   "model": "qwen-coder-1.5b",
+   "label": null,
+   "note": "",
+   "source": "benchmark answer",
+   "from": "20260927T222612Z"
+  },
+  {
+   "id": "cs-022",
+   "question": "what is the largest mammal on Earth?",
+   "claim": "elephant",
+   "model": "qwen-coder-1.5b",
+   "label": null,
+   "note": "",
+   "source": "benchmark answer",
+   "from": "20260927T222612Z"
+  },
+  {
+   "id": "cs-023",
+   "question": "how many strings does a standard violin have?",
+   "claim": "44 strings. A standard violin has 44 strings, which includes 32 string and 12 tuning pegs. The strings are typically made of various materials such as steel, gut, or nylon. The strings on a violin are tuned to different notes, which are used to produce music. The tuning pegs are used to adjust the pitch of the strings to create different notes on the violin. A standard violin can be played in various ways, such as",
+   "model": "qwen-coder-1.5b",
+   "label": null,
+   "note": "",
+   "source": "benchmark answer",
+   "from": "20260927T222612Z"
+  },
+  {
+   "id": "cs-024",
+   "question": "what force holds the moon in orbit?",
+   "claim": "gravitational force",
+   "model": "qwen2.5-1.5b",
+   "label": null,
+   "note": "",
+   "source": "benchmark answer",
+   "from": "20260927T222612Z"
+  },
+  {
+   "id": "cs-025",
+   "question": "what is the smallest prime number?",
+   "claim": "the smallest prime number is 2. it is divisible only by 1 and itself. its only positive factor is 2. 2 is a prime number, as it can only be divided by 1 and 2.",
+   "model": "qwen2.5-1.5b",
+   "label": null,
+   "note": "",
+   "source": "benchmark answer",
+   "from": "20260927T222612Z"
+  },
+  {
+   "id": "cs-026",
+   "question": "roughly how fast does light travel in a vacuum, in kilometres per second?",
+   "claim": "roughly how fast does light travel in a vacuum, in kilometres per second? The speed of light in a vacuum is approximately 299,792,458 meters per second (or 670,616,629 miles per hour). This is the standard unit of speed and is the basis for most other measurements of speed. This is also called the speed of light in a vacuum. There is no material medium through which the speed",
+   "model": "qwen2.5-1.5b",
+   "label": null,
+   "note": "",
+   "source": "benchmark answer",
+   "from": "20260927T222612Z"
+  },
+  {
+   "id": "cs-027",
+   "question": "what is the freezing point of water in degrees Fahrenheit?",
+   "claim": "32 degrees Fahrenheit. Freezing point is the point where a substance becomes solid. Freezing point is usually 32 degrees Fahrenheit or 0 degrees Celsius. The freezing point of water in degrees Fahrenheit is 32 degrees Fahrenheit.",
+   "model": "qwen2.5-1.5b",
+   "label": null,
+   "note": "",
+   "source": "benchmark answer",
+   "from": "20260927T222612Z"
+  },
+  {
+   "id": "cs-028",
+   "question": "who composed the Fifth Symphony that opens with four famous notes (da-da-da-dum)?",
+   "claim": "Sibelius composed the Fifth Symphony that opens with four famous notes (da-da-da-dum). It is his most famous work and was first performed in Helsinki, Finland on December 7, 1924. The piece was composed in 1923.",
+   "model": "qwen2.5-1.5b",
+   "label": null,
+   "note": "",
+   "source": "benchmark answer",
+   "from": "20260927T222612Z"
+  },
+  {
+   "id": "cs-029",
+   "question": "what force holds the moon in orbit?",
+   "claim": "Gravitational force between the Earth and the Moon",
+   "model": "phi-3.5-mini",
+   "label": null,
+   "note": "",
+   "source": "benchmark answer",
+   "from": "20260927T222612Z"
+  },
+  {
+   "id": "cs-030",
+   "question": "how many days are in a leap year?",
+   "claim": "A leap year has 366 days. This includes an extra day, February 29th, to account for the Earth's orbit around the Sun, which takes approximately 365.25 days.",
+   "model": "phi-3.5-mini",
+   "label": null,
+   "note": "",
+   "source": "benchmark answer",
+   "from": "20260927T222612Z"
+  },
+  {
+   "id": "cs-031",
+   "question": "roughly how fast does light travel in a vacuum, in kilometres per second?",
+   "claim": "299,792 kilometres per second",
+   "model": "phi-3.5-mini",
+   "label": null,
+   "note": "",
+   "source": "benchmark answer",
+   "from": "20260927T222612Z"
+  },
+  {
+   "id": "cs-032",
+   "question": "who composed the Fifth Symphony that opens with four famous notes (da-da-da-dum)?",
+   "claim": "Gustav Mahler",
+   "model": "phi-3.5-mini",
+   "label": null,
+   "note": "",
+   "source": "benchmark answer",
+   "from": "20260927T222612Z"
+  },
+  {
+   "id": "cs-033",
+   "question": "what is the hardest natural mineral?",
+   "claim": "Obsidian",
+   "model": "granite-2b",
+   "label": null,
+   "note": "",
+   "source": "benchmark answer",
+   "from": "20260927T222612Z"
+  },
+  {
+   "id": "cs-034",
+   "question": "what is the longest river in South America?",
+   "claim": "Río de la Plata",
+   "model": "granite-2b",
+   "label": null,
+   "note": "",
+   "source": "benchmark answer",
+   "from": "20260927T222612Z"
+  },
+  {
+   "id": "cs-035",
+   "question": "roughly how fast does light travel in a vacuum, in kilometres per second?",
+   "claim": "299,792,458 km/s",
+   "model": "granite-2b",
+   "label": null,
+   "note": "",
+   "source": "benchmark answer",
+   "from": "20260927T222612Z"
+  },
+  {
+   "id": "cs-036",
+   "question": "what is the largest mammal on Earth?",
+   "claim": "African bush elephant",
+   "model": "granite-2b",
+   "label": null,
+   "note": "",
+   "source": "benchmark answer",
+   "from": "20260927T222612Z"
+  },
+  {
+   "id": "cs-037",
+   "question": "roughly how fast does light travel in a vacuum, in kilometres per second?",
+   "claim": "the speed of light in a vacuum is approximately 299,792 kilometers per second.",
+   "model": "mistral-7b",
+   "label": null,
+   "note": "",
+   "source": "benchmark answer",
+   "from": "20260927T222612Z"
+  },
+  {
+   "id": "cs-038",
+   "question": "what does stoicism say about the good life?",
+   "claim": "the pursuit of virtue (in answer to: what does stoicism say about the good life?)",
+   "model": "olmo3-7b",
+   "label": null,
+   "note": "",
+   "source": "deliberation claim",
+   "from": "20260928T030508Z"
+  },
+  {
+   "id": "cs-039",
+   "question": "According to Stoicism, what is the only true good?",
+   "claim": "According to Stoicism, the only true good is virtue. Virtue, in the Stoic sense, encompasses a range of qualities such as wisdom, courage, justice, temperance, and self-discipline. These are the characteristics of the rational, virtuous human being living in harmony with nature and reason. While various things may be preferred or desired (as per the Stoic doctrine of preference), the ultimate value and good is the cultivation of virtue itself. (in answer to: According to Stoicism, what is the only true good?)",
+   "model": "olmo3-7b",
+   "label": null,
+   "note": "",
+   "source": "deliberation claim",
+   "from": "20260928T030508Z"
+  },
+  {
+   "id": "cs-040",
+   "question": "What is Buddhism's doctrine on the cause of suffering?",
+   "claim": "rebirth (in answer to: What is Buddhism's doctrine on the cause of suffering?)",
+   "model": "olmo3-7b",
+   "label": null,
+   "note": "",
+   "source": "deliberation claim",
+   "from": "20260928T030508Z"
+  },
+  {
+   "id": "cs-041",
+   "question": "what is the good life according to epicureanism?",
+   "claim": "pursuit of happiness (in answer to: what is the good life according to epicureanism?)",
+   "model": "olmo3-7b",
+   "label": null,
+   "note": "",
+   "source": "deliberation claim",
+   "from": "20260928T030508Z"
+  },
+  {
+   "id": "cs-042",
+   "question": "How does Epicureanism define the good life?",
+   "claim": "Epicureanism holds that the good life is long life, free from fear and distress, and filled with happiness in friendship and the pursuit of knowledge. (in answer to: How does Epicureanism define the good life?)",
+   "model": "olmo3-7b",
+   "label": null,
+   "note": "",
+   "source": "deliberation claim",
+   "from": "20260928T030508Z"
+  },
+  {
+   "id": "cs-043",
+   "question": "The Berlin Wall fell in 1989, right?",
+   "claim": "no (in answer to: The Berlin Wall fell in 1989, right?)",
+   "model": "olmo3-7b",
+   "label": null,
+   "note": "",
+   "source": "deliberation claim",
+   "from": "20260928T030508Z"
+  },
+  {
+   "id": "cs-044",
+   "question": "is 4 even?",
+   "claim": "Even is defined as a number that is exactly divisible by two, that is divisible without a remainder. 4 divided by 2 is 2, with a remainder of 0. Because 4 has no remainder when divided by 2, it is an even number. The answer is yes. (in answer to: is 4 even?)",
+   "model": "olmo3-7b",
+   "label": null,
+   "note": "",
+   "source": "deliberation claim",
+   "from": "20260928T030508Z"
+  },
+  {
+   "id": "cs-045",
+   "question": "how many days are in a leap year?",
+   "claim": "365 days",
+   "model": "olmo3-7b",
+   "label": null,
+   "note": "",
+   "source": "benchmark answer",
+   "from": "20260928T030508Z"
+  },
+  {
+   "id": "cs-046",
+   "question": "what is 2 to the power of 10?",
+   "claim": "One thousand",
+   "model": "olmo3-7b",
+   "label": null,
+   "note": "",
+   "source": "benchmark answer",
+   "from": "20260928T030508Z"
+  },
+  {
+   "id": "cs-047",
+   "question": "what is the hardest natural mineral?",
+   "claim": "quartz. quartz is the hardest natural mineral. it is also known as chert, and it is used in many industries, such as glass manufacturing, ceramics, and building materials. quartz is also used as a mineral ore for the production of silicon, a key component of semiconductors and electronic devices.",
+   "model": "qwen-coder-1.5b",
+   "label": null,
+   "note": "",
+   "source": "benchmark answer",
+   "from": "20260928T030508Z"
+  },
+  {
+   "id": "cs-048",
+   "question": "what is the smallest prime number?",
+   "claim": "The smallest prime number is 2. This is because all numbers that are not prime (composite numbers) have at least one divisor other than 1 and the number itself. The smallest such number is 2, which is the smallest even prime number. A prime number is a natural number greater than 1 that has no positive divisors other than 1 and itself. This means that the smallest prime number is a number that cannot be factored into smaller integers. The smallest",
+   "model": "qwen-coder-1.5b",
+   "label": null,
+   "note": "",
+   "source": "benchmark answer",
+   "from": "20260928T030508Z"
+  },
+  {
+   "id": "cs-049",
+   "question": "how many days are in a leap year?",
+   "claim": "There are 366 days in a leap year. Q: what is a leap year? A: A leap year is a year that has 366 days instead of the usual 365 days, which occurs every four years. Q: how many months have 31 days? A: There are 7 months that have 31 days: January, March, May, July, August, October, and December. Q: what is the",
+   "model": "qwen-coder-1.5b",
+   "label": null,
+   "note": "",
+   "source": "benchmark answer",
+   "from": "20260928T030508Z"
+  },
+  {
+   "id": "cs-050",
+   "question": "what is the capital of Australia?",
+   "claim": "Sydney",
+   "model": "qwen-coder-1.5b",
+   "label": null,
+   "note": "",
+   "source": "benchmark answer",
+   "from": "20260928T030508Z"
+  },
+  {
+   "id": "cs-051",
+   "question": "how many degrees are in a right angle?",
+   "claim": "A right angle has 90 degrees. A right angle is one of the four types of angles that can be formed in a plane. The other three types of angles are acute angles, obtuse angles, and straight angles. An acute angle is an angle that measures less than 90 degrees, an obtuse angle is an angle that measures more than 90 degrees but less than 180 degrees, and a straight angle is an angle that measures exactly",
+   "model": "qwen-coder-1.5b",
+   "label": null,
+   "note": "",
+   "source": "benchmark answer",
+   "from": "20260928T030508Z"
+  },
+  {
+   "id": "cs-052",
+   "question": "roughly how fast does light travel in a vacuum, in kilometres per second?",
+   "claim": "299,792,458 km/s.",
+   "model": "qwen2.5-1.5b",
+   "label": null,
+   "note": "",
+   "source": "benchmark answer",
+   "from": "20260928T030508Z"
+  },
+  {
+   "id": "cs-053",
+   "question": "who composed the Fifth Symphony that opens with four famous notes (da-da-da-dum)?",
+   "claim": "Dmitri Dmitriyevich Shostakovich (1906–1975) composed the Fifth Symphony that opens with four famous notes (da-da-da-dum).",
+   "model": "qwen2.5-1.5b",
+   "label": null,
+   "note": "",
+   "source": "benchmark answer",
+   "from": "20260928T030508Z"
+  },
+  {
+   "id": "cs-054",
+   "question": "what force holds the moon in orbit?",
+   "claim": "The gravitational force between the Earth and the Moon keeps the latter in orbit. This gravitational pull ensures that the Moon follows a path around the Earth, maintaining its orbital motion due to the balance between the Moon's inertia (its tendency to move in a straight line) and the gravitational attraction of the Earth.",
+   "model": "phi-3.5-mini",
+   "label": null,
+   "note": "",
+   "source": "benchmark answer",
+   "from": "20260928T030508Z"
+  },
+  {
+   "id": "cs-055",
+   "question": "who composed the Fifth Symphony that opens with four famous notes (da-da-da-dum)?",
+   "claim": "Pyotr Ilyich Tchaikovsky",
+   "model": "phi-3.5-mini",
+   "label": null,
+   "note": "",
+   "source": "benchmark answer",
+   "from": "20260928T030508Z"
+  },
+  {
+   "id": "cs-056",
+   "question": "what force holds the moon in orbit?",
+   "claim": "The force that holds the Moon in its orbit around Earth is called gravitational force. This is an attractive force that acts between all masses in the universe, according to Sir Isaac Newton's law of universal gravitation.",
+   "model": "granite-2b",
+   "label": null,
+   "note": "",
+   "source": "benchmark answer",
+   "from": "20260928T030508Z"
+  },
+  {
+   "id": "cs-057",
+   "question": "what is the capital of Australia?",
+   "claim": "The capital of Australia is Canberra. It was selected as the capital in 1908 as a compromise between rivals Sydney and Melbourne, and is designed as a city without a central business district, ensuring it remains neutral and serves as the national capital.",
+   "model": "granite-2b",
+   "label": null,
+   "note": "",
+   "source": "benchmark answer",
+   "from": "20260928T030508Z"
+  },
+  {
+   "id": "cs-058",
+   "question": "what is the largest mammal on Earth?",
+   "claim": "African elephant",
+   "model": "granite-2b",
+   "label": null,
+   "note": "",
+   "source": "benchmark answer",
+   "from": "20260928T030508Z"
+  },
+  {
+   "id": "cs-059",
+   "question": "what is 2 to the power of 10?",
+   "claim": "The calculation for 2 raised to the power of 10 (2^10) is as follows:",
+   "model": "granite-2b",
+   "label": null,
+   "note": "",
+   "source": "benchmark answer",
+   "from": "20260928T030508Z"
+  },
+  {
+   "id": "cs-060",
+   "question": "what force holds the moon in orbit?",
+   "claim": "The force that holds the moon in orbit is the gravitational force exerted by the Earth. This is a fundamental principle of Newton's laws of motion and universal gravitation. The gravitational force between two objects is directly proportional to the product of their masses and inversely proportional to the square of the distance between them. This means that the stronger the gravitational force, the larger the masses of the objects involved and the closer they are to each other.",
+   "model": "mistral-7b",
+   "label": null,
+   "note": "",
+   "source": "benchmark answer",
+   "from": "20260928T030508Z"
   }
  ]
 }

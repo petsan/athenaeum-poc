@@ -242,6 +242,12 @@ Both were rewritten into every later checkpoint, and the records grew with every
 
 ---
 
+### 45. The lexical grader marks a right answer wrong when it mentions the wrong label in passing (open)
+**What happened:** `model_answers.grade` counts an answer as right only if it names the correct label and *not* the labelled wrong one. A long answer can do both: "The smallest prime number is 2 ... divisible only by 1" (wrong label "1"), and "There are 366 days in a leap year ..." followed by a mention of 365. Both were graded not right. Found 2026-09-28 while building batch 14's labelling pool, which draws on the grader's misses. Several of the 44 benchmark-answer items are right answers of this kind.
+**Root cause:** The not-the-wrong-label rule guards against hedges ("2 or 1"), but it can't tell a hedge from an explanation.
+**Status:** Not fixed yet. The grader decides a gated metric (the admitted model's accuracy), and changing it changes what that gate measures. It is also checked against all 120 labels. The owner's marks on the labelling page will show how often it happens. It affects the admitted model too: olmo3-7b's "The smallest prime number is 2. It is the only even prime ..." is item cs-011.
+**Lesson:** A "must not mention X" rule needs a test with a right answer that mentions X for a reason.
+
 ## Open known limitations (found, not yet fixed)
 
 Real, reproduced behaviours that are wrong or weak but deliberately not fixed in the change that found them — kept here so they aren't rediscovered from scratch. Move an entry up into a numbered bug when it's fixed.

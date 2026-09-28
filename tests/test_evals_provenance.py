@@ -194,7 +194,7 @@ def test_citation_support_is_withheld_until_judged(tmp_path):
 def test_the_labelling_file_lists_model_backed_claims_only():
     items = provenance.labelling_items([source(["llm:olmo3-7b"], ["computed:trial_division"])])
     assert items == [{"id": "q/original/1", "question": "q?", "claim": "claim 0", "model": "olmo3-7b",
-                      "label": None, "note": ""}]
+                      "label": None, "note": "", "source": "deliberation claim"}]
 
 
 # --- the runner -----------------------------------------------------------
@@ -250,3 +250,37 @@ def test_marks_from_the_labelling_page_are_applied(tmp_path):
     assert [(i["label"], i["note"]) for i in items] == [(False, "wrong year"), (None, "unsure")]
     m = provenance.metrics([], labels_path=labels)["citation_support"]
     assert "1 labelled so far" in m.detail["note"]
+
+
+def test_benchmark_answers_the_grader_marked_wrong_join_the_pool(tmp_path):
+    """Batch 14: the pool needs wrong answers too, or a judge that always says
+    yes would validate. Every miss with an answer joins it, once per distinct
+    answer, and says where it came from but not what the grader decided."""
+    import subprocess
+    import sys
+
+    def answer(model, i, question, text, right):
+        return {"suite": "model_answers", "case_id": f"{model}/{i:02d}", "category": model, "variant": "original",
+                "run": 0, "metrics": {"right": right}, "detail": {"question": question, "answer": text}}
+    results = tmp_path / "run2" / "eval_results.json"
+    results.parent.mkdir()
+    results.write_text(json.dumps({"results": [
+        answer("olmo3-7b", 3, "how many days are in a leap year?", "365 days", 0.0),
+        answer("olmo3-7b", 4, "how many strings does a standard violin have?", "Six", 0.0),
+        answer("granite-2b", 4, "how many strings does a standard violin have?", "six", 0.0),   # the same answer
+        answer("granite-2b", 5, "what is the capital of Italy?", None, 0.0),                    # no answer, no claim
+        answer("olmo3-7b", 5, "what is the capital of Italy?", "Rome", 1.0),                    # graded right
+    ]}), encoding="utf-8")
+    out = tmp_path / "labels.json"
+    out.write_text(json.dumps({"items": [{"id": "cs-001", "question": "q?", "claim": "c", "model": "olmo3-7b",
+                                          "label": True, "note": ""}]}), encoding="utf-8")
+    script = pathlib.Path(__file__).resolve().parents[1] / "scripts" / "prepare_citation_labels.py"
+    done = subprocess.run([sys.executable, str(script), str(results), "--out", str(out)],
+                          capture_output=True, text=True, timeout=60)
+    assert done.returncode == 0, done.stderr
+    items = json.loads(out.read_text(encoding="utf-8"))["items"]
+    assert [(i["id"], i["claim"], i["model"], i["label"], i["source"]) for i in items] == [
+        ("cs-001", "c", "olmo3-7b", True, "deliberation claim"),
+        ("cs-002", "365 days", "olmo3-7b", None, "benchmark answer"),
+        ("cs-003", "Six", "olmo3-7b", None, "benchmark answer")]
+    assert all("right" not in i and "grade" not in i for i in items)
