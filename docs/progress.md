@@ -22,7 +22,7 @@ The sections below this one are a chronological log. The numbering runs roughly 
 - The nightly timer on LXC 104 runs at 02:30 Pacific and publishes http://192.168.0.104/athenaeum/. The last end-to-end run (§108.1) was REJECTED for two reasons:
   - confidence drift of inf, a bug now fixed (evalcore 0.1.3; recomputed as 0.0);
   - the judging gate: olmo3-7b scored 0.808 against the 0.95 bar.
-- **Next: batch 14 (§108.2).** It starts with the owner's answer on the judging gate. **Ask it first:** keep judging as a release gate (every nightly REJECTED until a model qualifies), or make it informational. Claude recommended informational: the runtime already ignores an unqualified challenger.
+- **Next: batch 14 (§108.2), in progress.** **Owner decisions, 2026-09-28 (batch 14):** (1) judging is **informational**, not a release gate: shown on the card, excluded from the verdict; (2) the citation labelling pool takes its wrong answers from **real model misses** (`model_answers`), each tagged with its source, and the owner still marks every item; (3) after an intended golden-data change Claude **re-saves the baseline itself**, only from an APPROVED run, logging the reason and commit here; (4) the snapshot-rebuild optimisation is **in scope**, with tests pinning current read behaviour written first.
 - **Owner reminders:**
   - evalgate 0.2.0 has the same degenerate `psi` as evalcore's (documented in evalcore 0.1.3, repo untouched);
   - the evalgate copy in Downloads: `git pull` was started by the owner on 2026-09-28;
@@ -96,10 +96,10 @@ The sections below this one are a chronological log. The numbering runs roughly 
 2. Check the guests: `for i in 161 162 163 164 165 166; do curl -s -m5 http://192.168.0.$i:8080/health; echo; done`.
 3. Sync 104 and run the **full live** suite with `/opt/athenaeum-venv/bin/python -m pytest -q -p no:cacheprovider`. Not yet run since batch 13. Expect about 843 passed, 1 skipped: the live suite runs 22 more tests than the offline one (820 vs 798 in batch 12), and offline is now 821 passed, 1 skipped, 3 deselected. Record the real count here; a different one needs explaining.
 4. Check last night's run: `journalctl -u athenaeum-nightly -n 30` on 104, and the page at http://192.168.0.104/athenaeum/.
-5. Then ask the owner the open decision (judging gate, §108.1) and start batch 14 (§108.2).
+5. Continue batch 14 (§108.2); the owner answered its decisions on 2026-09-28.
 
 **Open owner decisions:**
-- whether the judging suite stays a release gate (§108.1);
+- none open for batch 14 (all four answered 2026-09-28, see above);
 - D13–D19 of `docs/proposals/evalgate-integration.md`: all settled (D13, D14 and D18 superseded by X7; D15, D16, D17 and D19 decided).
 - `evalcore` (the reusable evaluation toolkit from `docs/proposals/evaltools-extraction.md`): **decided (X1–X7) and built**.
   - It lives in its own repo, `github.com/petsan/evalcore`, at `C:\Users\petsa\evalcore`, with tests in `/opt/evalcore-venv` on LXC 104.
@@ -117,7 +117,7 @@ The sections below this one are a chronological log. The numbering runs roughly 
       - Baseline: **save one from the six decidable suites** (all but judging and provenance) once such a run is APPROVED. To build in batch 13.
       - Judging benchmark: **approved as drafted** (`review.status` "reviewed"), relying on the drafter's checks. A model whose Wilson bound clears 0.95 now counts; none does yet.
       - Citation labels: **a labelling page** for the owner, built now (in batch 13 the owner chose not to wait for 30 items).
-  - **Batch 13 (§108) complete.** Quick questions finish first; a baseline from the six decidable suites; evalcore 0.1.2 and 0.1.3; faster checkpoint index reads; answer aliases; the citation labelling page. **Open owner decision:** whether the judging suite stays a release gate (§108.1).
+  - **Batch 13 (§108) complete.** Quick questions finish first; a baseline from the six decidable suites; evalcore 0.1.2 and 0.1.3; faster checkpoint index reads; answer aliases; the citation labelling page. Its open decision (judging gate) was answered 2026-09-28: informational.
   - Its own `progress.md` is authoritative;
 - not blocking: an auto-update mechanism for deployed code, and an off-site backup destination.
 
@@ -1585,7 +1585,9 @@ The service ran for 49 minutes, then measured the matrix with "when manifested" 
 
 **Batch 13 is complete.** Commits 8651abc → 39b51b9; evalcore v0.1.2 and v0.1.3.
 
-### 108.2 Next: batch 14 (proposed, not started)
+### 108.2 Next: batch 14 (started 2026-09-28)
+**Owner decisions, 2026-09-28 (batch 14):** (1) judging is **informational**, not a release gate: shown on the card, excluded from the verdict; (2) the citation labelling pool takes its wrong answers from **real model misses** (`model_answers`), each tagged with its source, and the owner still marks every item; (3) after an intended golden-data change Claude **re-saves the baseline itself**, only from an APPROVED run, logging the reason and commit here; (4) the snapshot-rebuild optimisation is **in scope**, with tests pinning current read behaviour written first.
+
 1. Apply the owner's decision on the judging gate (release gate or informational).
 2. Sync the labelling page as nightly runs add model answers. Once 30 are marked, validate a judge on citation support (D17), and feed the labelled model-backed claims into calibration, where over-confidence can finally show.
    - **Status 2026-09-28:** the owner marked all 9 answers; all 9 are right (folded in with `apply_citation_labels.py`). **The pool needs wrong answers too.** A judge can only be validated against both classes: with right answers alone, a judge that always says "yes" scores 100%. The nightly deliberation mostly yields right answers, so also draw items from `model_answers` misses, the lab models' wrong answers to benchmark questions (e.g. "365 days" for a leap year). Mark those items with their source so the owner still judges each one.
