@@ -6,27 +6,26 @@
 
 ---
 
-## 0. RESTART HERE (current state as of 2026-09-28; newest detail is §108, then §107, §106, ...)
+## 0. RESTART HERE (current state as of 2026-09-28; newest detail is §109, then §108, §107, §106, ...)
 
-The sections below this one are a chronological log. The numbering runs roughly newest-last up to §87; batches 10–11 and §102–§105 sit near the end; §108 (batch 13) and §107 (batch 12) come just before §106. **This section is the current state.** It should be enough to resume without any other context. Update it at the end of every piece of work.
+The sections below this one are a chronological log. The numbering runs roughly newest-last up to §87; batches 10–11 and §102–§105 sit near the end; §109 (batch 14), §108 (batch 13) and §107 (batch 12) come just before §106. **This section is the current state.** It should be enough to resume without any other context. Update it at the end of every piece of work.
 
 **Code: done and verified (2026-09-28).**
-- Everything is committed on `master` and pushed to `github.com/petsan/athenaeum-poc` (last commit c2da441). evalcore (`github.com/petsan/evalcore`, public) is at **v0.1.3**; evalgate-work is clean.
-- **Batches 1–13 are complete.**
+- Everything is committed on `master` and pushed to `github.com/petsan/athenaeum-poc`. evalcore (`github.com/petsan/evalcore`, public) is at **v0.1.4**; evalgate-work is clean.
+- **Batches 1–14 are complete.**
   - Batch 12 (§107): Athenaeum's evaluation on evalcore, 8 suites in `src/athenaeum_evals/`, the fault matrix and dashboard, and the nightly runner.
   - Batch 13 (§108): quick questions finish first, a regression baseline, evalcore 0.1.2 and 0.1.3, faster checkpoint index reads, answer aliases, and the citation labelling page.
+  - Batch 14 (§109): judging informational (evalcore 0.1.4), benchmark answers the grader marked wrong join the labelling pool (60 items), and the API snapshot is rebuilt only when its sources changed.
 - Last test runs (LXC 104, `/opt/athenaeum-venv/bin/python`):
-  - offline suite: **821 passed, 1 skipped**;
-  - full live suite: 820 passed, 1 skipped (batch 12, after the stop-sequence change);
-  - evalcore: 1,657 passed; its CI is green.
-- The nightly timer on LXC 104 runs at 02:30 Pacific and publishes http://192.168.0.104/athenaeum/. The last end-to-end run (§108.1) was REJECTED for two reasons:
-  - confidence drift of inf, a bug now fixed (evalcore 0.1.3; recomputed as 0.0);
-  - the judging gate: olmo3-7b scored 0.808 against the 0.95 bar.
-- **Next: batch 14 (§108.2), in progress.** **Owner decisions, 2026-09-28 (batch 14):** (1) judging is **informational**, not a release gate: shown on the card, excluded from the verdict; (2) the citation labelling pool takes its wrong answers from **real model misses** (`model_answers`), each tagged with its source, and the owner still marks every item; (3) after an intended golden-data change Claude **re-saves the baseline itself**, only from an APPROVED run, logging the reason and commit here; (4) the snapshot-rebuild optimisation is **in scope**, with tests pinning current read behaviour written first.
+  - offline suite: **827 passed, 1 skipped, 3 deselected**;
+  - full live suite: **850 passed, 1 skipped** (batch 14, 2026-09-28);
+  - evalcore: 1,658 passed; its CI is green.
+- The nightly timer on LXC 104 runs at 02:30 Pacific and publishes http://192.168.0.104/athenaeum/. The last end-to-end run (§109.1) was NOT APPROVED for one reason: citation support waits on 30 owner labels. Judging (0.808) is informational now, and all 14 regression gates passed.
+- **Next: batch 15 (§109.2).** It starts with the owner marking the 51 new items on the labelling page. The batch 14 decisions (2026-09-28) still stand: judging is informational; the labelling pool takes real model misses; Claude re-saves the baseline itself after an intended golden-data change, only from an APPROVED run, and logs it; the snapshot optimisation is done (§109).
 - **Owner reminders:**
   - evalgate 0.2.0 has the same degenerate `psi` as evalcore's (documented in evalcore 0.1.3, repo untouched);
   - the evalgate copy in Downloads: `git pull` was started by the owner on 2026-09-28;
-  - the labelling page (https://claude.ai/artifact/5yiqY91tivAJnRvMD2dEf1): all 9 answers marked on 2026-09-28, all right; more will be seeded, including wrong answers (§108.2), toward the 30 the gate needs.
+  - the labelling page (https://claude.ai/artifact/5yiqY91tivAJnRvMD2dEf1): 60 items, 9 marked (all right). The 51 new ones include 44 lab-model benchmark answers the grader marked wrong; some are actually right (known-bugs #45). Each item shows its source, never the grader's verdict. 30 decided marks are needed.
 
 **Standing rules (from the owner, all still in force):**
 - Work in batches: commit and push at the end of every phase. Run an end-to-end test at the end of a batch, then plan the next.
@@ -94,12 +93,12 @@ The sections below this one are a chronological log. The numbering runs roughly 
 **After a restart, in order:**
 1. Ping the host.
 2. Check the guests: `for i in 161 162 163 164 165 166; do curl -s -m5 http://192.168.0.$i:8080/health; echo; done`.
-3. Sync 104 and run the **full live** suite with `/opt/athenaeum-venv/bin/python -m pytest -q -p no:cacheprovider`. Not yet run since batch 13. Expect about 843 passed, 1 skipped: the live suite runs 22 more tests than the offline one (820 vs 798 in batch 12), and offline is now 821 passed, 1 skipped, 3 deselected. Record the real count here; a different one needs explaining.
+3. Sync 104 and run the **full live** suite with `/opt/athenaeum-venv/bin/python -m pytest -q -p no:cacheprovider`. Expect **850 passed, 1 skipped** (batch 14). Record the real count here; a different one needs explaining.
 4. Check last night's run: `journalctl -u athenaeum-nightly -n 30` on 104, and the page at http://192.168.0.104/athenaeum/.
-5. Continue batch 14 (§108.2); the owner answered its decisions on 2026-09-28.
+5. Sync the owner's marks from the labelling page (`scripts/apply_citation_labels.py`), then start batch 15 (§109.2).
 
 **Open owner decisions:**
-- none open for batch 14 (all four answered 2026-09-28, see above);
+- none; batch 15 waits on the owner's marks, not a decision;
 - D13–D19 of `docs/proposals/evalgate-integration.md`: all settled (D13, D14 and D18 superseded by X7; D15, D16, D17 and D19 decided).
 - `evalcore` (the reusable evaluation toolkit from `docs/proposals/evaltools-extraction.md`): **decided (X1–X7) and built**.
   - It lives in its own repo, `github.com/petsan/evalcore`, at `C:\Users\petsa\evalcore`, with tests in `/opt/evalcore-venv` on LXC 104.
@@ -118,6 +117,7 @@ The sections below this one are a chronological log. The numbering runs roughly 
       - Judging benchmark: **approved as drafted** (`review.status` "reviewed"), relying on the drafter's checks. A model whose Wilson bound clears 0.95 now counts; none does yet.
       - Citation labels: **a labelling page** for the owner, built now (in batch 13 the owner chose not to wait for 30 items).
   - **Batch 13 (§108) complete.** Quick questions finish first; a baseline from the six decidable suites; evalcore 0.1.2 and 0.1.3; faster checkpoint index reads; answer aliases; the citation labelling page. Its open decision (judging gate) was answered 2026-09-28: informational.
+  - **Batch 14 (§109) complete.** Judging is informational (evalcore 0.1.4); the labelling pool has 60 items; the snapshot is rebuilt only when its sources changed.
   - Its own `progress.md` is authoritative;
 - not blocking: an auto-update mechanism for deployed code, and an off-site backup destination.
 
@@ -132,6 +132,7 @@ The sections below this one are a chronological log. The numbering runs roughly 
 **Recurring pitfalls this project has hit (known-bugs.md has the full list):**
 - `pkill -f`/`pgrep -f` match their own command line, including an SSH command or a waiter script that contains the pattern. Use `pgrep -x`, and verify a PID before acting on it (#38).
 - `systemctl enable --now` doesn't restart a running service, so a changed unit never applies. Use `restart` (#39).
+- `systemctl is-active -q` is false while a oneshot service is still `activating`, so a wait loop built on it exits at once. Compare the state instead: `while [ "$(systemctl is-active X)" = activating ]; do sleep 10; done`.
 - `tar` into an unprivileged container needs `--no-same-owner`.
 - A rebuilt guest has new SSH host keys: run `ssh-keygen -R <ip>` first.
 - Build llama.cpp with `--target llama-server`; the whole tree is several times slower.
@@ -1574,7 +1575,25 @@ The owner answered all four open questions up front on 2026-09-28:
 | BG | Wrong answers in the labelling pool | **done**. `provenance.answer_items`: every lab-model answer to a benchmark question that `model_answers` graded not right joins the pool (an empty answer has no claim). Each item carries `source` ("benchmark answer" or "deliberation claim") and never the grader's verdict, so the owner's mark is not led. Identical answers to a question are listed once (case-insensitive), and the owner's existing labels are kept. From the two nightly runs: **60 items, 44 of them benchmark answers**. The page (https://claude.ai/artifact/5yiqY91tivAJnRvMD2dEf1) shows each item's source, and its 60 items are synced. **Found:** the lexical grader also marks some right answers wrong (known-bugs #45). The owner's marks will measure how often; the grader is left unchanged until then |
 | BH | Snapshot rebuilt only when the view's sources changed | **done**. Tests first (`tests/test_api_snapshot_rebuild.py`): after **every** worker round the snapshot readers get must equal a view built fresh from the stores. The workload covers model-backed and deterministic questions, the idle cycle they trigger, human input between rounds, and a unit failing until it is given up. These passed on the old code, then guarded the change. The API now takes a fingerprint before rebuilding. It covers each store's latest checkpoint id (the ledger index and every question's log, model fitness, human checkpoints, human inputs) and the Maintainer's in-memory state the view shows (idle cycles, queue length, emitted-event count, pending amendments, failed units, the unit registry). The Maintainer's own log is left out because every round writes it. A checkpoint id comes from the cached index (a `stat`), so a write by another process still counts; a test shows it. **Offline burst of 31 questions: worker time 0.85 → 0.72 s (−15%); 65 of 129 refreshes skipped.** The rest are rounds that do change what readers see: each question's start (queued → active) and its answer. The "≈40%" in §108 BE was the whole rebuild's share, and those rebuilds are still needed |
 
-**Tests.** Offline: **827 passed, 1 skipped, 3 deselected** (821 + 6 new). evalcore: 1,658 passed.
+**Tests.** Offline: **827 passed, 1 skipped, 3 deselected** (821 + 6 new). Full live suite: **850 passed, 1 skipped** (844 + 6). evalcore: 1,658 passed.
+
+### 109.1 End to end: the nightly service on the batch 14 code (2026-09-28 05:28 UTC, started by hand)
+
+The run took 36 minutes and published the dashboard (3 runs) to LXC 250.
+- **Verdict NOT APPROVED, for one reason:** citation support is still INSUFFICIENT (9 labels of the 30 it needs, and no validated judge).
+- Judging is listed as a note: "Informational, not in the verdict: judging: ... 0.808 FAIL (>= 0.95)". The card heading says it doesn't count.
+- **Regression check: all 14 compared gates PASS.** Confidence drift (PSI) is 0.000 on 84 confidences; the categorical PSI fixed the inf.
+- The burst's answer p95 fell from 56.3 s (baseline) to 26.0 s. This batch's snapshot change saves milliseconds per round, so it doesn't explain that. Model latency varies from run to run, so no cause is claimed.
+- The only FAIL on the card is judging's informational row.
+
+**Batch 14 is complete.** Commits c4d6d22 → (this one); evalcore v0.1.4.
+
+### 109.2 Next: batch 15 (proposed, not started)
+1. **Owner:** mark the 51 new items on the labelling page. The citation-support gate needs 30 decided marks, and the judge needs both classes.
+2. Once they're marked: validate a judge on citation support (D17), and feed the labelled model-backed claims into calibration, where over-confidence can finally show.
+3. Known-bugs #45 (the grader marks some right answers wrong): the owner's marks on the benchmark-answer items give its false-negative rate. Any fix changes a gated metric's meaning, so it goes to the owner with that number.
+4. The CLAUDE.md "Current status" section is many batches stale; refresh it (docs only).
+
 
 ## 108. Batch 13: faster bursts, a baseline, sharper tool rates (2026-09-27, autonomous)
 
