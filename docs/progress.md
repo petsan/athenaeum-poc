@@ -1558,6 +1558,24 @@ Same rules and stop conditions.
 
 **Batch 11 (AR–AU) complete 2026-09-26.** No owner decision is open.
 
+## 109. Batch 14: judging informational, wrong answers for the labels, fewer snapshot rebuilds (2026-09-28, autonomous)
+
+The owner answered all four open questions up front on 2026-09-28:
+1. judging is **informational**;
+2. the labelling pool's wrong answers come from **real model misses**;
+3. Claude re-saves the baseline itself after an intended golden-data change, only from an APPROVED run, and logs it here;
+4. the snapshot optimisation is in scope, **tests first**.
+
+**Health first.** The full live suite on the batch 13 code gave **844 passed, 1 skipped** (5 min 58 s). §0 had estimated 843 from the offline count; 844 is the real figure.
+
+| Phase | Scope | Status |
+|---|---|---|
+| BF | Judging informational | **done**. evalcore **0.1.4** adds `Suite(informational=True)`: the suite's gates are decided and shown (the card heading says "informational: not in the verdict"), but a FAIL doesn't reject, INSUFFICIENT_DATA doesn't withhold approval, and its regressions are ignored. Each such gate is listed in the verdict's reasons as a note. A run of only informational suites is not APPROVED. The judge dependency is unchanged: provenance's judge-scored gate still needs judging to pass. Default off, so evalgate 0.2.0 parity holds (evalcore 1,658 passed; CI green). Athenaeum pins `v0.1.4`, and `judging.SUITE` is informational. A new test shows olmo3-7b's 97/120 is a FAIL on the card and the run is still APPROVED |
+| BG | Wrong answers in the labelling pool | **done**. `provenance.answer_items`: every lab-model answer to a benchmark question that `model_answers` graded not right joins the pool (an empty answer has no claim). Each item carries `source` ("benchmark answer" or "deliberation claim") and never the grader's verdict, so the owner's mark is not led. Identical answers to a question are listed once (case-insensitive), and the owner's existing labels are kept. From the two nightly runs: **60 items, 44 of them benchmark answers**. The page (https://claude.ai/artifact/5yiqY91tivAJnRvMD2dEf1) shows each item's source, and its 60 items are synced. **Found:** the lexical grader also marks some right answers wrong (known-bugs #45). The owner's marks will measure how often; the grader is left unchanged until then |
+| BH | Snapshot rebuilt only when the view's sources changed | **done**. Tests first (`tests/test_api_snapshot_rebuild.py`): after **every** worker round the snapshot readers get must equal a view built fresh from the stores. The workload covers model-backed and deterministic questions, the idle cycle they trigger, human input between rounds, and a unit failing until it is given up. These passed on the old code, then guarded the change. The API now takes a fingerprint before rebuilding. It covers each store's latest checkpoint id (the ledger index and every question's log, model fitness, human checkpoints, human inputs) and the Maintainer's in-memory state the view shows (idle cycles, queue length, emitted-event count, pending amendments, failed units, the unit registry). The Maintainer's own log is left out because every round writes it. A checkpoint id comes from the cached index (a `stat`), so a write by another process still counts; a test shows it. **Offline burst of 31 questions: worker time 0.85 → 0.72 s (−15%); 65 of 129 refreshes skipped.** The rest are rounds that do change what readers see: each question's start (queued → active) and its answer. The "≈40%" in §108 BE was the whole rebuild's share, and those rebuilds are still needed |
+
+**Tests.** Offline: **827 passed, 1 skipped, 3 deselected** (821 + 6 new). evalcore: 1,658 passed.
+
 ## 108. Batch 13: faster bursts, a baseline, sharper tool rates (2026-09-27, autonomous)
 
 The owner's answers before starting:

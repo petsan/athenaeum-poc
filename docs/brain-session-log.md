@@ -1155,6 +1155,33 @@ quadratically with the number of questions ever asked. Once the answer is
 in the ledger, the graph and the stores, the scratch copy has no further
 use.
 
+**Q: Why is judging informational rather than dropped from the evaluation? (batch 14)**
+
+It measures something real: whether any lab model can be trusted to
+judge another's claim. No model can yet, and the runtime already ignores
+the challenges of a model that doesn't qualify, so a miss is a
+capability status, not a release defect. Keeping it on the card, with a
+heading that says it doesn't count, keeps the number in view. It also
+still gates the judge dependency, so nothing judge-scored counts until a
+model passes.
+
+**Q: Why does the labelling page show where an answer came from but not
+what the grader said?**
+
+The owner's marks are the ground truth that a judge, and the grader
+itself, will be measured against. Showing the grader's verdict would lead
+the mark, and known-bugs #45 shows the grader is wrong in a particular
+way.
+
+**Q: Why fingerprint the snapshot's sources instead of having each writer
+say "I changed something"?**
+
+A flag has to be remembered by every writer, including ones added later
+and other processes (the judging benchmark script writes the fitness store
+directly). The fingerprint is derived from what the view reads, so a new
+writer is covered for free. The one test that matters compares the
+snapshot with a fresh build after every round.
+
 ---
 
 *See `docs/progress.md` §26 for the checklist this log's entries track
