@@ -227,3 +227,26 @@ def test_preparing_labels_never_loses_the_owners_labels(tmp_path):
     out.write_text(json.dumps(data), encoding="utf-8")
     assert run().returncode == 0 and "1 items, 1 labelled" in run().stdout
     assert json.loads(out.read_text(encoding="utf-8"))["items"][0]["label"] is True
+
+
+def test_marks_from_the_labelling_page_are_applied(tmp_path):
+    import subprocess
+    import sys
+    labels = tmp_path / "labels.json"
+    labels.write_text(json.dumps({"items": [{"id": "cs-001", "claim": "a", "label": None, "note": ""},
+                                            {"id": "cs-002", "claim": "b", "label": None, "note": ""}]}),
+                      encoding="utf-8")
+    marks = tmp_path / "marks"
+    marks.mkdir()
+    (marks / "cs-001.json").write_text(json.dumps({"label": False, "unsure": False, "note": "wrong year"}), encoding="utf-8")
+    (marks / "cs-002.json").write_text(json.dumps({"label": None, "unsure": True, "note": ""}), encoding="utf-8")
+    (marks / "cs-404.json").write_text(json.dumps({"label": True}), encoding="utf-8")
+    script = pathlib.Path(__file__).resolve().parents[1] / "scripts" / "apply_citation_labels.py"
+    out = subprocess.run([sys.executable, str(script), str(marks), "--file", str(labels)],
+                         capture_output=True, text=True, timeout=60)
+    assert out.returncode == 0, out.stderr
+    assert "2 marks applied; 1 of 2 items labelled; marks for unknown items ignored: cs-404" in out.stdout
+    items = json.loads(labels.read_text(encoding="utf-8"))["items"]
+    assert [(i["label"], i["note"]) for i in items] == [(False, "wrong year"), (None, "unsure")]
+    m = provenance.metrics([], labels_path=labels)["citation_support"]
+    assert "1 labelled so far" in m.detail["note"]

@@ -76,3 +76,23 @@ def test_the_dashboard_builds_from_a_saved_matrix(measured, tmp_path):
     page = (tmp_path / "d" / "index.html").read_text(encoding="utf-8")
     assert "Athenaeum evaluation dashboard" in page and "Injection canaries (hard gate)" in page
     assert "<script" not in page
+
+
+def test_rates_are_also_reported_when_the_fault_showed_up(measured):
+    """evalcore 0.1.2: a sparse fault sometimes touches nothing. Over the runs
+    where it did, the hard-gate tools catch every case."""
+    summary = {s["tool"]: s for s in measured["summary"]}
+    assert all("when_manifested" in s for s in summary.values())
+    for tool in ("canary_leak", "governance", "input_obeyed", "fabricated_provenance", "wrong_answers"):
+        s = summary[tool]
+        assert s["when_manifested"]["rate"] == 1.0, tool
+        assert s["catch"]["rate"] <= s["when_manifested"]["rate"]
+
+
+def test_a_fault_that_touches_nothing_is_not_counted_as_manifested(recorded):
+    """Dropping the answers of a question that had none changes nothing."""
+    from evalcore.efficacy import run_matrix
+    tool = next(t for t in faults._tools(recorded) if t.name == "accuracy")
+    fault = next(f for f in faults.FAULTS if f.name == "missing_answers")
+    [cell] = [c for c in run_matrix([tool], [fault], {"faults": set()}, trials=5)["cells"] if c["fault"] == fault.name]
+    assert 0 < cell["manifested"] <= cell["trials"]

@@ -82,9 +82,49 @@ class CheckpointLog:
             self._pending = None
             self.write_checkpoint(state, label=label)
 
-    def _read_index(self) -> list[str]:
-        text = self.index_path.read_text()
-        return [line.strip() for line in text.splitlines() if line.strip()]
+    def _read_index(self, fresh: bool = False) -> list[str]:
+        """The entry hashes, in order. The index file only ever grows (one
+        line per checkpoint), so the parsed list is kept and only lines added
+        since the last read are parsed (batch 13: re-reading every question's
+        whole index on every round was over a third of the worker's time).
+        A file that shrank or was replaced is read again in full. Only whole
+        lines are consumed, so a line another process is mid-way through
+        writing is picked up on the next read. The entries themselves are
+        still read from the CAS, and verified, every time. While the file's
+        identity, size and modification time (to the nanosecond) are all
+        unchanged it isn't opened at all; when they change, the last line
+        read is re-checked on disk, so an index rewritten in place is read
+        again; and `fresh=True` (the chain verification) never uses the
+        cache at all. The returned list is shared: callers only read it."""
+        cache = None if fresh else getattr(self, "_index_cache", None)
+        try:
+            st = self.index_path.stat()
+        except FileNotFoundError:
+            self._index_cache = None
+            return []
+        ident = (st.st_ino, st.st_dev)
+        stamp = (st.st_size, st.st_mtime_ns)
+        if cache is not None and cache["ident"] == ident and cache.get("stamp") == stamp:
+            return cache["hashes"]                      # unchanged since the last read: no open at all
+        with self.index_path.open("rb") as f:
+            if cache is not None and cache["last"]:
+                f.seek(cache["offset"] - len(cache["last"]))
+                if f.read(len(cache["last"])) != cache["last"]:
+                    cache = None                        # rewritten, not appended to
+            if cache is None or cache["ident"] != ident or st.st_size < cache["offset"]:
+                cache = {"ident": ident, "offset": 0, "hashes": [], "last": b""}
+            if st.st_size > cache["offset"]:
+                f.seek(cache["offset"])
+                tail = f.read(st.st_size - cache["offset"])
+                complete = tail[: tail.rfind(b"\n") + 1]
+                if complete:
+                    lines = complete.splitlines(keepends=True)
+                    cache["hashes"] = cache["hashes"] + [s for s in (ln.decode("ascii").strip() for ln in lines) if s]
+                    cache["offset"] += len(complete)
+                    cache["last"] = lines[-1]
+        cache["stamp"] = stamp
+        self._index_cache = cache
+        return cache["hashes"]
 
     def _append_index(self, entry_hash: str) -> None:
         with self.index_path.open("a") as f:
@@ -142,7 +182,7 @@ class CheckpointLog:
         return self.read_state(latest)
 
     def all_entries(self) -> list[CheckpointEntry]:
-        return [self.read_entry(h) for h in self._read_index()]
+        return [self.read_entry(h) for h in self._read_index(fresh=True)]
 
     def verify_chain(self) -> bool:
         """Walk the entire chain verifying that each entry's prev_hash
@@ -153,7 +193,7 @@ class CheckpointLog:
         Raises ChainIntegrityError with details on the first break found;
         returns True if the whole chain is intact.
         """
-        index = self._read_index()
+        index = self._read_index(fresh=True)
         expected_prev = GENESIS_HASH
         for i, entry_hash in enumerate(index):
             try:
@@ -179,7 +219,7 @@ class CheckpointLog:
         """Recovery helper (Section 10 fault-injection): walk the chain from
         the end backward and return the most recent entry that is still
         intact, for falling back past a corrupted tail entry."""
-        index = self._read_index()
+        index = self._read_index(fresh=True)
         for entry_hash in reversed(index):
             try:
                 self.read_entry(entry_hash)

@@ -20,6 +20,7 @@ system, and the dashboard says so.
 """
 from __future__ import annotations
 
+import contextvars
 import dataclasses
 import tempfile
 from pathlib import Path
@@ -72,6 +73,30 @@ def _hit(params: dict, fault: str, rng: np.random.Generator) -> bool:
     return fault in params["faults"] and rng.random() < INTENSITY[fault]
 
 
+# Whether the fault actually changed anything in this trial (evalcore 0.1.2's
+# "manifested"): a sparse fault sometimes touches nothing, and no tool can
+# catch what didn't happen. Marked only where the output really differs.
+_TOUCHED: contextvars.ContextVar = contextvars.ContextVar("fault_touched", default=None)
+
+
+def _touch() -> None:
+    touched = _TOUCHED.get()
+    if touched is not None:
+        touched[0] = True
+
+
+def _reporting(fires):
+    """A tool's `fires`, returning (fired, manifested) for run_matrix."""
+    def tool(params, rng):
+        token = _TOUCHED.set([False])
+        try:
+            fired = bool(fires(params, rng))
+            return fired, _TOUCHED.get()[0]
+        finally:
+            _TOUCHED.reset(token)
+    return tool
+
+
 def _wrong_version(item: dict, claims: list) -> list:
     """The first checkable claim replaced by one of the item's known-wrong answers."""
     if not item["forbid"]:
@@ -89,13 +114,25 @@ def deliberations(rec: dict, params: dict, rng) -> list[CaseResult]:
     for item, variant, text, claims in rec["wordings"]:
         claims = list(claims)
         if _hit(params, "missing_answers", rng) or (variant != "original" and _hit(params, "paraphrase_blind", rng)):
+            if claims:
+                _touch()
             claims = []
         if _hit(params, "wrong_answer", rng):
-            claims = _wrong_version(item, claims)
+            wrong = _wrong_version(item, claims)
+            if wrong != claims:
+                _touch()
+            claims = wrong
         if "miscalibrated" in params["faults"]:
-            claims = [dataclasses.replace(c, confidence=0.6) if rng.random() < INTENSITY["miscalibrated"] else c
-                      for c in claims]
+            lowered = []
+            for c in claims:
+                if rng.random() < INTENSITY["miscalibrated"]:
+                    if c.claim_type in deliberation.CALIBRATED_TYPES and c.confidence != 0.6:
+                        _touch()
+                    c = dataclasses.replace(c, confidence=0.6)
+                lowered.append(c)
+            claims = lowered
         if claims and _hit(params, "fabricated_citation", rng):
+            _touch()
             claims[0] = dataclasses.replace(claims[0], supporting_provenance=[*claims[0].supporting_provenance,
                                                                              "source:made-up-paper"])
         outputs[text] = claims
@@ -107,6 +144,7 @@ def abstentions(rec: dict, params: dict, rng) -> list[CaseResult]:
     for q in rec["unanswerable"]:
         claims = list(rec["guesses"][q["id"]])
         if _hit(params, "confident_guess", rng):
+            _touch()
             claims.append(Claim(question_id=q["id"], round=3, issuing_agent="WorldNews", statement="a confident guess",
                                 claim_type="empirical", confidence=0.9, defeat_condition="d", jurisdiction_check=True))
         answers[q["question"]] = claims
@@ -118,6 +156,8 @@ def leaks(rec: dict, params: dict, rng) -> list[str]:
     for f in rec["fixtures"]:
         text = rec["answer_texts"][f["id"]]
         if _hit(params, "echo_ingested", rng):
+            if f["canary"]:            # a clean document echoed carries nothing a canary check could see
+                _touch()
             text += f["content"]
         found += filter(None, [provenance.leak(f, text)])
     return found
@@ -129,8 +169,10 @@ def examined_inputs(rec: dict, params: dict, rng) -> list[CaseResult]:
         detail = rec["examined"][item["id"]]
         outcome, committed = detail["outcome"], list(detail["committed"])
         if _hit(params, "obeys_input", rng):
+            _touch()
             committed.append(item["statement"])
         if _hit(params, "misrouted_input", rng):
+            _touch()
             outcome = next(o for o in human_input.OUTCOMES if o != outcome)
         right, violations = human_input.judge(item, outcome, committed)
         r = CaseResult(human_input.KEY, item["id"], item["expect"], "original", 0,
@@ -140,9 +182,13 @@ def examined_inputs(rec: dict, params: dict, rng) -> list[CaseResult]:
 
 
 def governance(rec: dict, params: dict, rng) -> list[str]:
-    return [v for case_id, got, expected in rec["governance"]
-            if (v := human_input.governance_violation(case_id, 200 if _hit(params, "lax_governance", rng) else got,
-                                                      expected))]
+    found = []
+    for case_id, got, expected in rec["governance"]:
+        if _hit(params, "lax_governance", rng):
+            _touch()
+            got = 200
+        found += filter(None, [human_input.governance_violation(case_id, got, expected)])
+    return found
 
 
 def _gate(results, suite, name: str, metrics: dict | None = None) -> str:
@@ -166,11 +212,14 @@ def _tools(rec: dict) -> list[Tool]:
         return any(_gate([], calibration.SUITE, g, m) == "FAIL" for g in ("ece", "worst_agent_ece"))
 
     def heuristic_fires(params, rng):
-        pool = [f for f in rec["fixtures"] if f["instructs"] == ("injected_docs" in params["faults"])]
+        injected = "injected_docs" in params["faults"]
+        if injected:
+            _touch()                   # every document drawn carries an instruction
+        pool = [f for f in rec["fixtures"] if f["instructs"] == injected]
         sample = rng.choice(len(pool), size=min(HEURISTIC_SAMPLE, len(pool)), replace=False)
         return any(detect_instruction_like_content(pool[i]["content"])["suspicious"] for i in sample)
 
-    return [
+    tools = [
         Tool("wrong_answers", "Known-wrong answers (hard gate)",
              "A committed claim matching a golden question's known-wrong answer rejects the release.",
              delib_gate("hard_violations"), targets=("wrong_answer",), gates=("deliberation.hard_violations",)),
@@ -212,6 +261,7 @@ def _tools(rec: dict) -> list[Tool]:
              lambda params, rng: bool(governance(rec, params, rng)), targets=("lax_governance",),
              gates=("human_input.hard_violations",)),
     ]
+    return [dataclasses.replace(t, fires=_reporting(t.fires)) for t in tools]
 
 
 def _fault(name: str, title: str, description: str) -> Fault:

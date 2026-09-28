@@ -1,0 +1,14 @@
+[
+  {"id": "shakespeare", "question": "who wrote Romeo and Juliet?", "accept": ["Shakespeare"]},
+  {"id": "da-vinci", "question": "who painted the Mona Lisa?", "accept": ["da Vinci", "Leonardo"]},
+  {"id": "einstein", "question": "who developed the theory of general relativity?", "accept": ["Einstein"]},
+  {"id": "austen", "question": "who wrote Pride and Prejudice?", "accept": ["Austen"]},
+  {"id": "armstrong", "question": "who was the first person to walk on the Moon?", "accept": ["Armstrong"]},
+  {"id": "beethoven", "question": "who composed the Fifth Symphony that opens with four famous notes (da-da-da-dum)?", "accept": ["Beethoven"]},
+  {"id": "light-speed", "question": "roughly how fast does light travel in a vacuum, in kilometres per second?", "accept": ["299,792", "299792.458"]},
+  {"id": "table-salt", "question": "what is the chemical formula for table salt?", "accept": ["sodium chloride"]},
+  {"id": "pacific", "question": "what is the largest ocean on Earth?", "accept": ["Pacific"]},
+  {"id": "everest", "question": "what is the tallest mountain above sea level?", "accept": ["Everest"]},
+  {"id": "co2", "question": "what gas do plants absorb from the air for photosynthesis?", "accept": ["CO2"]},
+  {"id": "erythrocytes", "question": "which blood cells carry oxygen around the body?", "accept": ["erythrocytes"]}
+]

@@ -4,9 +4,11 @@ Every lab model is asked every judging-benchmark question, the way the
 agents' fallbacks ask (`ask_model`, with its retries and answer cut).
 An answer is graded lexically against the item's labels: right when it
 contains the correct answer and not the labelled wrong one. The grader is
-checked against all 120 labelled answers in the tests; a free-form answer
-it can't read (a paraphrase, a hedge) counts as not right, so accuracy here
-is a floor.
+checked against all 120 labelled answers in the tests. Accepted alternative
+forms ("Einstein" for "Albert Einstein", "sodium chloride" for NaCl) are in
+evals/golden/answer_aliases.json, outside the benchmark's versioned items. A
+free-form answer it still can't read (a paraphrase, a hedge) counts as not
+right, so accuracy here is a floor.
 
 Only the admitted model (the one every fallback asks) is gated: its
 accuracy, how often it gives no answer at all, and its p95 latency. The
@@ -17,8 +19,10 @@ from __future__ import annotations
 
 import re
 import time
+from pathlib import Path
 
 from evalcore import CaseResult, GateSpec, Suite
+from evalcore.golden import load_items
 
 from athenaeum_body.model_lab_registry import MODEL_LAB_ENDPOINTS
 from athenaeum_brain import judging_benchmark as jb
@@ -26,6 +30,8 @@ from athenaeum_brain import model_backed_reasoning as mbr
 
 KEY = "model_answers"
 ADMITTED = mbr.DEFAULT_MODEL
+ALIASES_FILE = "answer_aliases.json"
+ALIASES = Path(__file__).resolve().parents[2] / "evals" / "golden" / ALIASES_FILE
 
 SUITE = Suite(
     key=KEY, title="Lab model answers (benchmark questions, graded lexically)",
@@ -37,6 +43,11 @@ SUITE = Suite(
     optional_gates=frozenset({"mean_cost_usd"}),               # local models: no cost to report
     primary_metrics=("right", "answered"),
     defaults={"model_min_accuracy": 0.80, "model_min_answered": 0.95, "model_max_p95_s": 30.0},
+    # A sampling model on 60 questions: accuracy has a standard deviation of
+    # about 0.04 between runs, so 0.10 (2.5 of them) is a real drop; latency in
+    # seconds (evalcore 0.1.2).
+    regression_tolerances={"admitted_right": 0.10, "admitted_answered": 0.05, "p95_latency_s": 5.0},
+    golden_files=(ALIASES_FILE,),
 )
 SYSTEM_INFO = {"name": "lab models", "model_id": ADMITTED, "models": ", ".join(MODEL_LAB_ENDPOINTS),
                "prompt_version": mbr.ANSWER_FRAME}
@@ -60,15 +71,32 @@ def _contains(answer: str, label: str) -> bool:
     return re.search(r"(?<![\w.])" + re.escape(normalize(label)) + r"(?![\w])", normalize(answer)) is not None
 
 
-def grade(answer: str | None, correct: str, wrong: str) -> bool:
-    """Right when the answer names the correct label and not the wrong one."""
-    return bool(answer) and _contains(answer, correct) and not _contains(answer, wrong)
+def grade(answer: str | None, correct: str, wrong: str, accept=()) -> bool:
+    """Right when the answer names the correct label (or an accepted form of
+    it) and not the wrong one."""
+    return (bool(answer) and any(_contains(answer, label) for label in (correct, *accept))
+            and not _contains(answer, wrong))
+
+
+def aliases(path: Path = ALIASES) -> dict[str, tuple]:
+    """{question: accepted forms}. An alias that names the wrong label, or a
+    question the benchmark doesn't ask, is an error."""
+    wrong_of = {q: w for q, _, w in jb.ITEMS}
+    out = {}
+    for a in load_items(path):
+        if a["question"] not in wrong_of:
+            raise ValueError(f"{path.name}: {a['id']} is for a question the benchmark doesn't ask")
+        if any(_contains(alias, wrong_of[a["question"]]) for alias in a["accept"]):
+            raise ValueError(f"{path.name}: {a['id']} accepts the labelled wrong answer")
+        out[a["question"]] = tuple(a["accept"])
+    return out
 
 
 def evaluate(models=None, items=None, ask=None) -> list[CaseResult]:
     models = list(MODEL_LAB_ENDPOINTS) if models is None else models
     items = jb.ITEMS if items is None else items
     ask = ask or mbr.ask_model
+    accepted = aliases()
     results = []
     for model in models:
         for i, (question, correct, wrong) in enumerate(items):
@@ -79,7 +107,7 @@ def evaluate(models=None, items=None, ask=None) -> list[CaseResult]:
             except Exception as e:                     # an unreachable model gives no answer
                 answer, r.detail["error"] = None, f"{type(e).__name__}: {e}"
             r.latency_s = time.perf_counter() - started
-            right = grade(answer, correct, wrong)
+            right = grade(answer, correct, wrong, accepted.get(question, ()))
             r.metrics.update(right=float(right), answered=float(bool(answer)))
             if model == ADMITTED:
                 r.metrics.update(admitted_right=float(right), admitted_answered=float(bool(answer)))

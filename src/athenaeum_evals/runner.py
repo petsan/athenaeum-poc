@@ -23,6 +23,10 @@ GOLDEN = ROOT / "evals" / "golden"
 BASELINE = ROOT / "evals" / "baselines" / "baseline.json"
 
 SUITES = {m.KEY: m for m in (adversarial, deliberation, calibration, provenance, human_input, api_service, model_answers, judging)}
+# The suites that can reach a verdict today: judging waits on a qualifying
+# model, provenance on the owner's citation labels (D17). The baseline is
+# saved from these (owner decision, batch 13): run_evals.py --suites decidable --save-baseline
+DECIDABLE = [k for k in SUITES if k not in (judging.KEY, provenance.KEY)]
 
 
 def run(out: Path, suites: list[str] | None = None, *, config: Config | None = None,
@@ -31,7 +35,9 @@ def run(out: Path, suites: list[str] | None = None, *, config: Config | None = N
     unknown = sorted(set(keys) - set(SUITES))
     if unknown:
         raise ValueError(f"unknown suites {unknown}; available: {sorted(SUITES)}")
-    config = config or Config()
+    # Per-suite baselines (evalcore 0.1.2): the baseline covers the decidable
+    # suites (owner decision, batch 13), so the others must not switch it off.
+    config = config or Config(baseline_per_suite=True)
     modules = [SUITES[k] for k in keys]
     ev = Evaluation([m.SUITE for m in modules], config, golden_dir=GOLDEN, baseline_path=BASELINE)
     case_results = {}

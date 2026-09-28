@@ -14,12 +14,14 @@ from athenaeum_evals import runner  # noqa: E402
 
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    p.add_argument("--suites", default=",".join(runner.SUITES), help="comma-separated suite keys")
+    p.add_argument("--suites", default=",".join(runner.SUITES),
+                   help="comma-separated suite keys, or 'decidable' for the suites the baseline covers")
     p.add_argument("--out", type=Path, default=runner.ROOT / "evals" / "out")
     p.add_argument("--save-baseline", action="store_true")
     args = p.parse_args(argv)
-    result = runner.run(args.out, [s.strip() for s in args.suites.split(",") if s.strip()],
-                        save_as_baseline=args.save_baseline)
+    suites = (runner.DECIDABLE if args.suites.strip() == "decidable"
+              else [s.strip() for s in args.suites.split(",") if s.strip()])
+    result = runner.run(args.out, suites, save_as_baseline=args.save_baseline)
     print(f"verdict: {result.verdict.status}")
     for reason in result.verdict.reasons:
         print(f"  - {reason}")

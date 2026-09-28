@@ -46,6 +46,10 @@ SUITE = Suite(
     hard_gate_label="Error responses or unfinished questions",
     defaults={"api_max_submit_p95_s": 0.5, "api_max_poll_p95_s": 0.5, "api_max_read_p95_s": 0.5,
               "api_max_answer_p95_s": 120.0},
+    # In seconds (evalcore 0.1.2): request latencies are milliseconds, so 0.1 s
+    # is a real slowdown; time until answered is set by live model calls, which
+    # vary by tens of seconds, so only a doubling-scale change counts.
+    regression_tolerances={"submit_p95_s": 0.1, "poll_p95_s": 0.1, "read_p95_s": 0.1, "answer_p95_s": 30.0},
 )
 
 

@@ -68,3 +68,29 @@ def test_an_admitted_model_that_is_down_fails_to_answer():
 def test_only_the_admitted_models_misses_are_problems():
     results = ma.evaluate(models=[ma.ADMITTED, "granite-2b"], items=jb.ITEMS[:2], ask=lambda q, model_name: "no idea")
     assert [r.case_id for r in results if "problem" in r.detail] == [f"{ma.ADMITTED}/00", f"{ma.ADMITTED}/01"]
+
+
+def test_accepted_forms_count_and_never_accept_the_wrong_label():
+    accepted = ma.aliases()
+    assert len(accepted) >= 10
+    salt = "what is the chemical formula for table salt?"
+    assert ma.grade("sodium chloride", "NaCl", "KCl", accepted[salt])               # found live: olmo3-7b
+    light = "roughly how fast does light travel in a vacuum, in kilometres per second?"
+    assert ma.grade("299 792", "About 300,000", "About 3,000", accepted[light])      # found live: olmo3-7b
+    einstein = "who developed the theory of general relativity?"
+    assert ma.grade("Einstein", "Albert Einstein", "Isaac Newton", accepted[einstein])
+    assert not ma.grade("Einstein or Isaac Newton", "Albert Einstein", "Isaac Newton", accepted[einstein])
+    # the aliases don't break agreement with the labels: every wrong label still grades wrong
+    assert [q for q, c, w in jb.ITEMS if ma.grade(w, c, w, accepted.get(q, ()))] == []
+
+
+@pytest.mark.parametrize("bad, message", [
+    ({"id": "x", "question": "what is the capital of Mars?", "accept": ["Olympus"]}, "doesn't ask"),
+    ({"id": "x", "question": "what is the capital of France?", "accept": ["Berlin"]}, "accepts the labelled wrong"),
+])
+def test_bad_aliases_are_refused(tmp_path, bad, message):
+    import json
+    path = tmp_path / "a.json"
+    path.write_text(json.dumps([bad]), encoding="utf-8")
+    with pytest.raises(ValueError, match=message):
+        ma.aliases(path)
