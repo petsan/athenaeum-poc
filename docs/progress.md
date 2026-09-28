@@ -1573,7 +1573,13 @@ The service ran for 49 minutes, then measured the matrix with "when manifested" 
   - **Judging: 0.808 < 0.95 (FAIL), expected.** The owner approved the benchmark, so the admitted challenger's result now counts instead of being withheld. olmo3-7b doesn't qualify, which fails the gate and rejects the run. The runtime already refuses to count an unqualified challenger's challenges, so this is a capability status, not a release defect. **Owner decision:** keep judging as a release gate (every nightly REJECTED until a model qualifies), or make it optional/informational so the verdict reflects the rest.
 - Citation support stays INSUFFICIENT until 30 labels (the page is ready).
 
-**Batch 13 is complete.** Commits 8651abc → this one; evalcore v0.1.2 and v0.1.3.
+**Batch 13 is complete.** Commits 8651abc → 39b51b9; evalcore v0.1.2 and v0.1.3.
+
+### 108.2 Next: batch 14 (proposed, not started)
+1. Apply the owner's decision on the judging gate (release gate or informational).
+2. Sync the labelling page as nightly runs add model answers. Once 30 are marked, validate a judge on citation support (D17), and feed the labelled model-backed claims into calibration, where over-confidence can finally show.
+3. The API snapshot rebuild after every round (≈40% of offline bookkeeping, §108 BE): rebuild only when a round changed what readers see. This changes read timing, so it needs its own tests first.
+4. Re-save the baseline after any intended change to a decidable suite's golden data. The per-suite check names the suite it skips, so a stale suite is visible on the card.
 
 ## 107. Batch 12: Athenaeum's evaluation on evalcore (planned 2026-09-27, autonomous)
 
