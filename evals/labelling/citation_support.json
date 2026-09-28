@@ -6,7 +6,7 @@
    "question": "what does stoicism say about the good life?",
    "claim": "In the philosophy of the ancient Greek stoics, the \"good life\" is the life of reason, self-discipline, and virtue. (in answer to: what does stoicism say about the good life?)",
    "model": "olmo3-7b",
-   "label": null,
+   "label": true,
    "note": "",
    "from": "20260927T222612Z"
   },
@@ -15,7 +15,7 @@
    "question": "According to Stoicism, what is the only true good?",
    "claim": "According to Stoic philosophy, the only true good is a virtuous life, which involves living in accordance with reason, virtue, and nature. Stoics believed that while external events are beyond our control, the way we respond to them is within our control, and that cultivating virtues such as wisdom, courage, justice, and temperance leads to eudaimonia, or true happiness. (in answer to: According to Stoicism, what is the only true good?)",
    "model": "olmo3-7b",
-   "label": null,
+   "label": true,
    "note": "",
    "from": "20260927T222612Z"
   },
@@ -24,7 +24,7 @@
    "question": "What is Buddhism's doctrine on the cause of suffering?",
    "claim": "In Buddhism, suffering (dukkha) is caused by craving and attachment to impermanent things (tanha), ignorance of the nature of reality (avidya), and a lack of understanding of the Four Noble Truths and the Eightfold Path. (in answer to: What is Buddhism's doctrine on the cause of suffering?)",
    "model": "olmo3-7b",
-   "label": null,
+   "label": true,
    "note": "",
    "from": "20260927T222612Z"
   },
@@ -33,7 +33,7 @@
    "question": "what is the good life according to epicureanism?",
    "claim": "pleasure (in answer to: what is the good life according to epicureanism?)",
    "model": "olmo3-7b",
-   "label": null,
+   "label": true,
    "note": "",
    "from": "20260927T222612Z"
   },
@@ -42,7 +42,7 @@
    "question": "How does Epicureanism define the good life?",
    "claim": "Epicureanism states that the good life is characterized by happiness and freedom from pain and distress. (in answer to: How does Epicureanism define the good life?)",
    "model": "olmo3-7b",
-   "label": null,
+   "label": true,
    "note": "",
    "from": "20260927T222612Z"
   },
@@ -51,7 +51,7 @@
    "question": "The Berlin Wall fell in 1989, right?",
    "claim": "yes (in answer to: The Berlin Wall fell in 1989, right?)",
    "model": "olmo3-7b",
-   "label": null,
+   "label": true,
    "note": "",
    "from": "20260927T222612Z"
   },
@@ -60,7 +60,7 @@
    "question": "is 4 even?",
    "claim": "Yes (in answer to: is 4 even?)",
    "model": "olmo3-7b",
-   "label": null,
+   "label": true,
    "note": "",
    "from": "20260927T222612Z"
   },
@@ -69,7 +69,7 @@
    "question": "Is the number 4 even?",
    "claim": "yes (in answer to: Is the number 4 even?)",
    "model": "olmo3-7b",
-   "label": null,
+   "label": true,
    "note": "",
    "from": "20260927T222612Z"
   },
@@ -78,7 +78,7 @@
    "question": "Is 4 an even number?",
    "claim": "yes (in answer to: Is 4 an even number?)",
    "model": "olmo3-7b",
-   "label": null,
+   "label": true,
    "note": "",
    "from": "20260927T222612Z"
   }

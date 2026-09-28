@@ -25,8 +25,8 @@ The sections below this one are a chronological log. The numbering runs roughly 
 - **Next: batch 14 (§108.2).** It starts with the owner's answer on the judging gate. **Ask it first:** keep judging as a release gate (every nightly REJECTED until a model qualifies), or make it informational. Claude recommended informational: the runtime already ignores an unqualified challenger.
 - **Owner reminders:**
   - evalgate 0.2.0 has the same degenerate `psi` as evalcore's (documented in evalcore 0.1.3, repo untouched);
-  - `git pull` the evalgate copy in Downloads;
-  - mark answers on the labelling page (https://claude.ai/artifact/5yiqY91tivAJnRvMD2dEf1; 9 answers; the gate needs 30).
+  - the evalgate copy in Downloads: `git pull` was started by the owner on 2026-09-28;
+  - the labelling page (https://claude.ai/artifact/5yiqY91tivAJnRvMD2dEf1): all 9 answers marked on 2026-09-28, all right; more will be seeded, including wrong answers (§108.2), toward the 30 the gate needs.
 
 **Standing rules (from the owner, all still in force):**
 - Work in batches: commit and push at the end of every phase. Run an end-to-end test at the end of a batch, then plan the next.
@@ -1588,6 +1588,7 @@ The service ran for 49 minutes, then measured the matrix with "when manifested" 
 ### 108.2 Next: batch 14 (proposed, not started)
 1. Apply the owner's decision on the judging gate (release gate or informational).
 2. Sync the labelling page as nightly runs add model answers. Once 30 are marked, validate a judge on citation support (D17), and feed the labelled model-backed claims into calibration, where over-confidence can finally show.
+   - **Status 2026-09-28:** the owner marked all 9 answers; all 9 are right (folded in with `apply_citation_labels.py`). **The pool needs wrong answers too.** A judge can only be validated against both classes: with right answers alone, a judge that always says "yes" scores 100%. The nightly deliberation mostly yields right answers, so also draw items from `model_answers` misses, the lab models' wrong answers to benchmark questions (e.g. "365 days" for a leap year). Mark those items with their source so the owner still judges each one.
 3. The API snapshot rebuild after every round (≈40% of offline bookkeeping, §108 BE): rebuild only when a round changed what readers see. This changes read timing, so it needs its own tests first.
 4. Re-save the baseline after any intended change to a decidable suite's golden data. The per-suite check names the suite it skips, so a stale suite is visible on the card.
 
