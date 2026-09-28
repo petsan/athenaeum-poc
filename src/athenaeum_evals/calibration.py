@@ -27,7 +27,7 @@ from pathlib import Path
 import numpy as np
 from evalcore import Config, GateSpec, Suite, SuiteMetric
 from evalcore.calibration import brier, ece
-from evalcore.stats import psi
+from evalcore.stats import psi_categorical
 
 from . import deliberation
 
@@ -115,7 +115,11 @@ def metrics(results, config: Config | None = None, baseline_confidences: list[fl
     if baseline_confidences is None:
         baseline_confidences = saved_confidences()
     if baseline_confidences and rows:                          # absent: the optional gate stays NOT_RUN
-        value = psi(baseline_confidences, [r["confidence"] for r in rows])
+        # Confidences sit on a few levels (1.0, 0.99, 0.95, a fallback's 0.6), where
+        # quantile-binned psi reads identical samples as inf (evalcore 0.1.3), so
+        # compare the levels themselves, rounded to the 0.01 the agents state.
+        value = psi_categorical([round(c, 2) for c in baseline_confidences],
+                                [round(r["confidence"], 2) for r in rows])
         out["confidence_psi"] = SuiteMetric(value, value, value, n=len(rows),
                                             detail={"note": f"against {len(baseline_confidences)} baseline confidences"})
     return out

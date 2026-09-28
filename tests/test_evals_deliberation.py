@@ -168,7 +168,7 @@ def test_no_labelled_claims_is_insufficient_never_a_pass():
 
 def test_confidence_drift_is_optional_until_a_baseline_exists():
     rows = [(f"m{i}", "Mathematics", 1.0 if i % 2 else 0.9, True) for i in range(40)]
-    first = calibration.metrics(labelled_results(rows), baseline_confidences=None)
+    first = calibration.metrics(labelled_results(rows), baseline_confidences=[])   # no baseline sample
     assert "confidence_psi" not in first
     assert gates_for([], [calibration.SUITE], first)["confidence_psi"].status == "NOT_RUN"
     same = calibration.metrics(labelled_results(rows), baseline_confidences=[r[2] for r in rows])
@@ -202,3 +202,18 @@ def test_calibration_alone_runs_its_source(tmp_path, monkeypatch):
     monkeypatch.setattr(deliberation, "evaluate", lambda: real()[:30])
     result = runner.run(tmp_path / "out", ["calibration"])
     assert {g.suite for g in result.gates} == {"calibration"}
+
+
+def test_identical_confidences_show_no_drift():
+    """Batch 13: the first run against the baseline reported PSI = inf for two
+    identical samples (quantile-binned psi collapses on a few levels). The
+    categorical comparison reads them as the same."""
+    levels = [1.0] * 69 + [0.95] * 12 + [0.99] * 3                    # the live sample, both times
+    rows = [(f"q{i}", "Mathematics", c, True) for i, c in enumerate(levels)]
+    m = calibration.metrics(labelled_results(rows), baseline_confidences=levels)
+    assert m["confidence_psi"].value == 0.0
+    assert gates_for([], [calibration.SUITE], m)["confidence_psi"].status == "PASS"
+    fallbacks = levels[:60] + [0.6] * 24                               # model fallbacks start being labelled
+    drifted = calibration.metrics(labelled_results([(f"q{i}", "Physics", c, True) for i, c in enumerate(fallbacks)]),
+                                  baseline_confidences=levels)
+    assert gates_for([], [calibration.SUITE], drifted)["confidence_psi"].status == "FAIL"
