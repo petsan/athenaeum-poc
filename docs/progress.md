@@ -21,7 +21,7 @@ The sections below this one are a chronological log. The numbering runs roughly 
   - full live suite: **850 passed, 1 skipped** (batch 14, 2026-09-28);
   - evalcore: 1,658 passed; its CI is green.
 - The nightly timer on LXC 104 is **disabled** (2026-09-28: no tests on proxmox-01); it published http://192.168.0.104/athenaeum/. The last end-to-end run (§109.1) was NOT APPROVED for one reason: citation support waits on 30 owner labels. Judging (0.808) is informational now, and all 14 regression gates passed.
-- **Next: the move to proxmox-02 on 2026-09-29 (§110).** Waiting on the owner's answers in §110.3. **No tests of any kind on proxmox-01** (owner, 2026-09-28); the nightly timer on LXC 104 is disabled. Batch 15 (§109.2) comes after the move; it also waits on the owner marking 51 items on the labelling page.
+- **Next: the move to proxmox-02 on 2026-09-29 (§110).** Answered 2026-09-28: host NVIDIA driver with GPUs shared into LXCs; restore 104 from vzdump; copy the six lab models. Still open: proxmox-02's IP and access, the cap, and the timing of the root key deletion (§110.3). **No tests of any kind on proxmox-01** (owner, 2026-09-28); the nightly timer on LXC 104 is disabled. Batch 15 (§109.2) comes after the move; it also waits on the owner marking 51 items on the labelling page.
 - **Owner reminders:**
   - evalgate 0.2.0 has the same degenerate `psi` as evalcore's (documented in evalcore 0.1.3, repo untouched);
   - the evalgate copy in Downloads: `git pull` was started by the owner on 2026-09-28;
@@ -76,7 +76,7 @@ The sections below this one are a chronological log. The numbering runs roughly 
 - **Access:**
   - Guests: key `~/.ssh/athenaeum_poc`.
   - API: `ssh root@192.168.0.151 pve-ops -p athenaeum <cmd>`.
-  - **Host root key:** `~/.ssh/proxmox_temp_root`. It works only from `192.168.0.85`. **It has no expiry**: the owner confirmed on 2026-09-28 that it is set never to expire and is fine with that for now. It is still a root key, so use it only for host work that needs it. Its host key fingerprint is `SHA256:hfXHivPsL33+zuiODq3++y73nyUxPBQdFPDr7PHz5Rc`, already in `known_hosts`.
+  - **Host root key:** `~/.ssh/proxmox_temp_root` (`claude-temp-root`). It works only from `192.168.0.85`. **The owner will delete it (said 2026-09-28; it expires 2026-09-29).** After that there is no root on proxmox-01; only `pve-ops` on 106 remains. It is still a root key, so use it only for host work that needs it. Its host key fingerprint is `SHA256:hfXHivPsL33+zuiODq3++y73nyUxPBQdFPDr7PHz5Rc`, already in `known_hosts`.
   - Revoke the temporary key when done: delete the `claude-temp-root` line from `/root/.ssh/authorized_keys` on the host, and the key file here.
   - Claude Code's auto mode refuses destructive host commands and ACL grants. Give those to the owner as paste-ready commands, and don't work around the refusal.
 
@@ -101,7 +101,7 @@ The sections below this one are a chronological log. The numbering runs roughly 
 5. Sync the owner's marks from the labelling page (`scripts/apply_citation_labels.py`), then start batch 15 (§109.2).
 
 **Open owner decisions:**
-- the proxmox-02 questions in §110.3 (Q1–Q6);
+- proxmox-02: its IP and access (Q2), the capacity cap (Q6), and **when the proxmox-01 root key is deleted relative to copying the 104 backup and the models off glacier-01** (§110.3);
 - D13–D19 of `docs/proposals/evalgate-integration.md`: all settled (D13, D14 and D18 superseded by X7; D15, D16, D17 and D19 decided).
 - `evalcore` (the reusable evaluation toolkit from `docs/proposals/evaltools-extraction.md`): **decided (X1–X7) and built**.
   - It lives in its own repo, `github.com/petsan/evalcore`, at `C:\Users\petsa\evalcore`, with tests in `/opt/evalcore-venv` on LXC 104.
@@ -1605,6 +1605,13 @@ Same rules and stop conditions.
 - **Q4. Test runner:** restore LXC 104 from its vzdump (recommended: same packages, venvs and run history in one step), or build fresh from `infra/proxmox/` scripts (tests the scripts, slower)?
 - **Q5. Model store on proxmox-02:** a directory on the NVMe, e.g. `/mnt/pve/<nvme-storage>/models`, with the same rule that all models live there? Which models to copy: the six lab models plus Qwen3.8 27B Q8_0 (fits one GPU) are recommended; GLM-5.3-Flash (186 GB) can't be served there.
 - **Q6. Capacity cap on proxmox-02:** keep 80% of CPU/RAM (16 threads, ~102 GB)? Does it apply to VRAM too?
+
+**Owner's answers (2026-09-28):**
+- **Q1:** the key being deleted is the host root key, `claude-temp-root` from `192.168.0.85` (`~/.ssh/proxmox_temp_root`). **Consequence:** after deletion Claude has no root on proxmox-01, only the scoped API token through `pve-ops` on LXC 106. Two migration steps read host paths on glacier-01: the LXC 104 vzdump and the six lab models. Either they run before the key is deleted, or the owner pastes the commands, or proxmox-02 gets its own read access to proxmox-01 (still open, see §0).
+- **Q3:** NVIDIA driver on the proxmox-02 host, GPUs shared into LXCs.
+- **Q4:** restore LXC 104's vzdump on proxmox-02, with a new VMID and IP.
+- **Q5:** copy the six lab models only, into a store on the NVMe.
+- **Q2 (IP and access) and Q6 (capacity cap) are still open.** Until Q6 is answered, Claude assumes the 80% CPU/RAM cap carries over (16 threads, ~102 GB) and that VRAM is uncapped.
 
 **Not moving:** LXC 250 (the report host) and the other projects' guests stay on proxmox-01. The Windows elastic GPU worker (RTX 3070 Ti) is unaffected.
 
