@@ -6,19 +6,28 @@
 
 ---
 
-## 0. RESTART HERE (current state as of 2026-09-27; newest detail is §105, then §104, §103, ...)
+## 0. RESTART HERE (current state as of 2026-09-28; newest detail is §108, then §107, §106, ...)
 
-The sections below this one are a chronological log, and the numbering runs roughly newest-last up to §87, then batches 10–11 and §102–§105 sit near the end. **This section is the current state.** It should be enough to resume without any other context. Update it at the end of every piece of work.
+The sections below this one are a chronological log. The numbering runs roughly newest-last up to §87; batches 10–11 and §102–§105 sit near the end; §108 (batch 13) and §107 (batch 12) come just before §106. **This section is the current state.** It should be enough to resume without any other context. Update it at the end of every piece of work.
 
-**Code: done and verified.**
-- Everything is committed on `master` and pushed to `github.com/petsan/athenaeum-poc`.
-- Batches 1–11 are complete. All owner decisions 2–12 are made and implemented (briefs in `docs/owner-decisions.md`).
-- The narrated demo (`demo_brain.py`) covers batches 1–11.
-- Last full live suite: **693 passed, 1 skipped** (§103). Since the rebuild (§105), only the offline suite has run: 672 passed, 2 skipped. The 5 failures all needed the model guests, which were down then.
-- **The next big change is proposed, not started:** [`docs/proposals/evalgate-integration.md`](proposals/evalgate-integration.md) (2026-09-27).
-  - It brings the owner's other project, evalgate (`github.com/petsan/evalgate`, private, deployed on LXC 250), into Athenaeum as its release gate, plus a dashboard showing how well each evalgate tool works.
-  - The owner asked for planning only. **Nothing is built until decisions D13–D19 (§7 of the proposal) are made.**
-  - The plan is batch 12, phases AV–BA.
+**Code: done and verified (2026-09-28).**
+- Everything is committed on `master` and pushed to `github.com/petsan/athenaeum-poc` (last commit c2da441). evalcore (`github.com/petsan/evalcore`, public) is at **v0.1.3**; evalgate-work is clean.
+- **Batches 1–13 are complete.**
+  - Batch 12 (§107): Athenaeum's evaluation on evalcore, 8 suites in `src/athenaeum_evals/`, the fault matrix and dashboard, and the nightly runner.
+  - Batch 13 (§108): quick questions finish first, a regression baseline, evalcore 0.1.2 and 0.1.3, faster checkpoint index reads, answer aliases, and the citation labelling page.
+- Last test runs (LXC 104, `/opt/athenaeum-venv/bin/python`):
+  - offline suite: **821 passed, 1 skipped**;
+  - full live suite: 820 passed, 1 skipped (batch 12, after the stop-sequence change);
+  - evalcore: 1,657 passed; its CI is green.
+- The nightly timer on LXC 104 runs at 02:30 Pacific and publishes http://192.168.0.104/athenaeum/. The last end-to-end run (§108.1) was REJECTED for two reasons:
+  - confidence drift of inf, a bug now fixed (evalcore 0.1.3; recomputed as 0.0);
+  - the judging gate: olmo3-7b scored 0.808 against the 0.95 bar.
+- **Next: batch 14 (§108.2).** It starts with the owner's answer on the judging gate. **Ask it first:** keep judging as a release gate (every nightly REJECTED until a model qualifies), or make it informational. Claude recommended informational: the runtime already ignores an unqualified challenger.
+- **Owner reminders:**
+  - revoke the temporary root key (it expires 2026-09-29);
+  - evalgate 0.2.0 has the same degenerate `psi` as evalcore's (documented in evalcore 0.1.3, repo untouched);
+  - `git pull` the evalgate copy in Downloads;
+  - mark answers on the labelling page (https://claude.ai/artifact/5yiqY91tivAJnRvMD2dEf1; 9 answers; the gate needs 30).
 
 **Standing rules (from the owner, all still in force):**
 - Work in batches: commit and push at the end of every phase. Run an end-to-end test at the end of a batch, then plan the next.
@@ -86,14 +95,16 @@ The sections below this one are a chronological log, and the numbering runs roug
 **After a restart, in order:**
 1. Ping the host.
 2. Check the guests: `for i in 161 162 163 164 165 166; do curl -s -m5 http://192.168.0.$i:8080/health; echo; done`.
-3. Sync 104 and run the **full live** suite. Expect 693 passed, 1 skipped; a different count needs explaining.
-4. Then take the owner's decisions on the two proposals in `docs/proposals/`.
+3. Sync 104 and run the **full live** suite with `/opt/athenaeum-venv/bin/python -m pytest -q -p no:cacheprovider`. Not yet run since batch 13. Expect about 843 passed, 1 skipped: the live suite runs 22 more tests than the offline one (820 vs 798 in batch 12), and offline is now 821 passed, 1 skipped, 3 deselected. Record the real count here; a different one needs explaining.
+4. Check last night's run: `journalctl -u athenaeum-nightly -n 30` on 104, and the page at http://192.168.0.104/athenaeum/.
+5. Then ask the owner the open decision (judging gate, §108.1) and start batch 14 (§108.2).
 
 **Open owner decisions:**
-- `docs/proposals/evalgate-integration.md` §7 (D13–D19);
-- `evalcore` (the reusable evaluation toolkit from `docs/proposals/evaltools-extraction.md`): **decided (X1–X7) and being built**.
+- whether the judging suite stays a release gate (§108.1);
+- D13–D19 of `docs/proposals/evalgate-integration.md`: all settled (D13, D14 and D18 superseded by X7; D15, D16, D17 and D19 decided).
+- `evalcore` (the reusable evaluation toolkit from `docs/proposals/evaltools-extraction.md`): **decided (X1–X7) and built**.
   - It lives in its own repo, `github.com/petsan/evalcore`, at `C:\Users\petsa\evalcore`, with tests in `/opt/evalcore-venv` on LXC 104.
-  - It is now **public** (owner's decision). Commits use the GitHub noreply address. Tagged `v0.1.0`.
+  - It is **public** (owner's decision). Commits use the GitHub noreply address. Latest tag **`v0.1.3`**, which Athenaeum pins.
   - Done:
     - E1–E4: statistics and gates identical to evalgate 0.2.0's; detectors, judges and calibration; the artifacts, front end and CLI; the fault matrix and dashboard.
     - E5: evalgate 0.3.0 rebased on evalcore. Its CI is green, and LXC 250 was redeployed and ran successfully.
