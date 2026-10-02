@@ -495,7 +495,7 @@ Started the §26 "planned upgrade". **VM 202** `athenaeum-gpu-qwen3-8-27b` creat
 **Host RAM is very tight:** `free -g` showed 57 of 62GB used, ~4GB available, with VMs 201+202+203 (16+20+12GB) plus the ZFS ARC (8GB) and the host's own Athenaeum. Do not add another VM or raise a VM's RAM without shrinking another.
 
 **Still open, in suggested order:**
-1. **Commit.** Nothing from this whole stretch (nor the earlier proxmox-02 bring-up) is committed; ~27 files changed. Ask the user before committing (the repo's attribution trailer is in the system reminder).
+1. ~~Commit~~ — **done 2026-10-02, `3f83a97`** (the untracked `athenaeum_poc_system_architecture_watermarked_img_*.jpg` was deliberately left out; ask the user whether it belongs in the repo). `git config core.fileMode false` was set locally because this Windows checkout reports scripts as 644 and would otherwise show phantom diffs; the committed modes are 755.
 2. proxmox-02 **backups — none exist** (VMs 201–203 and `fast-z1`; ~150GB of VM disks). `infra/proxmox/proxmox-02/TODO.md` §2 has the plan; include an `OnBootSec` trigger.
 3. proxmox01: power on, then redeploy/verify the backup timer after a **real** reboot (`OnBootSec=10min` must be seen firing), confirm guests 104/106 autostart, and re-verify the six model-lab guests (`.161`–`.166:8080`) — the manifest says they were set up, but none answered on 2026-09-28 (host was likely mid-reboot) so their liveness is **unconfirmed**.
 4. Decide whether any of the new models join `elastic_workers.yaml` (nothing registered; not assumed).

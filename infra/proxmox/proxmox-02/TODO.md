@@ -12,7 +12,7 @@ Written so a cold session can pick up without the conversation. Facts here were 
 - `curl -s -o /dev/null -w "%{http_code}\n" http://192.168.0.97:8080/health` (200?).
 - The host may be powered off; if so that's normal — ask the user to power it on.
 
-## 1. Decide about the uncommitted work (needs the user)
+## 1. (Done: committed as 3f83a97 on 2026-10-02) Decide about the uncommitted work
 
 Nothing from the bring-up is committed. Changed: `CLAUDE.md`, `README.md`, `deployment-playbook.md`, `docs/progress.md`, `elastic_workers.yaml`, `infra/proxmox/README.md`, `known-bugs.md`, `security-review-sandbox.md`, `src/athenaeum_brain/agents.py` (the `[-200:]` fix); new: `infra/proxmox/proxmox-02/`. The other `M` files in `git status` are file-mode-only flips (0755→0644, no content change) and the `.jpg` is unrelated — don't sweep them into the commit. Ask before committing/pushing.
 
