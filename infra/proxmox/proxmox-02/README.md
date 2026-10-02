@@ -57,3 +57,5 @@ Preflight (`scripts/preflight_check.py`) on this host: everything passes except 
 - **Not drilled through a cold boot:** only the `vfio-pci` binding has been seen surviving a reboot. VM 201's `onboot`, `fast-z1`'s automatic import, the ARC cap, and the `llama-server` unit were set up correctly but not observed after one.
 - The Amfeltec Squid is the fourth-drive-sharing uplink noted above; a heavy NVMe workload and that GPU's host traffic compete for one x16 link.
 - 4TB SATA SSD not installed; BIOS SATA controller state above needs fixing first.
+
+> **2026-10-02 update:** VM 202 now holds **all three GPUs** (`hostpci0` `67:00`, `hostpci1` `1f:00`, `hostpci2` `68:00`) and runs Qwen3.8-27B **Q4_K_M** with MTP speculative decoding (`-c 65536 -np 2`), so VMs 201 and 203 cannot start while it runs. Undo with VM 202 stopped: `qm set 202 --delete hostpci1,hostpci2`. Config backups: `/root/backup-pve-config-20261002/` on the host. Details and measurements: `docs/progress.md` §45 addendum.
