@@ -188,9 +188,20 @@ except Exception:
 # ---------------------------------------------------------------------
 
 def scenario_fork_containment():
-    cg_root = Path("/sys/fs/cgroup/pids")
-    if not cg_root.is_dir():
-        return False, "no cgroups v1 'pids' controller -- cannot test the real mechanism (see cgroups_pids_available above)"
+    v1_root = Path("/sys/fs/cgroup/pids")
+    v2_root = Path("/sys/fs/cgroup")
+    controllers = v2_root / "cgroup.controllers"
+    if v1_root.is_dir():
+        cg_root = v1_root
+    elif controllers.is_file() and "pids" in controllers.read_text().split():
+        # v2: a child only gets the controller if the parent delegates it
+        # (mirrors sandbox._make_pids_cgroup).
+        subtree = v2_root / "cgroup.subtree_control"
+        if "pids" not in subtree.read_text().split():
+            subtree.write_text("+pids")
+        cg_root = v2_root
+    else:
+        return False, "no cgroups v1 or v2 'pids' controller -- cannot test the real mechanism (see cgroups_pids_available above)"
     cg = cg_root / f"preflight-{uuid.uuid4().hex[:10]}"
     cg.mkdir()
     (cg / "pids.max").write_text("5")

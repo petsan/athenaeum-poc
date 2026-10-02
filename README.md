@@ -401,8 +401,9 @@ caught when asked "what about the Brain" during a Claude Code handoff):
 ## Everything else in this package
 
 - **`CLAUDE.md`** — read automatically by Claude Code on startup; points
-  at all of the above plus the hard constraints (50% resource cap, no
-  bare-host deployment, sandbox stays disabled until re-validated).
+  at all of the above plus the hard constraints (100% resource cap,
+  sandbox stays disabled until re-validated; the no-bare-host-deployment
+  rule was removed by the user on 2026-09-28).
 - **`client/standalone-demo.html`** — the self-contained, JS-ported
   version of the deliberation loop demo that runs with no backend at
   all; open it directly in any browser.

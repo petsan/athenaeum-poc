@@ -143,6 +143,48 @@ These aren't bugs in the sense of "code that was wrong" — they're incorrect as
 
 ---
 
+## Found bringing up proxmox-02 (2026-09-28)
+
+### 21. `verify_code()` kept the *first* 200 chars of stderr, which on Python 3.13 no longer contains the exception
+**What happened:** On the new host (Python 3.13.5), `tests/test_engineering_execution.py::test_verify_code_real_known_buggy_solution` failed: `defeat_condition` had the start of the traceback but not `AssertionError`. Every earlier run (LXC 104, older Python) passed 248/248.
+**Root cause:** `agents.py` built the message with `result.stderr.strip()[:200]`. Python prints the actual exception on the *last* line of a traceback, and 3.13 tracebacks are longer (extra `~~~~^^^^` caret lines). Minimal repro on the host: the same two-line failing snippet produces 361 chars of stderr with `AssertionError` at offset 327 — past the cut. Nothing was wrong with the sandbox or the execution; the diagnostic text was truncated at the wrong end.
+**Fix:** `[-200:]` (keep the tail). 7/7 in that file, full suite 247 passed + 1 skipped afterwards.
+**Lesson:** When truncating an error stream, keep the end, not the beginning — the cause is last, the call stack is first. And a suite that passes on one interpreter version has not been shown to pass on the next; this only surfaced because the code ran somewhere new.
+
+### 22. cloud-init drive on the q35 machine's default `ide2` bus is invisible to Debian's `genericcloud` kernel
+**What happened:** A Debian 12 genericcloud VM (VMID 201) booted to a `localhost login:` prompt — no hostname, no SSH key, unreachable, ARP `INCOMPLETE` — even though the VM was running and PVE reported cloud-init ISO generation succeeded.
+**Root cause (probable, and the fix worked):** the genericcloud kernel is stripped for virtio-only hardware and, as far as I could tell, has no SATA/AHCI driver, so the cloud-init CD on `ide2` (an AHCI port on q35) was never seen. The fix is consistent with that but I did not inspect the guest's module list to prove it.
+**Fix:** attach the cloud-init drive as `scsi1` (virtio-scsi); the rebuilt VM answered SSH in ~20s with the right hostname. `infra/proxmox/proxmox-02/20-create-gpu-model-vm.sh` does this now.
+**Lesson:** "Booted but hostname is `localhost`" means cloud-init found no datasource — look at the VM console (`qm monitor <id>` → `screendump`) before debugging networking.
+
+### 23. Two "the new host is dead" scares had mundane causes
+**What happened:** after adding hardware, proxmox-02 stopped answering (no ping, no ARP); the console sat on a mid-boot line. Cause: **the network cable had been unplugged during the reboot**. Separately, the 4TB SATA SSD never appeared: the chipset SATA controller (`00:17.0`) had vanished from `lspci` entirely, which most likely means it was disabled in BIOS (inferred from the device being absent; not confirmed in the BIOS screen).
+**Lesson:** before theorizing about a config change breaking boot, check link lights/cable, and check `lspci` for a *missing* device before blaming a drive or cable.
+
+### 24. Windows PowerShell 5.1 corrupts remote scripts piped to `ssh`
+**What happened:** piping a here-string to `ssh host bash -s` prepended a UTF-8 BOM, so the script's first line failed (`<BOM>set: command not found`, which silently disabled `set -e`); and inner double quotes in native-command arguments were stripped, producing bash syntax errors.
+**Lesson:** run remote scripts from the Bash tool (git-bash) with quoted heredocs; keep the PowerShell tool for Windows-local queries. If a script must go through PowerShell, make its first line a harmless no-op.
+
+### 25. (fixed + verified 2026-09-28) `scripts/preflight_check.py` scenario 4 only tests cgroups v1 and reports a false FAIL on v2-only hosts
+**What happened:** on proxmox-02 the preflight printed `[FAIL] Scenario 4: fork containment via cgroups — no cgroups v1 'pids' controller`, right after `[PASS] cgroups v2 unified hierarchy with 'pids' controller available`. Meanwhile `tests/test_sandbox.py::test_scenario_4_fork_containment_via_cgroups` (a real `os.fork()` loop against the cgroup limit) **passed on the same host**, so containment works on v2; the preflight scenario body (`scenario_fork_containment`) just never got a v2 branch when `sandbox.py` did (entry 17).
+**Status:** v2 branch added to `scenario_fork_containment` (mirrors `sandbox._make_pids_cgroup`); re-run for real on proxmox-02: all preflight scenarios PASS, incl. scenario 4 (`blocked_after_2`). It failed in the safe direction (over-reports a problem), but it makes the preflight — the gate for ever enabling `execution_sandbox.enabled` — untrustworthy on exactly the kind of host this project now runs on.
+
+---
+
+---
+
+### 26. PrismML llama.cpp fork fails CMake configure on Debian's CUDA layout (stock llama.cpp doesn't)
+**What happened:** `cmake` for `github.com/PrismML-Eng/llama.cpp` died with `Could NOT find CUDAToolkit (missing: CUDAToolkit_INCLUDE_DIR)` ("Unable to find cuda_runtime.h in /usr/lib/nvidia-cuda-toolkit/include") while the stock build in the sibling VM configured fine.
+**Root cause:** the fork's `common/CMakeLists.txt` calls `find_package(CUDAToolkit)`; Debian's `nvidia-cuda-toolkit` puts headers in `/usr/include`, not where that module looks.
+**Fix:** `-DCUDAToolkit_ROOT=/usr -DCUDAToolkit_INCLUDE_DIR=/usr/include` (script 21's `CMAKE_EXTRA`). **Lesson:** a build recipe proven for one llama.cpp checkout isn't proven for a fork; read the configure log's actual missing-path line.
+
+### 27. Wrong quant file for the fork's loader: `Ternary-Bonsai-27B-Q2_0.gguf` fails to load
+**What happened:** the server built, then exited at load: `tensor 'output_norm.weight' has offset …, expected …` / "legacy Prism Q2_0 layout (group size 128 …) but this build reads Q2_0 as the official group-64 format".
+**Root cause:** one repo carries several 2-bit layouts; the file name looked right but the on-disk layout didn't match the current fork.
+**Fix:** use `Ternary-Bonsai-27B-PQ2_0.gguf` (same size) — the loader's own message named it. **Lesson:** pin the *file*, not just the repo, and read the loader's error before suspecting the build. Also: always verify the service reached `active` *and* answered `/health`, not just that the script exited 0 (script 21's "serve" printed `activating` and exit 3 only because the unit was crash-looping).
+
+---
+
 ## Recurring process mistake (not a code bug — a workflow one)
 
 ### 16. Duplicate "final" print statement when appending new steps to a narrated demo script

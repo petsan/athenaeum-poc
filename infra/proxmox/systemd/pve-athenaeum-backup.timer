@@ -7,6 +7,10 @@ OnCalendar=*-*-* 03:30:00
 # after an accidental power-off, or if the host was mid-reboot) -- runs
 # once shortly after boot instead of silently waiting a full day.
 Persistent=true
+# Persistent=true only catches up runs THIS timer previously recorded
+# (known-bugs.md #20) and this host is usually off well before 03:30, so
+# also fire shortly after every boot rather than rarely/never.
+OnBootSec=10min
 RandomizedDelaySec=10m
 
 [Install]

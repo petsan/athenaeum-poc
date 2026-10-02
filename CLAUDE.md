@@ -16,7 +16,7 @@ These aren't aspirational — every one of them is here because violating it (or
 3. **Root-cause, not workaround.** Isolate to a minimal reproduction before accepting a fix (the `RLIMIT_CPU`/`unshare --fork` crash was proven with a two-line repro before trusting the finding; the Docker `FORWARD`-chain diagnosis came from watching actual packets on the wire, not guessing). A fix that "seems to work" without a known mechanism is a coincidence until proven otherwise.
 4. **Infrastructure and decisions live in the repo (or memory), not just in chat.** Nothing about this project's Proxmox setup, its known bugs, or its open work should depend on any specific conversation surviving — `deployment-playbook.md`, `infra/proxmox/`, `known-bugs.md`, and `docs/progress.md` are the actual source of truth, kept current as work happens, not reconstructed from memory after the fact.
 5. **State scope honestly — what's fixed, what's tested, and what's still just reasoned-through.** A fix gets called "closed" only once it's been observed working, not once it's been designed correctly (see the cold-boot checklist item this principle exists to unblock). Backup/DR claims say plainly what they don't cover (no off-host protection here) rather than letting "backups exist" be read as "fully protected."
-6. **Confirm before consequential or hard-to-reverse actions**, especially anything touching shared state, security posture, or broad credentials — this repo's own hard constraints below (resource caps, no bare-host deploys, sandbox stays disabled) are instances of this principle, not exceptions to it.
+6. **Confirm before consequential or hard-to-reverse actions**, especially anything touching shared state, security posture, or broad credentials — this repo's own hard constraints below (resource caps, sandbox stays disabled; the former no-bare-host-deploys rule was removed by the user on 2026-09-28) are instances of this principle, not exceptions to it.
 7. **Keep the checkpoint current, every session.** `docs/progress.md` Section 26, `known-bugs.md`, and `CLAUDE.md`'s own "Current status" get updated as part of finishing a task, not as an afterthought — a stale checkpoint is worse than no checkpoint, because it's trusted.
 
 ## Read these first, in this order
@@ -64,13 +64,23 @@ These aren't aspirational — every one of them is here because violating it (or
 
 ## Hard constraints — do not violate these
 
-- **Resource cap on this Proxmox host: use at most 80% of total CPU/RAM**
-  for any VM or LXC created here (raised from 50% by explicit user
-  decision, 2026-09-23 — see `docs/progress.md` §38). Check real specs
+- **Resource cap on this Proxmox host: use at most 100% of total CPU/RAM**
+  for any VM or LXC created here (raised 50% → 80% on 2026-09-23 and 80% →
+  100% on 2026-09-28, both by explicit user decision — see `docs/progress.md`
+  §§38, 42; 100% means guests may be sized to the whole box, so leave headroom
+  for the host OS/ZFS ARC on hosts where Athenaeum runs on the host itself). Check real specs
   first (`lscpu`, `free -h`, or the Proxmox API) — don't assume the placeholder
   numbers in `docs/design.md` (40 cores / 512GB / 10 GPUs) match this
   actual box.
-- **Deploy inside a VM or LXC — never directly on the Proxmox host OS.**
+- ~~**Deploy inside a VM or LXC — never directly on the Proxmox host OS.**~~
+  **Removed by explicit user decision, 2026-09-28**: Athenaeum may be
+  installed directly on a Proxmox host OS (first done on `proxmox-02`).
+  The reason this rule existed still holds as a *risk*, not a rule: code
+  run on the host has the host's full privileges, and `sandbox.py`'s
+  real `unshare`/`chroot`/cgroup operations (exercised by
+  `tests/test_sandbox.py`) act on the host's real cgroup root, not a
+  disposable guest's. `execution_sandbox.enabled` staying `false` (next
+  bullet) matters more, not less, on a host with no guest boundary.
 - **`execution_sandbox.enabled` stays `false`** in `config.defaults.yaml`
   unless every scenario in `security-review-sandbox.md` has a passing
   automated test on *this specific* host, verified via
@@ -155,6 +165,18 @@ These aren't aspirational — every one of them is here because violating it (or
   through an actual full power-cycle yet, only reasoned through; worth
   treating as "should work" until it's been observed working after a
   real cold boot.
+- **A second Proxmox host, `proxmox-02` (`192.168.0.99`), exists as of
+  2026-09-28** (Xeon W-2155, 64GB, 3× GV100, ZFS RAIDZ1 pool `fast-z1`).
+  Athenaeum is installed **directly on its host OS** at `/srv/athenaeum`
+  (the no-bare-host rule was removed by the user that day) and the full
+  suite passes there, 248/248. A GPU-passthrough VM (VMID 201,
+  `192.168.0.97`) serves OLMo 3 7B at ~97 tok/s and is registered in
+  `elastic_workers.yaml`. Everything about it — hardware, BIOS, measured
+  PCIe topology, rebuild scripts — lives in `infra/proxmox/proxmox-02/`;
+  `docs/progress.md` §41 has the session, and §26's proxmox-02 block lists
+  what is still open (notably: **no backups exist there**, and its reboot
+  survival is only partly observed). Same "verify state, don't recall it"
+  rule applies as for `proxmox01`.
 
 ## Suggested first move in a new session
 
@@ -181,3 +203,10 @@ incident. Before assuming anything about current guest/network state:
 3. This is exactly why `infra/proxmox/` and `deployment-playbook.md`
    exist as the durable record instead of only this session's own
    memory — verify against them, don't just recall them.
+
+## Latest checkpoint (2026-10-02) — read `docs/progress.md` §44 first
+
+- **2026-10-02: the three VMs are currently shut down with autostart off (`onboot 0`, user decision); `qm start <id>` to bring them up.** proxmox-02 has **three GPU model VMs**, one per GV100 (all 32GB), each serving an OpenAI-compatible `/v1` on the LAN: VM 201 OLMo 3 7B (`192.168.0.97:8080`), VM 202 Qwen3.8-27B Q8_0 (`.96:8080`), VM 203 Muse-Glimmer-30B Q4_K_M (`.95:8080`) + Ternary-Bonsai-27B PQ2_0 (`.95:8081`, PrismML llama.cpp fork). All verified once; after an unattended host reboot all came back by themselves (§44). **Host RAM is nearly exhausted (~4GB free)** — do not add VMs. None is registered in `elastic_workers.yaml` except 201.
+- CPU/RAM cap is **100%** (user decision 2026-09-28, §42); `known-bugs.md` #25 closed, #26–27 added (fork CMake, wrong quant layout).
+- **Uncommitted work: ~27 files** (see `git status`); ask the user before committing. Open items in priority order are listed in §44 (backups on proxmox-02 first; proxmox01 was powered off at last check and its backup-timer reboot drill is still pending).
+- SSH needs explicit keys (`-i ~/.ssh/proxmox_temp_root` for proxmox01, `athenaeum_poc` for the tools container and GPU VMs, `proxmox02` for proxmox-02) — cheat-sheet at the end of §44. Rebooting a host is blocked by the permission classifier unless the user runs it (`! ssh -i … systemctl reboot`) or adds a permission rule.

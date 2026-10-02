@@ -140,3 +140,16 @@ Verified against this same container (not a different environment, not a hypothe
 Note on verification method: this Windows-based session has no local Python/Linux environment to run the full `pytest -q` suite (which needs root + `unshare`/`chroot`/cgroups). The fix was instead verified by pushing the modified `sandbox.py` into this same LXC and directly exercising `run_sandboxed()` and `_cgroup_pids_version()` there — the real code, the real target environment, just not through the pytest harness. `tests/test_sandbox.py` gained the corresponding pytest-native coverage (`test_cgroup_pids_version_*`, no root required for those specific tests) for whenever this runs in a normal CI/dev environment; re-run the actual suite there before trusting this beyond what's confirmed above.
 
 With this fix, fork containment is confirmed working on **both** cgroups v1 (original reference environment) and v2 (this Proxmox LXC) hosts. The CPU-time gap (7.1) remains the sole open item, mitigated by wall-clock `timeout -s KILL` as before.
+
+#### 2026-09-28 — `proxmox-02` (Proxmox VE 9.2.20 **bare host OS**, no container), cgroups v2 unified hierarchy, kernel `7.0.14-19-pve`, Python 3.13.5
+
+`scripts/preflight_check.py` run as root directly on the host (this deployment target exists because the user removed the "never on the Proxmox host" rule on 2026-09-28 — see `CLAUDE.md`). Results:
+
+| Scenario | Result | Notes |
+|---|---|---|
+| cgroups `pids` controller availability | PASS | v2; the host root's `subtree_control` already listed `pids` |
+| 1, 2/3, 5b, 6, 7, 8 | PASS | |
+| 4 — fork containment via cgroups | **FAIL — preflight-script gap, not a containment failure** | The script's `scenario_fork_containment` still only looks for the cgroups **v1** path and reports "no cgroups v1 'pids' controller — cannot test the real mechanism." It never exercised v2 here. `tests/test_sandbox.py::test_scenario_4_fork_containment_via_cgroups` — a real `os.fork()` loop against the sandbox's pids limit — **passed on this same host**. `known-bugs.md` #25, unfixed. |
+| Minimal repro — `RLIMIT_CPU` under `unshare --fork` | **PASS (differs from the earlier LXC result)** | `unshare --fork` survived `SIGXCPU` (`rc=-9`). The 2026-09-21 run on `proxmox01`'s LXC failed this exact repro on kernel `7.0.14-17-pve`. What changed is **not isolated**: it could be bare host vs. container, the `-17` vs `-19` kernel build, or a `util-linux` difference — I did not test which. So this is one more observation, not evidence that `RLIMIT_CPU` is now safe to rely on; per 7.3 it only upgrades *this* environment, and the wall-clock kill stays as the backstop. |
+
+Full pytest suite on the host: `tests/test_sandbox.py` 13/13, whole suite 248/248. Sandbox tests were run last and under a hard `timeout`, since on a host (unlike a disposable guest) the sandbox's cgroup and namespace operations act on the real system. No leftover `athenaeum*` cgroups afterward. `execution_sandbox.enabled` remains `false`.

@@ -11,7 +11,7 @@
 ## 0. Before anything: hard constraints (apply regardless of project)
 
 - **Resource cap:** default to 50% of the host's real CPU/RAM for any new VM/LXC, verified against actual specs (Section 2), not assumed. This is a testing-phase default — confirm with the user before assuming a higher cap applies (it may, once a project is "going live"; that's a per-project decision, not a host default).
-- **Never deploy workloads directly on the Proxmox host OS.** Everything goes inside a VM or LXC.
+- ~~**Never deploy workloads directly on the Proxmox host OS.** Everything goes inside a VM or LXC.~~ **Removed for the Athenaeum project by explicit user decision, 2026-09-28** (see `CLAUDE.md`). Still the safer default for any *other* project using this playbook — confirm with that project's owner rather than assuming the exception carries over.
 - **Never commit secrets.** The config file in Section 1 holds a live API token secret — it is gitignored from the first commit of any new project, never typed into chat, never pasted into a document that gets published.
 
 ---

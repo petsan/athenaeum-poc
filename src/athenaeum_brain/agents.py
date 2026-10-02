@@ -268,7 +268,7 @@ class MasterOfEngineering:
             subject=task_id,
             statement=f"task '{task_id}': {'implementation verified (PASS)' if passed else 'implementation FAILED verification'}",
             claim_type="executable", confidence=1.0 if passed else 0.0,
-            defeat_condition=f"a failing execution (status={result.status}, returncode={result.returncode}, stderr={result.stderr.strip()[:200]!r})",
+            defeat_condition=f"a failing execution (status={result.status}, returncode={result.returncode}, stderr={result.stderr.strip()[-200:]!r})",
             jurisdiction_check=True,
             supporting_provenance=[f"executed:sandbox_run:{task_id}"],
             serving_model=serving_model,

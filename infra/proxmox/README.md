@@ -57,6 +57,14 @@ To onboard a **new** project onto the existing tools container:
 
 Keep this table current — it's the fastest way to know what should exist before assuming something is missing or extra.
 
+## A second host: `proxmox-02`
+
+A separate, non-clustered Proxmox host (Xeon W-2155, 64GB, 3× Quadro GV100) was built 2026-09-28. It is documented in its own directory, `proxmox-02/` — see `proxmox-02/README.md` for the hardware, BIOS settings, measured PCIe topology, and access model, and its numbered scripts (`10-` GPU passthrough, `11-` ZFS pool, `20-`/`21-` GPU model-server VM) for the rebuild recipe. Everything above this section describes `proxmox01`; the scripts in this directory that hardcode `proxmox01`'s node name or `local-thin-multi` (notably `00-bootstrap-identity.sh`) have **not** been run against `proxmox-02` and would need parameterizing first.
+
+| VMID | Hostname | IP | Purpose | Notes |
+|---|---|---|---|---|
+| 201 | `athenaeum-gpu-gv100` | 192.168.0.97 | GPU-backed llama.cpp model server (elastic GPU worker) | VM, one GV100 passed through; on `fast-z1` |
+
 ## Every guest carries its purpose/lifetime in its own Notes field
 
 `01-create-tools-container.sh` and `03-create-project-guest.sh` both set the LXC `description` field (the "Notes" box in the Proxmox UI's guest summary) at creation time — purpose, expected lifetime, tier (if any), and creation timestamp — via `TOOLS_DESCRIPTION`/`GUEST_DESCRIPTION` (or the `GUEST_PURPOSE`/`GUEST_LIFETIME` pair that builds `03-`'s default). This is deliberately redundant with this README's own inventory table above: the table can go stale between rebuilds, but the Notes field lives on the guest itself and survives even if this file isn't updated — `pct config <vmid>` or the Proxmox UI is always a second, independent source of truth for "why does this exist and is it safe to destroy." Guests 104/106 had this applied retroactively on 2026-09-22 (they predate this convention); any future manual `pct create`/`pct set` should set `--description` too, not just guests created through these scripts.

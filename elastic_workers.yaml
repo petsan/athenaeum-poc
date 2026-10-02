@@ -18,3 +18,10 @@ workers:
   - name: petsa-desktop-3070ti
     endpoint: http://192.168.0.85:8090
     models: [olmo3-7b]
+  # proxmox-02's GV100 VM (VMID 201): a Proxmox VM with a GPU passed through,
+  # built by infra/proxmox/proxmox-02/20-*.sh + 21-*.sh. Unlike the desktop
+  # above this one is meant to be up long-term, but it's still listed here
+  # the same way -- health-checked live on every call, never assumed up.
+  - name: proxmox02-gv100
+    endpoint: http://192.168.0.97:8080
+    models: [olmo3-7b]

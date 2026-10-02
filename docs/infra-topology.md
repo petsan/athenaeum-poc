@@ -31,8 +31,8 @@ predate this convention and aren't retrofitted into it.
   *Proxmox-hosted* guests specifically; the elastic pool is a genuinely
   separate topology, not a stretched XLarge tier pretending to be a GPU
   slot.
-- **Hard cap raised 2026-09-23 (explicit user decision, was 50%):** at most
-  80% of the host's real CPU/RAM for anything created here (`CLAUDE.md`),
+- **Hard cap raised 2026-09-23 to 80% (was 50%), then to 100% on 2026-09-28 (explicit user decisions):** at most
+  100% of the host's real CPU/RAM for anything created here (`CLAUDE.md`). The figures below were computed at the 80% cap (proxmox01 ceiling 32 threads / ~402GB); at 100% the raw totals apply (40 threads / ~503GB) —
   confirmed specs: 2× Xeon E5-2690 v2 = 40 threads, ~503GB RAM →
   **budget ceiling of 32 threads / ~402GB across every guest**, not per
   guest. As of that same date, nine guests (104, 106, plus the seven
@@ -139,5 +139,5 @@ speculative infrastructure ahead of a real need for it.
   provisioning them; that's a separate decision for whenever real load
   justifies it.
 - ~~Raising the 50% resource cap — out of scope...~~ **Done, 2026-09-23**:
-  raised to 80% by explicit user decision — see `CLAUDE.md`'s hard
+  raised to 80% (later 100%, 2026-09-28) by explicit user decision — see `CLAUDE.md`'s hard
   constraints and §1 above for the recomputed budget.
