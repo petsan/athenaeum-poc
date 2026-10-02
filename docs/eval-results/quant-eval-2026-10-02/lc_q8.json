@@ -1,0 +1,98 @@
+{
+ "label": "q8_0",
+ "url": "http://192.168.0.96:8081",
+ "tokens_per_sentence": 22.96,
+ "wall_seconds": 1060,
+ "rows": [
+  {
+   "target": 16000,
+   "depth": 0.1,
+   "ok": true,
+   "answer": "INDIGO-8316",
+   "gold": "INDIGO-8316",
+   "prompt_tokens": 16155,
+   "prefill_tok_s": 407,
+   "seconds": 59.5
+  },
+  {
+   "target": 16000,
+   "depth": 0.5,
+   "ok": true,
+   "answer": "TEAL-6142",
+   "gold": "TEAL-6142",
+   "prompt_tokens": 16116,
+   "prefill_tok_s": 747,
+   "seconds": 26.2
+  },
+  {
+   "target": 16000,
+   "depth": 0.9,
+   "ok": true,
+   "answer": "IVORY-4190",
+   "gold": "IVORY-4190",
+   "prompt_tokens": 16130,
+   "prefill_tok_s": 721,
+   "seconds": 28.0
+  },
+  {
+   "target": 64000,
+   "depth": 0.1,
+   "ok": true,
+   "answer": "AMBER-5383",
+   "gold": "AMBER-5383",
+   "prompt_tokens": 64359,
+   "prefill_tok_s": 630,
+   "seconds": 107.9
+  },
+  {
+   "target": 64000,
+   "depth": 0.5,
+   "ok": true,
+   "answer": "INDIGO-3731",
+   "gold": "INDIGO-3731",
+   "prompt_tokens": 64242,
+   "prefill_tok_s": 71,
+   "seconds": 1000.1
+  },
+  {
+   "target": 64000,
+   "depth": 0.9,
+   "ok": true,
+   "answer": "IVORY-5301",
+   "gold": "IVORY-5301",
+   "prompt_tokens": 64353,
+   "prefill_tok_s": 632,
+   "seconds": 109.5
+  },
+  {
+   "target": 120000,
+   "depth": 0.1,
+   "ok": true,
+   "answer": "MARBLE-8470",
+   "gold": "MARBLE-8470",
+   "prompt_tokens": 120510,
+   "prefill_tok_s": 496,
+   "seconds": 251.8
+  },
+  {
+   "target": 120000,
+   "depth": 0.5,
+   "ok": true,
+   "answer": "JADE-8116",
+   "gold": "JADE-8116",
+   "prompt_tokens": 120540,
+   "prefill_tok_s": 493,
+   "seconds": 254.7
+  },
+  {
+   "target": 120000,
+   "depth": 0.9,
+   "ok": true,
+   "answer": "ONYX-6450",
+   "gold": "ONYX-6450",
+   "prompt_tokens": 120650,
+   "prefill_tok_s": 493,
+   "seconds": 256.2
+  }
+ ]
+}

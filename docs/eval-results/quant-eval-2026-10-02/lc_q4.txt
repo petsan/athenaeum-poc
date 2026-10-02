@@ -1,0 +1,11 @@
+== q4_k_m  wall 1680s  (23.0 tok/sentence)
+  ~ 16k depth 10%  PASS  prompt=16155 prefill=495 tok/s 40.2s ans='INDIGO-8316'
+  ~ 16k depth 50%  PASS  prompt=16116 prefill=268 tok/s 89.7s ans='TEAL-6142'
+  ~ 16k depth 90%  PASS  prompt=16130 prefill=456 tok/s 42.4s ans='IVORY-4190'
+  ~ 64k depth 10%  PASS  prompt=64359 prefill=400 tok/s 168.7s ans='AMBER-5383'
+  ~ 64k depth 50%  PASS  prompt=64242 prefill=44 tok/s 1590.6s ans='INDIGO-3731'
+  ~ 64k depth 90%  PASS  prompt=64353 prefill=400 tok/s 173.0s ans='IVORY-5301'
+  ~120k depth 10%  PASS  prompt=120510 prefill=308 tok/s 405.4s ans='MARBLE-8470'
+  ~120k depth 50%  PASS  prompt=120540 prefill=307 tok/s 408.6s ans='JADE-8116'
+  ~120k depth 90%  PASS  prompt=120650 prefill=313 tok/s 403.5s ans='ONYX-6450'
+  passed 9/9

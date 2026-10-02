@@ -59,3 +59,5 @@ Preflight (`scripts/preflight_check.py`) on this host: everything passes except 
 - 4TB SATA SSD not installed; BIOS SATA controller state above needs fixing first.
 
 > **2026-10-02 update:** VM 202 now holds **all three GPUs** (`hostpci0` `67:00`, `hostpci1` `1f:00`, `hostpci2` `68:00`) and runs Qwen3.8-27B **Q4_K_M** with MTP speculative decoding (`-c 65536 -np 2`), so VMs 201 and 203 cannot start while it runs. Undo with VM 202 stopped: `qm set 202 --delete hostpci1,hostpci2`. Config backups: `/root/backup-pve-config-20261002/` on the host. Details and measurements: `docs/progress.md` §45 addendum.
+
+> **2026-10-02 (later):** VM 202 is the **only VM to run**: 3 GPUs, **46,592MB RAM** (all available less ~10% headroom), two llama-servers (Q4_K_M pinned to GPU 0 on `:8080`, Q8_0 on GPUs 1+2 on `:8081`, `-c 262144 -np 2` each, MTP). VMs 201 and 203 are on **cold standby** (stopped, `onboot 0`, configs untouched). Revive one: `qm shutdown 202; qm set 202 --delete hostpci1,hostpci2; qm start <id>`. VM 202 does not autostart with the host.
