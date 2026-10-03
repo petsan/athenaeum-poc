@@ -212,6 +212,6 @@ incident. Before assuming anything about current guest/network state:
 - SSH needs explicit keys (`-i ~/.ssh/proxmox_temp_root` for proxmox01, `athenaeum_poc` for the tools container and GPU VMs, `proxmox02` for proxmox-02) — cheat-sheet at the end of §44. Rebooting a host is blocked by the permission classifier unless the user runs it (`! ssh -i … systemctl reboot`) or adds a permission rule.
 
 ## Rules & latest decisions (2026-10-03)
-- **VMID ranges (user rule): proxmox-01 uses VMIDs 100–199.** (proxmox-02's existing VM is 202; proxmox-03 has no VMs yet — ranges for those two weren't specified.)
+- **VMID ranges (user rule): proxmox-01 = 100–199, proxmox-02 = 200–299, proxmox-03 = 300–399.** (proxmox-02's only VM is 202; proxmox-03 has none yet.)
 - **proxmox-02: VMs 201 and 203 were destroyed (user decision); only VM 202 remains** (Qwen3.8-27B Q4_K_M `:8080` + Q8_0 `:8081`). The standby/revive notes above about 201/203 are obsolete. `elastic_workers.yaml`'s `proxmox02-gv100` entry was removed.
 - **proxmox-03 (new, `192.168.0.97`; same IP VM 201 used)**: E5-2697v4, 128GB, 4× Maxwell M6000 24GB, one 512GB NVMe, passthrough working, wipeable. Key `~/.ssh/proxmox03` generated; access pending the user installing it. User's summary of its Gemini-made setup is still to come.
