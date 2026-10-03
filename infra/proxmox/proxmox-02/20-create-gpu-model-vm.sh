@@ -70,7 +70,7 @@ Created: $(date -u +%Y-%m-%dT%H:%MZ)"
 qm set "$VMID" --args "-fw_cfg name=opt/ovmf/X-PciMmio64Mb,string=131072"
 i=0
 for slot in $GPU_PCI; do
-    qm set "$VMID" --hostpci${i} "${slot},pcie=1"
+    qm set "$VMID" --hostpci${i} "${slot},pcie=1${HOSTPCI_OPTS:-}"   # e.g. HOSTPCI_OPTS=,rombar=0 (needed on proxmox-03: OVMF hangs on option ROMs when the boot GPU is combined with 2+ others)
     i=$((i + 1))
 done
 
