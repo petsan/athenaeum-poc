@@ -33,15 +33,19 @@ IMG_DIR=/root/vm-images
 [ -r "$PUBKEY_FILE" ] || { echo "cannot read $PUBKEY_FILE" >&2; exit 1; }
 qm status "$VMID" >/dev/null 2>&1 && { echo "VM $VMID already exists" >&2; exit 1; }
 
+# GPU_PCI may be ONE slot or a SPACE-SEPARATED LIST (e.g. "0000:05:00 0000:06:00") --
+# every listed GPU goes into this one VM as hostpci0, hostpci1, ...
 echo "== GPU guards for ${GPU_PCI} =="
-dev="/sys/bus/pci/devices/${GPU_PCI}.0"
-[ -e "$dev" ] || { echo "no PCI device ${GPU_PCI}.0" >&2; exit 1; }
-[ "$(basename "$(readlink -f "$dev/driver")")" = vfio-pci ] || { echo "REFUSING: ${GPU_PCI}.0 is not bound to vfio-pci (run 10-gpu-passthrough.sh and reboot)" >&2; exit 1; }
-if [ "$(cat "$dev/boot_vga")" != 0 ]; then
-    [ "${ALLOW_BOOT_VGA:-0}" = 1 ] || { echo "REFUSING: ${GPU_PCI}.0 is the boot display GPU; pick another slot (or set ALLOW_BOOT_VGA=1 only after confirming the host needs no console on it -- /proc/fb empty, vfio-pci bound)" >&2; exit 1; }
-    echo "WARNING: passing through the boot-display GPU (ALLOW_BOOT_VGA=1)"
-fi
-echo "ok: bound to vfio-pci, not the boot GPU"
+for slot in $GPU_PCI; do
+    dev="/sys/bus/pci/devices/${slot}.0"
+    [ -e "$dev" ] || { echo "no PCI device ${slot}.0" >&2; exit 1; }
+    [ "$(basename "$(readlink -f "$dev/driver")")" = vfio-pci ] || { echo "REFUSING: ${slot}.0 is not bound to vfio-pci (run 10-gpu-passthrough.sh and reboot)" >&2; exit 1; }
+    if [ "$(cat "$dev/boot_vga")" != 0 ]; then
+        [ "${ALLOW_BOOT_VGA:-0}" = 1 ] || { echo "REFUSING: ${slot}.0 is the boot display GPU; pick another slot (or set ALLOW_BOOT_VGA=1 only after confirming the host needs no console on it -- /proc/fb empty, vfio-pci bound)" >&2; exit 1; }
+        echo "WARNING: ${slot}.0 is the boot-display GPU (ALLOW_BOOT_VGA=1)"
+    fi
+    echo "ok: ${slot}.0 bound to vfio-pci"
+done
 
 echo "== image =="
 mkdir -p "$IMG_DIR"
@@ -64,7 +68,11 @@ Purpose: elastic GPU worker for model-backed tests; falls back to CPU guests whe
 Lifetime: long-lived on proxmox-02; rebuild via infra/proxmox/proxmox-02/20-*.sh + 21-*.sh.
 Created: $(date -u +%Y-%m-%dT%H:%MZ)"
 qm set "$VMID" --args "-fw_cfg name=opt/ovmf/X-PciMmio64Mb,string=131072"
-qm set "$VMID" --hostpci0 "${GPU_PCI},pcie=1"
+i=0
+for slot in $GPU_PCI; do
+    qm set "$VMID" --hostpci${i} "${slot},pcie=1"
+    i=$((i + 1))
+done
 
 echo "== import + size disk =="
 qm importdisk "$VMID" "$img" "$STORAGE" >/dev/null
