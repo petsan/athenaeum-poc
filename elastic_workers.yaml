@@ -21,4 +21,3 @@ workers:
   # (Removed 2026-10-03: the proxmox-02 OLMo GPU VM 201 was destroyed at the user's request;
   # its old address 192.168.0.97 is now proxmox-03's. VM 202 serves Qwen3.8-27B and is not
   # registered here -- model_lab_registry.py has no entry for it.)
-    models: [olmo3-7b]
