@@ -1,0 +1,11 @@
+[Unit]
+Description=llama.cpp GPU server -- Qwen3.8-27B Q4_K_M (Athenaeum elastic GPU worker, GV100)
+After=network.target
+
+[Service]
+ExecStart=/opt/llama.cpp/build/bin/llama-server --model /opt/models/Qwen3.8-27B-Q4_K_M.gguf --host 0.0.0.0 --port 8080 -c 65536 -np 2 --n-gpu-layers 999 --jinja
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

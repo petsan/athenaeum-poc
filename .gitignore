@@ -6,3 +6,15 @@ data/demo-run/
 .venv/
 .proxmox.env
 .env
+
+# User rule (2026-10-03): models and images are NEVER pushed unless the user says so.
+# Images may live in the working folder (e.g. docs/images/) but stay local only.
+*.gguf
+*.safetensors
+*.bin
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.webp
+docs/images/

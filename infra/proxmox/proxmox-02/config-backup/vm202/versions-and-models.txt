@@ -1,0 +1,44 @@
+## llama.cpp commit
+fc07d781e61f0d23764394e902b88d26a974e202
+## cmake flags
+CMAKE_BUILD_TYPE:STRING=Release
+CMAKE_CUDA_ARCHITECTURES:UNINITIALIZED=70
+GGML_CUDA:BOOL=ON
+LLAMA_CURL:UNINITIALIZED=OFF
+## nvidia/cuda packages
+firmware-nvidia-gsp 535.309.01-0+deb12u1
+glx-alternative-nvidia 1.2.2
+libcuda1:amd64 535.309.01-0+deb12u1
+libcudart11.0:amd64 11.8.89~11.8.0-5~deb12u1
+libnvidia-cfg1:amd64 535.309.01-0+deb12u1
+libnvidia-ml-dev:amd64 11.8.86~11.8.0-5~deb12u1
+libnvidia-ml1:amd64 535.309.01-0+deb12u1
+libnvidia-nvvm4:amd64 535.309.01-0+deb12u1
+libnvidia-pkcs11-openssl3:amd64 535.309.01-0+deb12u1
+libnvidia-ptxjitcompiler1:amd64 535.309.01-0+deb12u1
+nvidia-alternative 535.309.01-0+deb12u1
+nvidia-cuda-dev:amd64 11.8.89~11.8.0-5~deb12u1
+nvidia-cuda-gdb 11.8.86~11.8.0-5~deb12u1
+nvidia-cuda-toolkit 11.8.89~11.8.0-5~deb12u1
+nvidia-cuda-toolkit-doc 11.8.0-5~deb12u1
+nvidia-installer-cleanup 20220217+3~deb12u1
+nvidia-kernel-common 20220217+3~deb12u1
+nvidia-kernel-dkms 535.309.01-0+deb12u1
+nvidia-kernel-support 535.309.01-0+deb12u1
+nvidia-legacy-check 535.309.01-0+deb12u1
+nvidia-modprobe 535.309.01-0+deb12u1
+nvidia-opencl-common 535.309.01-0+deb12u1
+nvidia-opencl-dev:amd64 11.8.89~11.8.0-5~deb12u1
+nvidia-opencl-icd:amd64 535.309.01-0+deb12u1
+nvidia-openjdk-8-jre 9.+8u372-ga-1~11.8.0-5~deb12u1
+nvidia-persistenced 535.171.04-1~deb12u1
+nvidia-profiler 11.8.87~11.8.0-5~deb12u1
+nvidia-smi 535.309.01-0+deb12u1
+nvidia-support 20220217+3~deb12u1
+nvidia-visual-profiler 11.8.87~11.8.0-5~deb12u1
+## model files (names/sizes only)
+/opt/models:
+-rw-r--r-- 1 root root 16810714336 Oct  2 16:15 Qwen3.8-27B-Q4_K_M.gguf
+-rw-r--r-- 1 root root 29047084256 Sep 29 04:37 Qwen3.8-27B-Q8_0.gguf
+/opt/models/MTP:
+-rw-r--r-- 1 root root 1369590656 Oct  2 16:48 mtp-Qwen3.8-27B-Q4_0.gguf

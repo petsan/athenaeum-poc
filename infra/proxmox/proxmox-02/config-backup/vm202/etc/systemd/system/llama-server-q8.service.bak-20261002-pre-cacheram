@@ -1,0 +1,12 @@
+[Unit]
+Description=llama.cpp GPU server -- Qwen3.8-27B Q8_0, GPUs 1+2 (Athenaeum comparison)
+After=network.target
+
+[Service]
+Environment=CUDA_VISIBLE_DEVICES=1,2
+ExecStart=/opt/llama.cpp/build/bin/llama-server --model /opt/models/Qwen3.8-27B-Q8_0.gguf --port 8081 --host 0.0.0.0 -c 262144 -np 2 --n-gpu-layers 999 --jinja --cache-type-k q8_0 --cache-type-v q8_0 --spec-type draft-mtp --spec-draft-model /opt/models/MTP/mtp-Qwen3.8-27B-Q4_0.gguf --spec-draft-n-max 3
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

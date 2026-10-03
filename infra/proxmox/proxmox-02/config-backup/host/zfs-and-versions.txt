@@ -1,0 +1,37 @@
+## zpool status
+  pool: fast-z1
+ state: ONLINE
+config:
+
+	NAME                                                STATE     READ WRITE CKSUM
+	fast-z1                                             ONLINE       0     0     0
+	  raidz1-0                                          ONLINE       0     0     0
+	    nvme-Samsung_SSD_950_PRO_512GB_S2GMNX0H905304E  ONLINE       0     0     0
+	    nvme-Samsung_SSD_950_PRO_512GB_S2GMNX0H701844X  ONLINE       0     0     0
+	    nvme-Samsung_SSD_950_PRO_512GB_S2GMNX0H705539L  ONLINE       0     0     0
+	    nvme-Samsung_SSD_950_PRO_512GB_S2GMNX0H705553H  ONLINE       0     0     0
+
+errors: No known data errors
+
+## zfs local properties
+NAME                      PROPERTY                VALUE                   SOURCE
+fast-z1                   mountpoint              none                    local
+fast-z1                   compression             lz4                     local
+fast-z1                   atime                   off                     local
+fast-z1                   xattr                   sa                      local
+fast-z1                   dnodesize               auto                    local
+fast-z1                   acltype                 posix                   local
+fast-z1/athenaeum         mountpoint              /srv/athenaeum          local
+fast-z1/models            recordsize              1M                      local
+fast-z1/models            mountpoint              /srv/models             local
+fast-z1/vm-202-cloudinit  volsize                 4M                      local
+fast-z1/vm-202-disk-0     volsize                 1M                      local
+fast-z1/vm-202-disk-1     volsize                 96G                     local
+
+## qm list
+      VMID NAME                 STATUS     MEM(MB)    BOOTDISK(GB) PID       
+       202 athenaeum-gpu-qwen3-8-27b running    46592             96.00 88311     
+
+## pveversion
+pve-manager/9.2.20/49318c671b82f31e (running kernel: 7.0.14-19-pve)
+7.0.14-19-pve
