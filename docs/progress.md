@@ -551,3 +551,4 @@ Started the §26 "planned upgrade". **VM 202** `athenaeum-gpu-qwen3-8-27b` creat
 
 **2026-10-03 (user decisions):** destroyed VMs **201 and 203** on proxmox-02 (`qm destroy --purge`, no leftover volumes; there is no VM 100 there); **VM 202 is the only VM left**. `elastic_workers.yaml`'s `proxmox02-gv100` entry removed (its address `192.168.0.97` now belongs to the new host **proxmox-03**: E5-2697v4, 128GB, 4× Maxwell M6000 24GB, one 512GB NVMe, passthrough working, wipeable; key `~/.ssh/proxmox03` generated, access pending). **New rule: proxmox-01 VMIDs are 100–199.** The 201/203 cold-standby notes in §45 addenda are obsolete.
 **VMID rule extended (2026-10-03): proxmox-02 = 200–299, proxmox-03 = 300–399 (proxmox-01 = 100–199).**
+**IP rule (2026-10-03): 192.168.0.100–110 reserved for Proxmox hosts only; no guests there. proxmox-01 = .100; proxmox-02 (.99) and proxmox-03 (.97) are outside the range.**
