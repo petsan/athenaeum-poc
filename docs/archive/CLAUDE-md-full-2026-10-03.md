@@ -1,0 +1,230 @@
+# Athenaeum
+
+A slow, deep-reasoning, memory-resident, evolving knowledge system split into
+**Body** (infrastructure/elasticity) and **Brain** (cognitive logic: six
+classical Master Agents plus World News, a seventh, deliberately added
+2026-09-22 — see `brain-design.md` Section 2.0b). This repo is a
+proof-of-work implementation, not the finished system — read
+`docs/progress.md` before doing anything else.
+
+## Guiding principles
+
+These aren't aspirational — every one of them is here because violating it (or nearly violating it) actually cost real time or nearly caused real damage somewhere in this project's history. Re-read this list, not just the hard constraints below, before doing anything nontrivial.
+
+1. **Verify empirically, don't trust — not even your own prior notes.** "Should work" isn't "works." A host that's routinely powered off between sessions means every session starts by checking real state, not recalling it — see "Suggested first move" below. `known-bugs.md` exists specifically because "it mostly worked" was repeatedly mistaken for "it worked as designed" (bug #19: a script that silently corrupted storage config still produced a working backup).
+2. **Least privilege by default, expanded only when a specific error demands it.** Every scoped Proxmox token/role here started minimal and grew one privilege at a time, each addition traceable to an actual permission-denied error, never "grant broadly to save a round trip." `Sys.Modify` is deliberately withheld from the automation token even where it would be convenient — the two operations that genuinely need it (identity bootstrap, host-level firewall persistence) are host-only scripts run by a human, on purpose.
+3. **Root-cause, not workaround.** Isolate to a minimal reproduction before accepting a fix (the `RLIMIT_CPU`/`unshare --fork` crash was proven with a two-line repro before trusting the finding; the Docker `FORWARD`-chain diagnosis came from watching actual packets on the wire, not guessing). A fix that "seems to work" without a known mechanism is a coincidence until proven otherwise.
+4. **Infrastructure and decisions live in the repo (or memory), not just in chat.** Nothing about this project's Proxmox setup, its known bugs, or its open work should depend on any specific conversation surviving — `deployment-playbook.md`, `infra/proxmox/`, `known-bugs.md`, and `docs/progress.md` are the actual source of truth, kept current as work happens, not reconstructed from memory after the fact.
+5. **State scope honestly — what's fixed, what's tested, and what's still just reasoned-through.** A fix gets called "closed" only once it's been observed working, not once it's been designed correctly (see the cold-boot checklist item this principle exists to unblock). Backup/DR claims say plainly what they don't cover (no off-host protection here) rather than letting "backups exist" be read as "fully protected."
+6. **Confirm before consequential or hard-to-reverse actions**, especially anything touching shared state, security posture, or broad credentials — this repo's own hard constraints below (resource caps, sandbox stays disabled; the former no-bare-host-deploys rule was removed by the user on 2026-09-28) are instances of this principle, not exceptions to it.
+7. **Keep the checkpoint current, every session.** `docs/progress.md` Section 26, `known-bugs.md`, and `CLAUDE.md`'s own "Current status" get updated as part of finishing a task, not as an afterthought — a stale checkpoint is worse than no checkpoint, because it's trusted.
+
+## Read these first, in this order
+
+1. **`docs/progress.md`** — resumable session-history checkpoint. What's
+   built, what's tested, what's still open. This is the single most
+   important file in the repo for picking up cold — **Section 26 is a
+   maintained checklist of actual open work**, not scattered prose; check
+   there first for "what's next" instead of re-deriving it from the
+   narrative sections above it.
+2. **`known-bugs.md`** — twenty real bugs hit during development, each
+   with root cause and generalizable lesson. Read the relevant section
+   before touching sandboxing/namespace code, checkpoint/content-addressed
+   storage, any narrated demo script (`demo.py`, `demo_brain.py`), or any
+   Proxmox guest-networking issue (entry 18 — check `iptables -L FORWARD`
+   before any other theory).
+3. **`docs/body-design.md`** and **`docs/brain-design.md`** — the actual
+   design intent. The code in `src/athenaeum_body/` and `src/athenaeum_brain/`
+   implements a deliberate subset of these; when in doubt about *why*
+   something is shaped a certain way, or what a not-yet-built piece is
+   supposed to become, these are the source of truth, not the code.
+4. **`security-review-sandbox.md`** — required reading before any change
+   to `src/athenaeum_body/sandbox.py`. `execution_sandbox.enabled` stays
+   `false` until every scenario in this document passes on the actual
+   target environment — re-run `scripts/preflight_check.py` on any new
+   host before assuming the existing scorecard carries over.
+5. **`acceptance-criteria.md`**, **`schemas.md`**, **`tech-stack.md`** —
+   supporting reference: what "done" means for the highest-risk tasks,
+   field-level shapes for the core stores, and the committed tech
+   decisions (Python, flat-file CAS, SHA-256, YAML config).
+6. **`deployment-playbook.md`** and **`infra/proxmox/`** — required
+   reading before any new Proxmox access setup or new guest creation on
+   this host. The playbook is the narrative; `infra/proxmox/` is the same
+   thing as executable scripts (`README.md` there maps each script to
+   the playbook section it implements). Distilled from the first live
+   deployment session (see `known-bugs.md` 17–18): scoped token/role/ACL
+   creation (including the token+user grant-pairing gotcha and the
+   `VM.Audit` omission that silently broke guest listing), the
+   standing-guest template, and the mandatory `iptables -L FORWARD` check
+   before chasing any other networking theory. A shared, multi-project
+   tools container (`athenaeum-tools`, `192.168.0.151`) now holds a CLI
+   (`pve-ops`) with credentials preinstalled — prefer
+   `ssh root@192.168.0.151 pve-ops -p athenaeum <command>` over re-deriving
+   raw API calls for routine operations.
+
+## Hard constraints — do not violate these
+
+- **Resource cap on this Proxmox host: use at most 100% of total CPU/RAM**
+  for any VM or LXC created here (raised 50% → 80% on 2026-09-23 and 80% →
+  100% on 2026-09-28, both by explicit user decision — see `docs/progress.md`
+  §§38, 42; 100% means guests may be sized to the whole box, so leave headroom
+  for the host OS/ZFS ARC on hosts where Athenaeum runs on the host itself). Check real specs
+  first (`lscpu`, `free -h`, or the Proxmox API) — don't assume the placeholder
+  numbers in `docs/design.md` (40 cores / 512GB / 10 GPUs) match this
+  actual box.
+- ~~**Deploy inside a VM or LXC — never directly on the Proxmox host OS.**~~
+  **Removed by explicit user decision, 2026-09-28**: Athenaeum may be
+  installed directly on a Proxmox host OS (first done on `proxmox-02`).
+  The reason this rule existed still holds as a *risk*, not a rule: code
+  run on the host has the host's full privileges, and `sandbox.py`'s
+  real `unshare`/`chroot`/cgroup operations (exercised by
+  `tests/test_sandbox.py`) act on the host's real cgroup root, not a
+  disposable guest's. `execution_sandbox.enabled` staying `false` (next
+  bullet) matters more, not less, on a host with no guest boundary.
+- **`execution_sandbox.enabled` stays `false`** in `config.defaults.yaml`
+  unless every scenario in `security-review-sandbox.md` has a passing
+  automated test on *this specific* host, verified via
+  `scripts/preflight_check.py`, not assumed from the reference
+  environment's scorecard.
+- **No paid or metered external services, ever** — this is a hard
+  invariant enforced in `config.py` itself (`disallow_paid_apis`), not
+  just a policy.
+- Before marking any task "done," run the actual test suite
+  (`pytest -q`, currently 248/248) and update `docs/progress.md` — don't
+  let the checkpoint file go stale.
+
+## Current status (see `docs/progress.md` for full detail)
+
+- Body: storage/checkpoint/scheduler/concurrency/ingestion (now including
+  a real `fetch_url()` network fetch, not just `FixtureSource`)/model-
+  serving-router/sandbox/distributed worker dispatch (`distributed_worker.py`,
+  real cross-process, network-based, proven against an actual killed
+  worker process) all implemented and tested against everything this
+  sandboxed dev environment could validate.
+- Brain: deliberation loop, all **seven** Master Agents now implemented
+  as deterministic toy agents (Mathematics, Logic, Engineering, Physics,
+  Philosophy, Theology, World News — see brain-design.md Section 2.0b for
+  the seventh's rationale), registered via `agents.py`'s `@master_agent`
+  decorator so adding another domain needs no edit to `rounds.py`,
+  Reputability Engine,
+  Model Fitness tracking, knowledge consolidation, domain fidelity
+  monitoring, Output Types (Research/Forecast/Recommendation, §5.4), Human
+  Input Pipeline and governance (§11), Content Integrity enforcement
+  (§12, verified by construction), and Evaluation Infrastructure (§9b —
+  ground-truth benchmarks, a 6-case adversarial suite, calibration
+  tracking, baselines/ablations, non-compensatory integrity gates) all
+  implemented. Engineering's `verify_code()`/`verify_claim()` run real,
+  unmocked code in the Body's sandbox — the first Master Agent capability
+  that's genuinely real end-to-end, not a stand-in. No real LLM backend
+  yet for most reasoning — `model_serving.py` now has a real
+  `LlamaCppBackend` (2026-09-23) talking to six live model-lab guests
+  (`infra/proxmox/model-lab/`, one CPU-quantized open-weight model each:
+  OLMo-2-1B, Qwen2.5-Coder-1.5B, Qwen2.5-1.5B, Phi-3.5-mini, Granite-3.1-2B,
+  Mistral-7B-v0.3), proven end-to-end including `evaluation.py`'s
+  previously-blocked B1 baseline. **Six of seven Master Agents now have a
+  real OLMo 3 fallback** (`model_backed_reasoning.py` — swapped from OLMo
+  2 on 2026-09-23, see `docs/progress.md` §38) for when their own
+  narrow deterministic computation finds nothing — Logic is the one
+  deliberate exception (§2.2: never asserts first-order claims, so no
+  fallback path exists for it at all). Deterministic computation still
+  always wins when it finds something; the fallback only fires on a
+  genuine "nothing to say" gap. `docs/infra-topology.md` (brainbox XSmall/Medium/Large/
+  XLarge sizing convention, CPU-RAM-only pending GPU nodes) and
+  `docs/brain-session-log.md` (running decision log) added 2026-09-22 —
+  see `docs/progress.md` §§27–34 for the full session.
+- **A real, elastic GPU worker pool now exists outside the Proxmox host**
+  (`src/athenaeum_body/elastic_workers.py`, `elastic_workers.yaml`,
+  `infra/elastic-workers/windows-gpu-worker/`, 2026-09-23) — independently
+  owned machines (starting with one Windows desktop's RTX 3070 Ti running
+  OLMo 3 7B at ~84 tok/s) that can be brought online/offline at will;
+  health is checked live on every call, never cached, and both
+  `ModelServingLayer.request()` and `model_backed_reasoning.ask_model()`
+  fall back to the CPU model-lab guests transparently the instant a
+  worker goes dark — see `docs/progress.md` §39 and
+  `docs/brain-session-log.md` for the design reasoning.
+- **Proxmox is live and access is set up** (see `deployment-playbook.md`,
+  `infra/proxmox/`, and the project's own memory notes) — a scoped API
+  token, a standing test LXC (VMID 104, `athenaeum-preflight`,
+  `192.168.0.150`, privileged+nesting for sandbox testing) with working
+  SSH, and real specs confirmed (2× Xeon E5-2690 v2, 40 threads, ~504GB
+  RAM, PVE 9.2.20). `scripts/preflight_check.py` has been run for real on
+  this host: `RLIMIT_CPU` still crashes `unshare --fork` here (matches the
+  original reference environment, wall-clock kill remains primary CPU-time
+  enforcement — no code change needed). Fork containment briefly reopened
+  on this host (cgroups v2 only, `sandbox.py` had assumed v1) and is now
+  fixed and re-verified — see `known-bugs.md` entry 17. **Full `pytest -q`
+  suite has been run for real in that LXC — 113/113.**
+- A shared, multi-project tools container (VMID 106, `athenaeum-tools`,
+  `192.168.0.151`) holds `pve-ops`, a CLI with credentials preinstalled;
+  both guests auto-start on host boot (`onboot: 1`); the Docker
+  `FORWARD`-chain networking fix and a daily `vzdump` backup (to `local`,
+  self-pruned to 7 copies) both persist via systemd units. All of this is
+  scripted, not just done once by hand — see `infra/proxmox/README.md`.
+  This host is routinely powered OFF between sessions by design (see
+  "Suggested first move" below) — none of the above has been drilled
+  through an actual full power-cycle yet, only reasoned through; worth
+  treating as "should work" until it's been observed working after a
+  real cold boot.
+- **A second Proxmox host, `proxmox-02` (`192.168.0.99`), exists as of
+  2026-09-28** (Xeon W-2155, 64GB, 3× GV100, ZFS RAIDZ1 pool `fast-z1`).
+  Athenaeum is installed **directly on its host OS** at `/srv/athenaeum`
+  (the no-bare-host rule was removed by the user that day) and the full
+  suite passes there, 248/248. A GPU-passthrough VM (VMID 201,
+  `192.168.0.97`) serves OLMo 3 7B at ~97 tok/s and is registered in
+  `elastic_workers.yaml`. Everything about it — hardware, BIOS, measured
+  PCIe topology, rebuild scripts — lives in `infra/proxmox/proxmox-02/`;
+  `docs/progress.md` §41 has the session, and §26's proxmox-02 block lists
+  what is still open (notably: **no backups exist there**, and its reboot
+  survival is only partly observed). Same "verify state, don't recall it"
+  rule applies as for `proxmox01`.
+
+## Suggested first move in a new session
+
+Read `docs/progress.md`. Proxmox access is already set up (see
+`deployment-playbook.md`); if starting infra work from scratch on a
+*different* host or project, follow that playbook rather than
+re-deriving the setup.
+
+**This Proxmox host is routinely powered OFF between sessions by design**
+(it's a test box, not production — the user turns it off when not
+actively working). This is the normal start-of-session state, not an
+incident. Before assuming anything about current guest/network state:
+1. Check reachability first (`ping 192.168.0.100` or similar) — if it's
+   down, that's expected, not a problem to diagnose. Ask the user to
+   power it on if Proxmox-related work is actually needed this session.
+2. Once it's up, don't trust prior-session memory notes about "what's
+   running" at face value — `onboot: 1` means both guests (104, 106)
+   *should* autostart, and the Docker `FORWARD`-chain fix *should*
+   reapply via its systemd unit, but "should" isn't "verified this
+   boot." Run `infra/proxmox/05-verify.sh` (or the equivalent manual
+   checks: ping the guest, SSH in, check `systemctl status
+   pve-docker-bridge-fix.service`) before building on top of an assumed
+   state.
+3. This is exactly why `infra/proxmox/` and `deployment-playbook.md`
+   exist as the durable record instead of only this session's own
+   memory — verify against them, don't just recall them.
+
+## Latest checkpoint (2026-10-02) — read `docs/progress.md` §44 first
+
+- **2026-10-02 (latest): VM 202 is the ONLY VM to run (user decision) — all 3 GPUs, 45.5GiB RAM (host headroom ~10%), two servers: Qwen3.8-27B Q4_K_M pinned GPU0 `http://192.168.0.96:8080/v1` (~51 tok/s) and Q8_0 on GPUs 1+2 `:8081` (~44.5 tok/s), both MTP, 131k tokens/slot × 2 slots. VMs 201/203 are on cold standby (stopped, onboot 0, configs untouched); to revive one: `qm shutdown 202; qm set 202 --delete hostpci1,hostpci2; qm start <id>`. VM 202 does not autostart with the host (`qm start 202`). Config backups: `/root/backup-pve-config-20261002/` on proxmox-02. See `docs/progress.md` §45 addenda.** Older note: all VMs `onboot 0`. proxmox-02 has **three GPU model VMs**
+- CPU/RAM cap is **100%** (user decision 2026-09-28, §42); `known-bugs.md` #25 closed, #26–27 added (fork CMake, wrong quant layout).
+- **Committed 2026-10-02 as `3f83a97`** (only the untracked architecture `.jpg` was deliberately left out). Open items in priority order are listed in §44 (backups on proxmox-02 first; proxmox01 was powered off at last check and its backup-timer reboot drill is still pending).
+- SSH needs explicit keys (`-i ~/.ssh/proxmox_temp_root` for proxmox01, `athenaeum_poc` for the tools container and GPU VMs, `proxmox02` for proxmox-02) — cheat-sheet at the end of §44. Rebooting a host is blocked by the permission classifier unless the user runs it (`! ssh -i … systemctl reboot`) or adds a permission rule.
+
+## Rules & latest decisions (2026-10-03)
+- **VMID ranges (user rule): proxmox-01 = 100–199, proxmox-02 = 200–299, proxmox-03 = 300–399.** (proxmox-02's only VM is 202; proxmox-03 has none yet.)
+- **proxmox-02: VMs 201 and 203 were destroyed (user decision); only VM 202 remains** (Qwen3.8-27B Q4_K_M `:8080` + Q8_0 `:8081`). The standby/revive notes above about 201/203 are obsolete. `elastic_workers.yaml`'s `proxmox02-gv100` entry was removed.
+- **proxmox-03 (new, `192.168.0.97`; same IP VM 201 used)**: E5-2697v4, 128GB, 4× Maxwell M6000 24GB, one 512GB NVMe, passthrough working, wipeable. Key `~/.ssh/proxmox03` generated; access pending the user installing it. User's summary of its Gemini-made setup is still to come.
+- **IP reservation (user rule, 2026-10-03): `192.168.0.100`–`192.168.0.110` are reserved for Proxmox hosts only — never assign them to guests/VMs/LXCs.** Today only proxmox-01 (`.100`) is inside the range; proxmox-02 (`.99`) and proxmox-03 (`.97`) are outside it (renumbering them is not done or requested). No existing guest uses `.100`–`.110`.
+- **proxmox-03 verified 2026-10-03:** SSH works (`-i ~/.ssh/proxmox03`; stale known_hosts entry from old VM 201 removed). PVE 9.2.21, kernel 7.0.14-20, 36 threads, 125GB RAM, **no VMs**, storage `local` + `local-lvm` (~365GB). IOMMU is active (61 groups; each M6000 in its own group) but **vfio-pci is NOT bound yet** (GPUs have no driver, audio functions on `snd_hda_intel`; `vfio.conf` IDs present but modules not loaded; no `iommu=pt` on cmdline) — passthrough is unproven until a test VM boots. Gemini's guide (`C:\Users\petsa\Proxmox-9.4-with-4x-M6000-24GB-configuration-doc.txt`) uses VMID 100, which breaks the 300–399 rule; Maxwell = CUDA arch 52 (script 21 defaults to 70).
+- **IP plan (user rule, 2026-10-03, replaces the earlier "100–110 reserved" wording; implemented GRADUALLY as hosts/guests reboot or are rebuilt, nothing renumbered yet):** same `192.168.0.0/24`, no new subnet. **Proxmox hosts: `proxmox-NN` → `192.168.0.(100+N)`, i.e. `.101`–`.110` (proxmox-01..10).** **Guests (VMs/LXCs): `192.168.0.200`–`.254`** (~55 slots; user expects <50). **Rules for new work:** new guests get an address in `.200–.254`; never put a guest in `.100–.110`. **Current addresses that don't yet comply** (migrate when convenient): proxmox-01 `.100`→`.101`, proxmox-02 `.99`→`.102`, proxmox-03 `.97`→`.103`; guests VM 202 `.96`, VMs 301–305 `.90–.94`, tools container `.151`, LXC 104 `.150`, model-lab `.161–.167` → all to `.200–.254`. Migrating a guest touches: cloud-init/netplan IP, `model_lab_registry.py`, `elastic_workers.yaml`, the `pve-ops` registration, script defaults, docs, SSH known_hosts. **User must also keep the router's DHCP pool away from `.100–.110` and `.200–.254`** (or reserve them) so nothing collides.
+- **REMINDER TO USER (their request, 2026-10-03): once the quant benchmarks are done, remind them to check their router's DHCP pool (keep it away from 192.168.0.100–110 and .200–254) so the new IP plan doesn't collide.**
+- **10G host-to-host link (2026-10-03):** proxmox-02 `nic0` ↔ proxmox-03 `nic1` (Intel X550, 10GBASE-T, Cat8 cable) is up at **10,000Mb/s**, point-to-point subnet **`10.10.10.0/24`** (proxmox-02 `10.10.10.2`, proxmox-03 `10.10.10.3`; proxmox-01 would be `.1`), no gateway, NOT in `vmbr0`. Measured: **9.40 Gbit/s** single-stream `iperf3`, 0.09ms ping. Configured in `/etc/network/interfaces` on both (backups `/root/interfaces.bak-20261003-pre10g`); **persistence across a reboot not yet observed.** Note both hosts' LAN uplinks (`vmbr0`) are the *other* X550 ports and run at only 1,000Mb/s to the router. Use `10.10.10.x` for bulk host-to-host transfers (e.g. model files to proxmox-03). Ports were administratively down ("manual", no `auto`) until configured — plugging a cable alone did nothing.
+
+## User decisions, 2026-10-03 (read these)
+- **NEVER push models or images unless the user explicitly says so.** `.gitignore` blocks `*.gguf *.safetensors *.bin *.jpg *.jpeg *.png *.gif *.webp docs/images/`. The architecture diagram lives locally at `docs/images/athenaeum_poc_system_architecture_watermarked_img_7139229381715818852.jpg` (in the folder, ignored by git, not pushed).
+- **Backups: configuration files of VM 202 only** — models are re-downloadable and all other VMs are ephemeral. `infra/proxmox/proxmox-02/40-backup-config.sh` pulls host + VM 202 config (text) into `infra/proxmox/proxmox-02/config-backup/`, versioned in git. Not backed up: model files, VM disks, ZFS data. Re-run the script after changing VM 202 or host config.
+- **Dropped by the user (do not raise again unless asked):** testing the proxmox-01 backup timer / reboot drill; verifying LM Studio against remote endpoints. **Undecided/leave alone:** registering models in `elastic_workers.yaml`. **Not done yet (user said so):** the router DHCP review — still remind after the benchmarks.
+- Junk/finished VMs are deleted: proxmox-03 VMs 302–305 destroyed; VM 301 (4× M6000) kept only until the benchmarks finish, then delete it. proxmox-02 keeps VM 202 only.
+- Benchmark scope widened: "do as much as necessary to find the best combos" — speed (llama-bench) + perplexity vs Q8_0 + a harder task eval, across 3 models × 4 quants × 2 hosts.
+- **Git (user decision 2026-10-03): keep branches separate.** Push our work only to `ops/proxmox-02-03-2026-10` (`git push origin master:ops/proxmox-02-03-2026-10`); do NOT merge GitHub's `master` or force-push it unless the user says so.
