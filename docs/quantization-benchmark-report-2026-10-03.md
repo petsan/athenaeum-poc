@@ -97,17 +97,31 @@ Same llama.cpp commit (`fc07d78`) on both hosts. Models come from one publisher 
 ## 5. Caveats — read before relying on this
 
 - **Perplexity is a proxy.** It was measured on 64 short windows of one text corpus. Differences under ~0.5% are noise, and perplexity can miss damage on code, structured output or long contexts.
-- **No task-accuracy comparison was run across this ladder.** Separately, on 2026-10-02 a 48-item task test and a 9-case long-context retrieval test (16k–120k tokens) found **no difference between Qwen3.8-27B Q4_K_M and Q8_0** — consistent with the perplexity result, but it covers one model and easy tasks.
+- **Task accuracy was tested for Qwen3.8-27B only, Q4_K_M vs Q8_0 (see 5a); the rest of the ladder has none.** Separately, on 2026-10-02 a 48-item task test and a 9-case long-context retrieval test (16k–120k tokens) found **no difference between Qwen3.8-27B Q4_K_M and Q8_0** — consistent with the perplexity result, but it covers one model and easy tasks.
 - **Speed numbers are without speculative decoding** (the MTP drafter gave Qwen3.8 roughly 1.6–2.1× on proxmox-02 in earlier tests). Real servers also add overhead.
 - The Qwen3.8 Q3 row uses a different quantization method, so don't read its quality gap as "Q3 vs Q4".
 - Odd speed orderings (see 3.4 point 4) are unexplained. Single run set per cell; no repeat-run variance was measured for the benchmark itself (earlier concurrency tests on the same server varied by ~15% between runs).
 
+## 5a. Harder task-accuracy eval, Qwen3.8-27B Q4_K_M vs Q8_0 (2026-10-03)
+
+`scripts/hard_eval.py`: 60 generated items (logic puzzles, Python-trace, 8-step arithmetic chains, string-operation sequences), thinking on, answers graded by code (truth computed, never model-judged), 3 samples per item at temp 0.7 (180 graded answers per model), both models on VM 202 at the same time.
+
+| category | Q4_K_M | Q8_0 |
+|---|---|---|
+| logic | 45/45 | 45/45 |
+| trace | 40/45 | 39/45 |
+| chain | 45/45 | 45/45 |
+| strings | 37/45 | 42/45 |
+| **total** | **167/180 (92.8%)** | **171/180 (95.0%)** |
+
+12 of 60 items scored differently: Q8 better on 8, Q4 better on 4. Q8 leads mainly on strings (+5); other categories are level. Truncated answers: 2 (Q4) vs 1 (Q8); no errors. **Reading:** a 2-point gap with this sample size and an 8-vs-4 split is within noise, so it does not overturn the Q4_K_M pick, but it is also not proof of equality - strings is the one category worth re-testing. Raw: `docs/eval-results/hard-eval-2026-10-03/{q4,q8}.json`. Coder-Next and Llama were not task-tested.
+
 ## 6. Suggested next steps
 
-1. A larger, harder task-accuracy test (code generation with execution, structured output, long context) to confirm Q4_K_M holds up where perplexity can't see — especially for Coder-Next and Llama.
+1. Task-accuracy eval for Coder-Next and Llama (done for Qwen3.8-27B, 5a); re-test the strings category with more samples; add code-generation-with-execution and structured-output items.
 2. If Coder-Next becomes the main workhorse, test it with speculative decoding / longer contexts on proxmox-02.
-3. Decide the serving layout (which model on which host) and restart the VM 202 servers, which are currently stopped.
+3. Decide the serving layout (which model on which host) (VM 202 servers were restarted after the benchmark).
 
 ---
 
-*Raw data:* `docs/eval-results/quant-ladder-2026-10-03/results-proxmox0{2,3}.jsonl` · *Tools:* `scripts/bench_quants.py`, `scripts/quant_eval.py`, `scripts/long_context_eval.py` · *Full session notes:* `docs/progress.md` §46.
+*Raw data:* `docs/eval-results/quant-ladder-2026-10-03/results-proxmox0{2,3}.jsonl`, `docs/eval-results/hard-eval-2026-10-03/` · *Tools:* `scripts/bench_quants.py`, `scripts/quant_eval.py`, `scripts/long_context_eval.py`, `scripts/hard_eval.py` · *Full session notes:* `docs/progress.md` §46.
