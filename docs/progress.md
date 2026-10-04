@@ -574,3 +574,21 @@ Started the §26 "planned upgrade". **VM 202** `athenaeum-gpu-qwen3-8-27b` creat
 **Downloads finished:** 16 files, 476GB, all size-verified, in `/srv/models/<model>/<quant>/` on proxmox-02: `qwen3.8-27b/{Q3_K_XL_UD,Q4_K_M,Q6_K,Q8_0}` (lmstudio-community; Q3 is unsloth's dynamic `UD-Q3_K_XL` — confounded), `qwen3-coder-next/{Q3_K_M,Q4_K_M,Q6_K,Q8_0}` and `llama-3.3-70b/{Q3_K_M,Q4_K_M,Q6_K,Q8_0}` (bartowski, one quantizer per ladder).
 **Plumbing:** `nic0`(proxmox-02) / `nic1`(proxmox-03) are now bridges **`vmbr1`** (`10.10.10.2` / `10.10.10.3`, backups `/root/interfaces.bak-20261003-pre-vmbr1`); VM 202 got a hot-plugged second NIC (`10.10.10.12`, netplan `/etc/netplan/60-10g.yaml`), VM 301 a second NIC (`10.10.10.13`). proxmox-02 host runs an NFS server exporting **`/srv/models` read-only to `10.10.10.0/24`** (`/etc/exports`, backup `/root/exports.bak-20261003`; `nfs-kernel-server` installed); both VMs mount it at `/mnt/models` (fstab, `nofail`). Measured NFS read in VM 202: **1.5 GB/s**. VM 301 was started (GPUs free after 302–305 were deleted) and has llama.cpp at the **same commit as VM 202 (`fc07d78`)** built for CUDA arch 52.
 **Method (`scripts/bench_quants.py`, resumable, results in `/var/tmp/bench/results-<host>.jsonl` inside each VM):** per model×quant and per GPU layout (`single` = GPU0 only when the file fits one card with ~8% headroom; `all` = every GPU, layer split): `llama-bench` pp512 / pp2048 / tg128 (mean of 2). Perplexity (`llama-perplexity`, wikitext-2 test, 512-token windows, 64 chunks, `-ngl 99`) is run **once, on proxmox-02 only** (it depends on the weights, not the GPU). Servers on VM 202 (`llama-server`, `llama-server-q8`) are **stopped for the duration** (restart: `sudo systemctl start llama-server llama-server-q8`). Still to add: a harder task-accuracy eval, then the quality/speed analysis and recommendation.
+
+**2026-10-03 — quant-ladder benchmark: speed + perplexity COMPLETE (raw: `docs/eval-results/quant-ladder-2026-10-03/results-proxmox0{2,3}.jsonl`).** Perplexity = wikitext-2 test, 64×512-token windows, run on proxmox-02; Δ is vs that model's Q8_0 (differences under ~0.5% are within noise — Coder-Next Q6_K scored *better* than its Q8_0).
+| model | quant | GiB | PPL | Δ vs Q8 | 02 pp512 | 02 tg128 | 03 pp512 | 03 tg128 |
+|---|---|---|---|---|---|---|---|---|
+| qwen3.8-27b | Q3_K_XL_UD* | 12.2 | 6.635 | +1.8% | 687 | 28.9 | 70 | 8.3 |
+| qwen3.8-27b | Q4_K_M | 15.7 | 6.532 | +0.2% | 759 | 28.6 (single 28.8) | 76 | 8.3 |
+| qwen3.8-27b | Q6_K | 20.9 | 6.516 | 0.0% | 812 | 22.4 | 81 | 6.0 |
+| qwen3.8-27b | Q8_0 | 27.1 | 6.517 | — | 858 | 19.4 | 78 | 7.7 |
+| qwen3-coder-next | Q3_K_M | 34.1 | 7.704 | +5.0% | 447 | 70.4 | 146 | 22.9 |
+| qwen3-coder-next | Q4_K_M | 45.4 | 7.417 | +1.1% | 416 | 79.8 | 159 | 27.0 |
+| qwen3-coder-next | Q6_K | 61.3 | 7.309 | −0.4% | 409 | 74.5 | 169 | 25.1 |
+| qwen3-coder-next | Q8_0 | 79.0 | 7.335 | — | 425 | 73.3 | 168 | 29.6 |
+| llama-3.3-70b | Q3_K_M | 31.9 | 4.859 | +15.0% | 327 | 10.6 | 27 | 2.9 |
+| llama-3.3-70b | Q4_K_M | 39.6 | 4.405 | +4.3% | 319 | 13.1 | 27 | 3.5 |
+| llama-3.3-70b | Q6_K | 53.9 | 4.241 | +0.4% | 284 | 9.5 | 29 | 2.5 |
+| llama-3.3-70b | Q8_0 | 69.8 | 4.225 | — | 272 | 7.9 | 28 | 3.2 |
+(*unsloth dynamic quant, different method — confounded.) Hosts: proxmox-02 (3×GV100 32GB) is ~8–10× faster at prompt processing and ~3–4× at generation than proxmox-03 (4×M6000 24GB, Maxwell, no dp4a); single vs all-GPU layout made little difference for the 27B. Odd-looking speed orderings (Llama Q3 slower than Q4; M6000 Q6 slower than Q8) are measured — likely k-quant dequant cost, cause not isolated.
+**Preliminary recommendation (PPL+speed only; task eval still pending):** with "acceptable" = ≤~1% perplexity loss vs Q8_0: Qwen3.8-27B → **Q4_K_M** (+0.2%, ~48% faster than Q8 on 02); Coder-Next → **Q4_K_M** if ~1% loss is fine (fastest, 45GB) else **Q6_K** (no measurable loss, only ~7% slower — MoE speed barely depends on quant); Llama-3.3-70B → **Q6_K** (+0.4%; Q4_K_M is +4.3% for +38% speed). proxmox-03 is only practical for Coder-Next (25–30 tok/s) and Qwen3.8-27B (~8 tok/s); a 70B there is ~3 tok/s. **VM 202's llama-servers are still stopped** (restart: `sudo systemctl start llama-server llama-server-q8`); VM 301 is running and is to be deleted when benchmarking ends.

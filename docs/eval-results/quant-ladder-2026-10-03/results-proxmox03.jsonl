@@ -1,0 +1,15 @@
+{"host": "proxmox03", "model": "qwen3.8-27b", "quant": "Q3_K_XL_UD", "layout": "single", "kind": "speed", "size_gib": 12.24, "ok": true, "pp512": 70.439357, "pp2048": 61.395537, "tg128": 7.501867, "seconds": 178}
+{"host": "proxmox03", "model": "qwen3.8-27b", "quant": "Q3_K_XL_UD", "layout": "all", "kind": "speed", "size_gib": 12.24, "ok": true, "pp512": 70.025017, "pp2048": 139.270994, "tg128": 8.324283, "seconds": 101}
+{"host": "proxmox03", "model": "qwen3.8-27b", "quant": "Q4_K_M", "layout": "single", "kind": "speed", "size_gib": 15.66, "ok": true, "pp512": 72.479888, "pp2048": 68.328633, "tg128": 7.681743, "seconds": 174}
+{"host": "proxmox03", "model": "qwen3.8-27b", "quant": "Q4_K_M", "layout": "all", "kind": "speed", "size_gib": 15.66, "ok": true, "pp512": 76.153184, "pp2048": 151.108849, "tg128": 8.271381, "seconds": 97}
+{"host": "proxmox03", "model": "qwen3.8-27b", "quant": "Q6_K", "layout": "single", "kind": "speed", "size_gib": 20.89, "ok": true, "pp512": 78.424267, "pp2048": 73.863425, "tg128": 5.901017, "seconds": 188}
+{"host": "proxmox03", "model": "qwen3.8-27b", "quant": "Q6_K", "layout": "all", "kind": "speed", "size_gib": 20.89, "ok": true, "pp512": 80.669482, "pp2048": 161.079387, "tg128": 5.976941, "seconds": 106}
+{"host": "proxmox03", "model": "qwen3.8-27b", "quant": "Q8_0", "layout": "all", "kind": "speed", "size_gib": 27.05, "ok": true, "pp512": 78.214399, "pp2048": 153.427213, "tg128": 7.721951, "seconds": 149}
+{"host": "proxmox03", "model": "qwen3-coder-next", "quant": "Q3_K_M", "layout": "all", "kind": "speed", "size_gib": 34.14, "ok": true, "pp512": 145.829346, "pp2048": 148.871662, "tg128": 22.85581, "seconds": 256}
+{"host": "proxmox03", "model": "qwen3-coder-next", "quant": "Q4_K_M", "layout": "all", "kind": "speed", "size_gib": 45.38, "ok": true, "pp512": 158.970136, "pp2048": 161.099582, "tg128": 26.96964, "seconds": 542}
+{"host": "proxmox03", "model": "qwen3-coder-next", "quant": "Q6_K", "layout": "all", "kind": "speed", "size_gib": 61.27, "ok": true, "pp512": 169.644073, "pp2048": 176.887125, "tg128": 25.126889, "seconds": 706}
+{"host": "proxmox03", "model": "qwen3-coder-next", "quant": "Q8_0", "layout": "all", "kind": "speed", "size_gib": 78.99, "ok": true, "pp512": 168.90858, "pp2048": 174.411726, "tg128": 29.601441, "seconds": 591}
+{"host": "proxmox03", "model": "llama-3.3-70b", "quant": "Q3_K_M", "layout": "all", "kind": "speed", "size_gib": 31.91, "ok": true, "pp512": 27.187398, "pp2048": 53.233371, "tg128": 2.868996, "seconds": 372}
+{"host": "proxmox03", "model": "llama-3.3-70b", "quant": "Q4_K_M", "layout": "all", "kind": "speed", "size_gib": 39.6, "ok": true, "pp512": 27.212309, "pp2048": 53.191103, "tg128": 3.463185, "seconds": 386}
+{"host": "proxmox03", "model": "llama-3.3-70b", "quant": "Q6_K", "layout": "all", "kind": "speed", "size_gib": 53.91, "ok": true, "pp512": 29.094815, "pp2048": 57.417596, "tg128": 2.489344, "seconds": 491}
+{"host": "proxmox03", "model": "llama-3.3-70b", "quant": "Q8_0", "layout": "all", "kind": "speed", "size_gib": 69.83, "ok": true, "pp512": 28.545648, "pp2048": 55.640756, "tg128": 3.215169, "seconds": 468}
